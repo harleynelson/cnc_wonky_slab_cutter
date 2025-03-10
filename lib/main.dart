@@ -1,6 +1,9 @@
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'dart:io' show Platform;
 
 import 'models/settings_model.dart';
@@ -8,24 +11,38 @@ import 'screens/home_page.dart';
 import 'utils/constants.dart';
 import 'utils/permissions_utils.dart';
 
-void main() async {
-  // Ensure that plugin services are initialized
+// Initialize compute engine for Flutter background isolates
+// This must be called early
+void _ensureInitialized() {
+  // Initialize the Flutter Bindings to ensure isolates are properly set up
   WidgetsFlutterBinding.ensureInitialized();
+  
+  // If using compute, make sure to initialize DartPluginRegistrant
+  if (!kIsWeb) {
+    try {
+      DartPluginRegistrant.ensureInitialized();
+    } catch (e) {
+      print('Error initializing DartPluginRegistrant: $e');
+      // Continue anyway as this might not be fatal
+    }
+  }
+}
+
+void main() async {
+  // Ensure Flutter is initialized first
+  _ensureInitialized();
 
   // Set preferred orientations only on mobile devices
   // Skip on web to avoid errors
   try {
     // Check if we're not on web (where Platform is not available)
-    if (!identical(0, 0.0)) {
-      // This condition is always false, but prevents tree-shaking from removing the Platform import
-      print(Platform.isAndroid);
+    if (!kIsWeb) {
+      // Use try-catch to handle orientation setting
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.portraitUp,
+        DeviceOrientation.portraitDown,
+      ]);
     }
-    
-    // Use try-catch to handle orientation setting
-    await SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-    ]);
   } catch (e) {
     print('Skipping orientation setting: $e');
   }
@@ -46,7 +63,13 @@ void main() async {
   }
   
   // Load saved settings or use defaults
-  final settings = await SettingsModel.load();
+  SettingsModel settings;
+  try {
+    settings = await SettingsModel.load();
+  } catch (e) {
+    print('Failed to load settings: $e');
+    settings = SettingsModel.defaults();
+  }
 
   runApp(CncSlabScannerApp(cameras: cameras, settings: settings));
 }

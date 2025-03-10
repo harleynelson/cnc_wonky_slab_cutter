@@ -6,11 +6,15 @@ import '../widgets/settings_fields.dart';
 class SettingsScreen extends StatefulWidget {
   final SettingsModel settings;
   final Function(SettingsModel) onSettingsChanged;
+  final int maxImageSize;
+  final int processingTimeout;
 
   const SettingsScreen({
     Key? key,
     required this.settings,
     required this.onSettingsChanged,
+    this.maxImageSize = 1200,  // Add default value
+    this.processingTimeout = 30000,  // Add default value
   }) : super(key: key);
 
   @override

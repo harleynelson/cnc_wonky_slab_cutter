@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:async';
 import 'dart:typed_data';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:flutter/services.dart';
 
 import '../models/settings_model.dart';
 import '../services/image_processing/slab_detector.dart';
@@ -30,6 +31,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
   File? _processedImageFile;
   File? _gcodeFile;
   String _statusMessage = '';
+  String _errorDetails = '';
   SlabProcessingResult? _processingResult;
   Uint8List? _webImageBytes;
 
@@ -70,6 +72,8 @@ class _PreviewScreenState extends State<PreviewScreen> {
           Expanded(
             child: _buildImagePreview(),
           ),
+          if (_errorDetails.isNotEmpty)
+            _buildErrorPanel(),
           _buildControls(),
         ],
       ),
@@ -125,6 +129,44 @@ class _PreviewScreenState extends State<PreviewScreen> {
     }
   }
 
+  Widget _buildErrorPanel() {
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(16),
+      color: Colors.red.shade50,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.error, color: Colors.red),
+              SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Error processing image',
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: Colors.red,
+                  ),
+                ),
+              ),
+              IconButton(
+                icon: Icon(Icons.copy),
+                tooltip: 'Copy error details',
+                onPressed: () => _copyErrorToClipboard(),
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Text(
+            _errorDetails,
+            style: TextStyle(fontFamily: 'monospace'),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildControls() {
     return Container(
       padding: EdgeInsets.all(16),
@@ -141,7 +183,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          if (_statusMessage.isNotEmpty)
+          if (_statusMessage.isNotEmpty && _errorDetails.isEmpty)
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: Text(
@@ -212,6 +254,7 @@ class _PreviewScreenState extends State<PreviewScreen> {
     setState(() {
       _isProcessing = true;
       _statusMessage = 'Processing image...';
+      _errorDetails = '';
     });
 
     try {
@@ -236,16 +279,31 @@ class _PreviewScreenState extends State<PreviewScreen> {
         _isProcessing = false;
         _statusMessage = 'Processing complete! G-code generated.';
       });
-    } catch (e) {
+    } catch (e, stackTrace) {
       setState(() {
         _isProcessing = false;
-        _statusMessage = 'Error processing image: ${e.toString()}';
+        _statusMessage = '';
+        _errorDetails = 'Error: ${e.toString()}\n\nStack trace:\n${stackTrace.toString()}';
       });
       
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error: ${e.toString()}')),
+        SnackBar(
+          content: Text('Error processing image. See details for more information.'),
+          duration: Duration(seconds: 5),
+          action: SnackBarAction(
+            label: 'Copy Error',
+            onPressed: _copyErrorToClipboard,
+          ),
+        ),
       );
     }
+  }
+
+  void _copyErrorToClipboard() {
+    Clipboard.setData(ClipboardData(text: _errorDetails));
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Error details copied to clipboard')),
+    );
   }
 
   // Simulated processing for web platform
