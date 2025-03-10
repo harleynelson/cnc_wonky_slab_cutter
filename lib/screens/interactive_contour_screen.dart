@@ -1,5 +1,6 @@
 // lib/screens/interactive_contour_screen.dart
 // Interactive contour detection screen with user guidance and algorithm selection
+// Fixed coordinate transformation for touch and markers
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -37,6 +38,7 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
   bool _isProcessing = false;
   bool _hasSelectedPoint = false;
   Offset? _selectedPoint;
+  Point? _selectedImagePoint; // Actual point in image coordinates
   img.Image? _sourceImage;
   Uint8List? _displayImageBytes;
   Uint8List? _resultImageBytes;
@@ -51,6 +53,14 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
   
   // Coordinate system
   late MachineCoordinateSystem _coordinateSystem;
+  
+  // Display calculations
+  double _imageScale = 1.0;
+  Offset _imageOffset = Offset.zero;
+  Size _displaySize = Size.zero;
+  
+  // Reference to image container key for proper positioning
+  final GlobalKey _imageContainerKey = GlobalKey();
   
   // Available detection algorithms
   List<String> _availableAlgorithms = [];
@@ -153,29 +163,103 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
     }
   }
 
-  void _handleImageTap(TapDownDetails details, Size imageSize, Size screenSize) {
-    if (_isProcessing) return;
+  // Calculate image display properties once we know both image and container sizes
+  void _calculateImageDisplayProperties(Size containerSize) {
+    if (_sourceImage == null) return;
+    
+    final double imageAspect = _sourceImage!.width / _sourceImage!.height;
+    final double containerAspect = containerSize.width / containerSize.height;
+    
+    double displayWidth, displayHeight;
+    double offsetX = 0, offsetY = 0;
+    
+    if (imageAspect > containerAspect) {
+      // Image is wider than container (letterboxed)
+      displayWidth = containerSize.width;
+      displayHeight = containerSize.width / imageAspect;
+      offsetY = (containerSize.height - displayHeight) / 2;
+    } else {
+      // Image is taller than container (pillarboxed)
+      displayHeight = containerSize.height;
+      displayWidth = containerSize.height * imageAspect;
+      offsetX = (containerSize.width - displayWidth) / 2;
+    }
+    
+    _imageScale = displayWidth / _sourceImage!.width;
+    _imageOffset = Offset(offsetX, offsetY);
+    _displaySize = Size(displayWidth, displayHeight);
+  }
 
-    // Calculate tap position relative to the image
-    final RenderBox box = context.findRenderObject() as RenderBox;
+  // Get accurate position of the image container relative to the screen
+  Offset _getImageContainerOffset() {
+    if (_imageContainerKey.currentContext == null) {
+      return Offset.zero;
+    }
+    final RenderBox containerBox = _imageContainerKey.currentContext!.findRenderObject() as RenderBox;
+    return containerBox.localToGlobal(Offset.zero);
+  }
+
+  // Convert screen coordinates to image coordinates
+  Point screenToImageCoordinates(Offset screenPoint) {
+    // First adjust for the position of the touch within the image
+    final relativeX = screenPoint.dx - _imageOffset.dx;
+    final relativeY = screenPoint.dy - _imageOffset.dy;
+    
+    // Then convert to image coordinates using the scale
+    final imageX = relativeX / _imageScale;
+    final imageY = relativeY / _imageScale;
+    
+    return Point(imageX, imageY);
+  }
+
+  void _handleImageTap(TapDownDetails details, Size containerSize) {
+    if (_isProcessing || _sourceImage == null) return;
+
+    // Calculate display properties if they haven't been set
+    if (_displaySize == Size.zero) {
+      _calculateImageDisplayProperties(containerSize);
+    }
+
+    // Get tap position relative to the GestureDetector
+    final RenderBox box = _imageContainerKey.currentContext!.findRenderObject() as RenderBox;
     final Offset localPosition = box.globalToLocal(details.globalPosition);
     
-    // Scale from screen coordinates to image coordinates
-    final double scaleX = _sourceImage!.width / imageSize.width;
-    final double scaleY = _sourceImage!.height / imageSize.height;
+    // Debug information
+    print('Container size: $containerSize');
+    print('Image display size: $_displaySize');
+    print('Image offset: $_imageOffset');
+    print('Tap global position: ${details.globalPosition}');
+    print('Tap local position: $localPosition');
     
-    final int imageX = (localPosition.dx * scaleX).round();
-    final int imageY = (localPosition.dy * scaleY).round();
+    // Check if tap is within the displayed image bounds
+    if (localPosition.dx < _imageOffset.dx || 
+        localPosition.dx > _imageOffset.dx + _displaySize.width ||
+        localPosition.dy < _imageOffset.dy || 
+        localPosition.dy > _imageOffset.dy + _displaySize.height) {
+      print('Tap outside image area');
+      return;  // Tap outside image area
+    }
+    
+    // Convert to image coordinates
+    final Point imagePoint = screenToImageCoordinates(localPosition);
+    final int imageX = imagePoint.x.round();
+    final int imageY = imagePoint.y.round();
     
     // Ensure coordinates are within image bounds
     if (imageX < 0 || imageX >= _sourceImage!.width || 
         imageY < 0 || imageY >= _sourceImage!.height) {
+      print('Image coordinates out of bounds: ($imageX, $imageY)');
       return;
     }
     
+    print('Converted to image coordinates: ($imageX, $imageY)');
+    
     setState(() {
+      // Store both screen and image coordinates
       _selectedPoint = localPosition;
+      _selectedImagePoint = imagePoint;
       _hasSelectedPoint = true;
+      
       // Clear any previous contour result
       _contourPoints = null;
       _contourMachinePoints = null;
@@ -186,7 +270,7 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
   }
 
   Future<void> _detectContour() async {
-    if (_sourceImage == null || !_hasSelectedPoint || _selectedPoint == null) {
+    if (_sourceImage == null || !_hasSelectedPoint || _selectedImagePoint == null) {
       setState(() {
         _errorMessage = 'Please tap on the slab to select a seed point first';
       });
@@ -207,17 +291,9 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
     });
 
     try {
-      // Calculate image coordinates of the seed point
-      final Size? screenSize = context.findRenderObject()?.paintBounds.size;
-      if (screenSize == null) {
-        throw Exception('Cannot determine screen size');
-      }
-      
-      final double scaleX = _sourceImage!.width / screenSize.width;
-      final double scaleY = _sourceImage!.height / screenSize.height;
-      
-      final int seedX = (_selectedPoint!.dx * scaleX).round();
-      final int seedY = (_selectedPoint!.dy * scaleY).round();
+      // Use the stored image coordinates
+      final int seedX = _selectedImagePoint!.x.round();
+      final int seedY = _selectedImagePoint!.y.round();
       
       // Get the selected algorithm
       final algorithm = ContourAlgorithmRegistry.getAlgorithm(_selectedAlgorithm);
@@ -251,7 +327,7 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
             width: _sourceImage!.width, height: _sourceImage!.height);
         
         // Draw seed point
-        _drawCircle(contourImage, seedX, seedY, 8, [255, 255, 0, 255]);
+        _drawCircle(contourImage, seedX, seedY, 8, img.ColorRgba8(255, 255, 0, 255));
         
         // Draw contour
         for (int i = 0; i < contourResult.pixelContour.length - 1; i++) {
@@ -261,7 +337,7 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
             contourResult.pixelContour[i].y.round(),
             contourResult.pixelContour[i + 1].x.round(), 
             contourResult.pixelContour[i + 1].y.round(),
-            [0, 255, 0, 255]
+            img.ColorRgba8(0, 255, 0, 255)
           );
         }
         
@@ -285,8 +361,8 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
   }
 
   // Simple drawing utilities for fallback visualization
-  void _drawCircle(img.Image image, int x, int y, int radius, List<int> color) {
-    final rgbaColor = img.ColorRgba8(color[0], color[1], color[2], color[3]);
+  void _drawCircle(img.Image image, int x, int y, int radius, img.Color color) {
+    final rgbaColor = color;
     
     for (int dy = -radius; dy <= radius; dy++) {
       for (int dx = -radius; dx <= radius; dx++) {
@@ -301,8 +377,8 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
     }
   }
   
-  void _drawLine(img.Image image, int x1, int y1, int x2, int y2, List<int> color) {
-    final rgbaColor = img.ColorRgba8(color[0], color[1], color[2], color[3]);
+  void _drawLine(img.Image image, int x1, int y1, int x2, int y2, img.Color color) {
+    final rgbaColor = color;
     
     // Basic Bresenham line algorithm
     int dx = (x2 - x1).abs();
@@ -344,7 +420,7 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
       pixelContour: _contourPoints!,
       machineContour: _contourMachinePoints!,
       debugImage: _resultImageBytes != null ? 
-        img.decodePng(_resultImageBytes!) : null,
+        img.decodeImage(_resultImageBytes!) : null,
     );
     
     // Update the flow manager with the new contour
@@ -373,6 +449,7 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
   void _resetContour() {
     setState(() {
       _selectedPoint = null;
+      _selectedImagePoint = null;
       _hasSelectedPoint = false;
       _contourPoints = null;
       _contourMachinePoints = null;
@@ -478,55 +555,62 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
     }
     
     if (_resultImageBytes != null) {
-      return GestureDetector(
-        onTapDown: null, // Disable tapping after contour is detected
-        child: InteractiveViewer(
-          constrained: true,
-          minScale: 0.5,
-          maxScale: 3.0,
-          child: Image.memory(
-            _resultImageBytes!,
-            fit: BoxFit.contain,
-          ),
+      return InteractiveViewer(
+        constrained: true,
+        minScale: 0.5,
+        maxScale: 3.0,
+        child: Image.memory(
+          _resultImageBytes!,
+          fit: BoxFit.contain,
         ),
       );
     }
     
     if (_displayImageBytes != null) {
-      return GestureDetector(
-        onTapDown: (details) {
-          final Size size = MediaQuery.of(context).size;
-          _handleImageTap(details, size, size);
-        },
-        child: Stack(
-          children: [
-            InteractiveViewer(
-              constrained: true,
-              minScale: 0.5,
-              maxScale: 3.0,
-              child: Image.memory(
-                _displayImageBytes!,
-                fit: BoxFit.contain,
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          // Calculate image display properties
+          _calculateImageDisplayProperties(Size(constraints.maxWidth, constraints.maxHeight));
+          
+          return Container(
+            key: _imageContainerKey,
+            width: constraints.maxWidth,
+            height: constraints.maxHeight,
+            color: Colors.grey.withOpacity(0.1), // Subtle background to visualize container
+            child: GestureDetector(
+              onTapDown: (details) {
+                _handleImageTap(details, Size(constraints.maxWidth, constraints.maxHeight));
+              },
+              child: Stack(
+                children: [
+                  // The image
+                  Center(
+                    child: Image.memory(
+                      _displayImageBytes!,
+                      fit: BoxFit.contain,
+                    ),
+                  ),
+                  
+                  // Draw the touch indicator if we have a selected point
+                  if (_hasSelectedPoint && _selectedPoint != null)
+                    Positioned(
+                      left: _selectedPoint!.dx - _touchRadius,
+                      top: _selectedPoint!.dy - _touchRadius,
+                      child: Container(
+                        width: _touchRadius * 2,
+                        height: _touchRadius * 2,
+                        decoration: BoxDecoration(
+                          color: Colors.yellow.withOpacity(0.5),
+                          shape: BoxShape.circle,
+                          border: Border.all(color: Colors.yellow, width: 2),
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
-            
-            // Draw the touch indicator if we have a selected point
-            if (_hasSelectedPoint && _selectedPoint != null)
-              Positioned(
-                left: _selectedPoint!.dx - _touchRadius,
-                top: _selectedPoint!.dy - _touchRadius,
-                child: Container(
-                  width: _touchRadius * 2,
-                  height: _touchRadius * 2,
-                  decoration: BoxDecoration(
-                    color: Colors.yellow.withOpacity(0.5),
-                    shape: BoxShape.circle,
-                    border: Border.all(color: Colors.yellow, width: 2),
-                  ),
-                ),
-              ),
-          ],
-        ),
+          );
+        },
       );
     }
     
