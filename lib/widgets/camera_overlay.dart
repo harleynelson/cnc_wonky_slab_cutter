@@ -47,15 +47,15 @@ class MarkerGuidePainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Define marker positions
-    final originPosition = Offset(size.width * 0.2, size.height * 0.2);
-    final xAxisPosition = Offset(size.width * 0.8, size.height * 0.2);
-    final scalePosition = Offset(size.width * 0.2, size.height * 0.8);
+    // Define marker positions - origin at bottom left
+    final originPosition = Offset(size.width * 0.2, size.height * 0.8);    // Bottom left
+    final xAxisPosition = Offset(size.width * 0.8, size.height * 0.8);     // Bottom right
+    final scalePosition = Offset(size.width * 0.2, size.height * 0.2);     // Top left
 
     // Draw guide circles for markers
     _drawMarkerGuide(canvas, originPosition, markerOriginColor, "Origin");
     _drawMarkerGuide(canvas, xAxisPosition, markerXAxisColor, "X-Axis");
-    _drawMarkerGuide(canvas, scalePosition, markerScaleColor, "Scale");
+    _drawMarkerGuide(canvas, scalePosition, markerScaleColor, "Y-Axis/Scale");
     
     // Draw connecting lines between markers
     final linePaint = Paint()
@@ -63,10 +63,10 @@ class MarkerGuidePainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
     
-    // Origin to X-Axis line
+    // Origin to X-Axis line (horizontal)
     canvas.drawLine(originPosition, xAxisPosition, linePaint);
     
-    // Origin to Scale line
+    // Origin to Scale line (vertical)
     canvas.drawLine(originPosition, scalePosition, linePaint);
     
     // Draw work area border
@@ -87,7 +87,7 @@ class MarkerGuidePainter extends CustomPainter {
     _drawInstructionText(
       canvas, 
       size, 
-      "Position the three markers as shown and place your slab in the work area"
+      "Position the markers as shown: Origin (bottom left), X-Axis (bottom right), Y-Axis (top left)"
     );
   }
   

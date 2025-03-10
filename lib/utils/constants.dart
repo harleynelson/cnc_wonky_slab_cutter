@@ -12,7 +12,8 @@ const String processedImageFileName = "processed_image.png";
 // Default Settings
 const double defaultCncWidth = 800.0;
 const double defaultCncHeight = 800.0;
-const double defaultMarkerDistance = 300.0;
+const double defaultMarkerXDistance = 762.0;    // X-axis distance (horizontal)
+const double defaultMarkerYDistance = 762.0;    // Y-axis distance (vertical)
 const double defaultToolDiameter = 25.4;
 const double defaultStepover = 20.0;
 const double defaultSafetyHeight = 10.0;

@@ -360,75 +360,87 @@ class MarkerDetector {
   
   /// Identify marker roles based on their relative positions
   List<MarkerPoint> _identifyMarkerRoles(List<MarkerPoint> candidates, int imageWidth, int imageHeight) {
-    if (candidates.length < 3) {
-      return _fallbackMarkerDetection(imageWidth, imageHeight);
-    }
-    
-    try {
-      // Sort by horizontal position for initial grouping
-      candidates.sort((a, b) => a.x.compareTo(b.x));
-      
-      // If we have exactly 3 candidates, try to identify by position
-      if (candidates.length == 3) {
-        // Find leftmost points
-        final leftMost = candidates[0];
-        final middle = candidates[1];
-        final rightMost = candidates[2];
-        
-        // Sort vertical positions of the two leftmost points
-        final topLeft = leftMost.y < middle.y ? leftMost : middle;
-        final bottomLeft = leftMost.y >= middle.y ? leftMost : middle;
-        
-        return [
-          MarkerPoint(topLeft.x, topLeft.y, MarkerRole.origin, confidence: 0.9),
-          MarkerPoint(rightMost.x, rightMost.y, MarkerRole.xAxis, confidence: 0.9),
-          MarkerPoint(bottomLeft.x, bottomLeft.y, MarkerRole.scale, confidence: 0.9),
-        ];
-      }
-      
-      // Sort all points by y-coordinate
-      candidates.sort((a, b) => a.y.compareTo(b.y));
-      
-      // Get the top third points (candidates for origin and x-axis)
-      int topThirdCount = (candidates.length / 3).ceil();
-      final topThird = candidates.sublist(0, math.min(topThirdCount, candidates.length));
-      
-      // Sort top points by x-coordinate
-      topThird.sort((a, b) => a.x.compareTo(b.x));
-      
-      // Take leftmost as origin and rightmost as x-axis
-      final origin = topThird.first;
-      final xAxis = topThird.last;
-      
-      // Sort the remaining points by distance to origin
-      final remainingPoints = candidates.where((p) => 
-        p.x != origin.x || p.y != origin.y && p.x != xAxis.x || p.y != xAxis.y
-      ).toList();
-      
-      remainingPoints.sort((a, b) {
-        final distA = math.pow(a.x - origin.x, 2) + math.pow(a.y - origin.y, 2);
-        final distB = math.pow(b.x - origin.x, 2) + math.pow(b.y - origin.y, 2);
-        return distA.compareTo(distB);
-      });
-      
-      // Choose closest point below origin as scale marker
-      for (final point in remainingPoints) {
-        if (point.y > origin.y) {
-          final scale = point;
-          return [
-            MarkerPoint(origin.x, origin.y, MarkerRole.origin, confidence: 0.8),
-            MarkerPoint(xAxis.x, xAxis.y, MarkerRole.xAxis, confidence: 0.8),
-            MarkerPoint(scale.x, scale.y, MarkerRole.scale, confidence: 0.8),
-          ];
-        }
-      }
-    } catch (e) {
-      print('Error identifying marker roles: $e');
-    }
-    
-    // Fallback if geometric analysis fails
+  if (candidates.length < 3) {
     return _fallbackMarkerDetection(imageWidth, imageHeight);
   }
+  
+  try {
+    // Set up positions based on expected layout
+    // Origin: Bottom left
+    // X-Axis: Bottom right
+    // Scale: Top left
+    
+    // First, try to identify candidates by their geometric positions
+    if (candidates.length == 3) {
+      // Sort candidates by y coordinate (vertical position)
+      candidates.sort((a, b) => a.y.compareTo(b.y));
+      
+      // The top point is likely the scale (Y-axis) marker
+      final scaleMarker = candidates[0];
+      
+      // The bottom two points are origin and X-axis
+      // Sort them by x coordinate
+      final bottomPoints = [candidates[1], candidates[2]];
+      bottomPoints.sort((a, b) => a.x.compareTo(b.x));
+      
+      // Left bottom is origin, right bottom is X-axis
+      final originMarker = bottomPoints[0];
+      final xAxisMarker = bottomPoints[1];
+      
+      return [
+        MarkerPoint(originMarker.x, originMarker.y, MarkerRole.origin, confidence: 0.9),
+        MarkerPoint(xAxisMarker.x, xAxisMarker.y, MarkerRole.xAxis, confidence: 0.9),
+        MarkerPoint(scaleMarker.x, scaleMarker.y, MarkerRole.scale, confidence: 0.9),
+      ];
+    }
+    
+    // If we have more than 3 candidates, use a more sophisticated approach
+    
+    // First, sort by y-coordinate (vertical position)
+    candidates.sort((a, b) => a.y.compareTo(b.y));
+    
+    // Take the top third as potential scale markers
+    int topThirdCount = (candidates.length / 3).ceil();
+    final topThird = candidates.sublist(0, math.min(topThirdCount, candidates.length));
+    
+    // Sort the top candidates by x-coordinate
+    topThird.sort((a, b) => a.x.compareTo(b.x));
+    
+    // Take leftmost of the top candidates as scale marker
+    final scaleMarker = topThird.first;
+    
+    // Now take the bottom third as potential origin/x-axis markers
+    final bottomThird = candidates.sublist(candidates.length - topThirdCount);
+    
+    // Sort by x-coordinate
+    bottomThird.sort((a, b) => a.x.compareTo(b.x));
+    
+    // Take leftmost as origin, rightmost as x-axis
+    final originMarker = bottomThird.first;
+    final xAxisMarker = bottomThird.last;
+    
+    return [
+      MarkerPoint(originMarker.x, originMarker.y, MarkerRole.origin, confidence: 0.8),
+      MarkerPoint(xAxisMarker.x, xAxisMarker.y, MarkerRole.xAxis, confidence: 0.8),
+      MarkerPoint(scaleMarker.x, scaleMarker.y, MarkerRole.scale, confidence: 0.8),
+    ];
+  } catch (e) {
+    print('Error identifying marker roles: $e');
+  }
+  
+  // Fallback if geometric analysis fails
+  return _fallbackMarkerDetection(imageWidth, imageHeight);
+}
+
+/// Fallback detection to ensure we always get some markers
+List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
+  print('Using fallback marker detection');
+  return [
+    MarkerPoint((width * 0.2).round(), (height * 0.8).round(), MarkerRole.origin, confidence: 0.5),   // Bottom left
+    MarkerPoint((width * 0.8).round(), (height * 0.8).round(), MarkerRole.xAxis, confidence: 0.5),    // Bottom right
+    MarkerPoint((width * 0.2).round(), (height * 0.2).round(), MarkerRole.scale, confidence: 0.5),    // Top left
+  ];
+}
   
   /// Calculate calibration parameters from detected markers
   MarkerDetectionResult _calculateCalibration(List<MarkerPoint> markers, img.Image? debugImage) {
@@ -537,13 +549,4 @@ class MarkerDetector {
     }
   }
   
-  /// Fallback detection to ensure we always get some markers
-  List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
-    print('Using fallback marker detection');
-    return [
-      MarkerPoint((width * 0.2).round(), (height * 0.2).round(), MarkerRole.origin, confidence: 0.5),
-      MarkerPoint((width * 0.8).round(), (height * 0.2).round(), MarkerRole.xAxis, confidence: 0.5),
-      MarkerPoint((width * 0.2).round(), (height * 0.8).round(), MarkerRole.scale, confidence: 0.5),
-    ];
-  }
 }

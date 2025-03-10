@@ -76,28 +76,53 @@ class MachineCoordinateSystem {
     return machinePoints.map((p) => machineToPixelCoords(p)).toList();
   }
   
-  /// Create a coordinate system from three marker points
-  static MachineCoordinateSystem fromMarkerPoints(
-    Point originMarker, 
-    Point xAxisMarker, 
-    Point scaleMarker,
-    double markerRealDistanceMm,
-  ) {
-    // Calculate orientation angle
-    final dx = xAxisMarker.x - originMarker.x;
-    final dy = xAxisMarker.y - originMarker.y;
-    final orientationRad = math.atan2(dy, dx);
-    
-    // Calculate mm per pixel from the distance between origin and scale marker
-    final scaleX = scaleMarker.x - originMarker.x;
-    final scaleY = scaleMarker.y - originMarker.y;
-    final distancePx = math.sqrt(scaleX * scaleX + scaleY * scaleY);
-    final pixelToMmRatio = markerRealDistanceMm / distancePx;
-    
-    return MachineCoordinateSystem(
-      originPx: originMarker,
-      orientationRad: orientationRad,
-      pixelToMmRatio: pixelToMmRatio,
-    );
-  }
+  /// Create a coordinate system from three marker points with separate X and Y distances
+static MachineCoordinateSystem fromMarkerPointsWithDistances(
+  Point originMarker, 
+  Point xAxisMarker, 
+  Point scaleMarker,
+  double markerXDistanceMm,
+  double markerYDistanceMm,
+) {
+  // Calculate orientation angle from origin to x-axis marker
+  final dx = xAxisMarker.x - originMarker.x;
+  final dy = xAxisMarker.y - originMarker.y;
+  final orientationRad = math.atan2(dy, dx);
+  
+  // Calculate pixel distances
+  final xDistancePx = math.sqrt(dx * dx + dy * dy);
+  
+  // Calculate scale marker distance (for Y axis)
+  final scaleX = scaleMarker.x - originMarker.x;
+  final scaleY = scaleMarker.y - originMarker.y;
+  final yDistancePx = math.sqrt(scaleX * scaleX + scaleY * scaleY);
+  
+  // Average the two ratios for better accuracy
+  // We could also use separate X and Y scales, but that complicates the transformation
+  final xPixelToMmRatio = markerXDistanceMm / xDistancePx;
+  final yPixelToMmRatio = markerYDistanceMm / yDistancePx;
+  final pixelToMmRatio = (xPixelToMmRatio + yPixelToMmRatio) / 2;
+  
+  return MachineCoordinateSystem(
+    originPx: originMarker,
+    orientationRad: orientationRad,
+    pixelToMmRatio: pixelToMmRatio,
+  );
+}
+
+// Backward compatibility method that uses a single distance value
+static MachineCoordinateSystem fromMarkerPoints(
+  Point originMarker, 
+  Point xAxisMarker, 
+  Point scaleMarker,
+  double markerRealDistanceMm,
+) {
+  return fromMarkerPointsWithDistances(
+    originMarker, 
+    xAxisMarker, 
+    scaleMarker, 
+    markerRealDistanceMm, 
+    markerRealDistanceMm
+  );
+}
 }
