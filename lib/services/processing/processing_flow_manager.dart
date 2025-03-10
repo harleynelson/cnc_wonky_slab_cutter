@@ -24,6 +24,13 @@ enum ProcessingState {
   error
 }
 
+/// Method used for contour detection
+enum ContourDetectionMethod {
+  automatic,
+  interactive,
+  manual
+}
+
 /// Result of the processing flow containing all intermediate and final results
 class ProcessingResult {
   final File? originalImage;
@@ -35,6 +42,7 @@ class ProcessingResult {
   final File? gcodeFile;
   final String? errorMessage;
   final ProcessingState state;
+  final ContourDetectionMethod? contourMethod;
   
   ProcessingResult({
     this.originalImage,
@@ -46,6 +54,7 @@ class ProcessingResult {
     this.gcodeFile,
     this.errorMessage,
     this.state = ProcessingState.notStarted,
+    this.contourMethod,
   });
   
   /// Create a copy with updated values
@@ -59,6 +68,7 @@ class ProcessingResult {
     File? gcodeFile,
     String? errorMessage,
     ProcessingState? state,
+    ContourDetectionMethod? contourMethod,
   }) {
     return ProcessingResult(
       originalImage: originalImage ?? this.originalImage,
@@ -70,6 +80,7 @@ class ProcessingResult {
       gcodeFile: gcodeFile ?? this.gcodeFile,
       errorMessage: errorMessage ?? this.errorMessage,
       state: state ?? this.state,
+      contourMethod: contourMethod ?? this.contourMethod,
     );
   }
   
@@ -105,6 +116,9 @@ class ProcessingFlowManager with ChangeNotifier {
   ProcessingResult _result = ProcessingResult();
   final SettingsModel settings;
   
+  // Default contour detection method
+  ContourDetectionMethod _preferredContourMethod = ContourDetectionMethod.interactive;
+  
   ProcessingFlowManager({required this.settings});
   
   /// Current processing result
@@ -112,6 +126,15 @@ class ProcessingFlowManager with ChangeNotifier {
   
   /// Current processing state
   ProcessingState get state => _result.state;
+  
+  /// Get preferred contour detection method
+  ContourDetectionMethod get preferredContourMethod => _preferredContourMethod;
+  
+  /// Set preferred contour detection method
+  set preferredContourMethod(ContourDetectionMethod method) {
+    _preferredContourMethod = method;
+    notifyListeners();
+  }
   
   /// Initialize with an image file
   Future<void> initWithImage(File imageFile) async {
@@ -168,8 +191,8 @@ class ProcessingFlowManager with ChangeNotifier {
     }
   }
   
-  /// Process slab contour detection
-  Future<void> detectSlabContour() async {
+  /// Process slab contour detection using automatic method
+  Future<void> detectSlabContourAutomatic() async {
     if (_result.markerResult == null || _result.processedImage == null) {
       _setErrorState('Marker detection must be completed first');
       return;
@@ -210,18 +233,53 @@ class ProcessingFlowManager with ChangeNotifier {
       _result = _result.copyWith(
         contourResult: contourResult,
         processedImage: compositeImage,
+        contourMethod: ContourDetectionMethod.automatic,
       );
       
       notifyListeners();
     } catch (e, stackTrace) {
       ErrorUtils().logError(
-        'Error during slab contour detection',
+        'Error during automatic slab contour detection',
         e,
         stackTrace: stackTrace,
-        context: 'slab_detection',
+        context: 'slab_detection_automatic',
       );
-      _setErrorState('Slab detection failed: ${e.toString()}');
+      _setErrorState('Automatic slab detection failed: ${e.toString()}');
     }
+  }
+  
+  /// Process slab contour detection
+  Future<void> detectSlabContour() async {
+    // Use the preferred method
+    switch (_preferredContourMethod) {
+      case ContourDetectionMethod.automatic:
+        await detectSlabContourAutomatic();
+        break;
+      case ContourDetectionMethod.interactive:
+        // Interactive method is handled by the UI via updateContourResult
+        _updateState(ProcessingState.slabDetection);
+        notifyListeners();
+        break;
+      case ContourDetectionMethod.manual:
+        // Manual method is handled by the UI via updateContourResult
+        _updateState(ProcessingState.slabDetection);
+        notifyListeners();
+        break;
+    }
+  }
+  
+  /// Update contour result from external source (interactive or manual methods)
+  void updateContourResult(SlabContourResult contourResult, {ContourDetectionMethod? method}) {
+    final usedMethod = method ?? _preferredContourMethod;
+    
+    _result = _result.copyWith(
+      contourResult: contourResult,
+      processedImage: contourResult.debugImage ?? _result.processedImage,
+      state: ProcessingState.slabDetection,
+      contourMethod: usedMethod,
+    );
+    
+    notifyListeners();
   }
   
   /// Generate toolpath and G-code

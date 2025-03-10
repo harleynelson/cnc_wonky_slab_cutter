@@ -1,5 +1,5 @@
 // lib/screens/processing_screen.dart
-// Screen for processing images through a step-by-step flow
+// Screen for processing images through a step-by-step flow with simplified slab detection
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -11,6 +11,7 @@ import '../services/processing/processing_flow_manager.dart';
 import '../models/settings_model.dart';
 import '../utils/constants.dart';
 import '../utils/file_utils.dart';
+import 'interactive_contour_screen.dart';
 
 class ProcessingScreen extends StatefulWidget {
   final File imageFile;
@@ -48,6 +49,31 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
     setState(() {
       _isLoading = false;
     });
+  }
+
+  Future<void> _openSlabDetectionScreen(ProcessingFlowManager flowManager) async {
+    if (flowManager.result.markerResult == null || flowManager.result.originalImage == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Marker detection must be completed first'))
+      );
+      return;
+    }
+    
+    final bool? result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => InteractiveContourScreen(
+          imageFile: flowManager.result.originalImage!,
+          markerResult: flowManager.result.markerResult!,
+          settings: widget.settings,
+        ),
+      ),
+    );
+    
+    if (result == true) {
+      // Contour detection was accepted, refresh the UI
+      setState(() {});
+    }
   }
 
   @override
@@ -294,6 +320,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
 
   Widget _buildSlabDetectionView(ProcessingFlowManager flowManager) {
     final contourResult = flowManager.result.contourResult;
+    final contourMethod = flowManager.result.contourMethod;
     
     return Center(
       child: Padding(
@@ -308,6 +335,21 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
                       ? _buildImageFromImgImage(flowManager.result.markerResult!.debugImage!)
                       : Placeholder()),
             ),
+            SizedBox(height: 20),
+            
+            // Single detection button
+            if (contourResult == null)
+              ElevatedButton.icon(
+                icon: Icon(Icons.find_in_page),
+                label: Text('Detect Slab'),
+                onPressed: () => _openSlabDetectionScreen(flowManager),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                  padding: EdgeInsets.symmetric(horizontal: 32, vertical: 12),
+                ),
+              ),
+            
             SizedBox(height: 10),
             if (contourResult != null)
               Text(
@@ -316,7 +358,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
               )
             else
               Text(
-                'Detecting slab contour...',
+                'Tap "Detect Slab" to proceed with slab detection',
                 style: TextStyle(fontSize: 16),
               ),
             if (contourResult != null)
@@ -562,6 +604,7 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
               ],
               if (flowManager.result.contourResult != null) ...[
                 Text('Contour Detection:', style: TextStyle(fontWeight: FontWeight.bold)),
+                Text('• Method: ${flowManager.result.contourMethod?.toString().split('.').last ?? "Unknown"}'),
                 Text('• Contour points: ${flowManager.result.contourResult!.pointCount}'),
                 if (flowManager.result.contourResult!.pixelArea > 0)
                   Text('• Area (px): ${flowManager.result.contourResult!.pixelArea.toStringAsFixed(1)}'),

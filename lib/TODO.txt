@@ -1,0 +1,5 @@
+Fix x,y, origin dots displayed wrong on interactive screen
+update algorithm for detection
+clean up flow with slab detection
+generate gcode
+crashes when minimized

@@ -12,31 +12,32 @@ class PermissionsUtils {
     return await Permission.camera.isGranted;
   }
 
-  /// Request storage permission
+  /// Request photo storage permission for SDK > 33
   static Future<bool> requestStoragePermission() async {
-    final status = await Permission.storage.request();
+    // For Android SDK 33 and above, use Photos and Videos permission
+    final status = await Permission.photos.request();
     return status.isGranted;
   }
 
-  /// Check if storage permission is granted
+  /// Check if photo storage permission is granted
   static Future<bool> isStoragePermissionGranted() async {
-    return await Permission.storage.isGranted;
+    return await Permission.photos.isGranted;
   }
 
   /// Request all required permissions for the app
   static Future<Map<Permission, PermissionStatus>> requestAllPermissions() async {
     return await [
       Permission.camera,
-      Permission.storage,
+      Permission.photos,
     ].request();
   }
 
   /// Check if all permissions needed by the app are granted
   static Future<bool> areAllPermissionsGranted() async {
     final cameraGranted = await isCameraPermissionGranted();
-    final storageGranted = await isStoragePermissionGranted();
-    
-    return cameraGranted && storageGranted;
+    final photosGranted = await isStoragePermissionGranted();
+   
+    return cameraGranted && photosGranted;
   }
 
   /// Opens app settings page
