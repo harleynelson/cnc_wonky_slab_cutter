@@ -350,6 +350,16 @@ class ProcessingFlowManager with ChangeNotifier {
     
     return compositeImage;
   }
+
+  /// Update contour result from external source
+  void updateContourResult(SlabContourResult contourResult) {
+    _result = _result.copyWith(
+      contourResult: contourResult,
+      processedImage: contourResult.debugImage,
+      state: ProcessingState.slabDetection,
+    );
+    notifyListeners();
+  }
   
   /// Overlay debug visualization from one image onto another
   void _overlayDebugImage(img.Image target, img.Image source, {bool greenOnly = false}) {

@@ -11,6 +11,7 @@ import '../services/processing/processing_flow_manager.dart';
 import '../models/settings_model.dart';
 import '../utils/constants.dart';
 import '../utils/file_utils.dart';
+import 'slab_contour_detection_screen.dart';
 
 class ProcessingScreen extends StatefulWidget {
   final File imageFile;
@@ -49,6 +50,30 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
       _isLoading = false;
     });
   }
+
+  Future<void> _openContourDetectionScreen(ProcessingFlowManager flowManager) async {
+  if (flowManager.result.markerResult == null || flowManager.result.originalImage == null) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('Marker detection must be completed first'))
+    );
+    return;
+  }
+  
+  final bool? result = await Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => SlabContourDetectionScreen(
+        imageFile: flowManager.result.originalImage!,
+        settings: widget.settings,
+      ),
+    ),
+  );
+  
+  if (result == true) {
+    // Contour detection was accepted, refresh the UI
+    setState(() {});
+  }
+}
 
   @override
   Widget build(BuildContext context) {
@@ -293,45 +318,54 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
   }
 
   Widget _buildSlabDetectionView(ProcessingFlowManager flowManager) {
-    final contourResult = flowManager.result.contourResult;
-    
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Expanded(
-              child: flowManager.result.processedImage != null
-                  ? _buildImageFromImgImage(flowManager.result.processedImage!)
-                  : (flowManager.result.markerResult?.debugImage != null
-                      ? _buildImageFromImgImage(flowManager.result.markerResult!.debugImage!)
-                      : Placeholder()),
+  final contourResult = flowManager.result.contourResult;
+  
+  return Center(
+    child: Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Expanded(
+            child: flowManager.result.processedImage != null
+                ? _buildImageFromImgImage(flowManager.result.processedImage!)
+                : (flowManager.result.markerResult?.debugImage != null
+                    ? _buildImageFromImgImage(flowManager.result.markerResult!.debugImage!)
+                    : Placeholder()),
+          ),
+          SizedBox(height: 10),
+          
+          // Add a button to try different contour detection methods
+          ElevatedButton.icon(
+            icon: Icon(Icons.auto_fix_high),
+            label: Text('Try Different Contour Detection Methods'),
+            onPressed: () => _openContourDetectionScreen(flowManager),
+          ),
+          
+          SizedBox(height: 10),
+          if (contourResult != null)
+            Text(
+              'Slab contour detection complete',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+            )
+          else
+            Text(
+              'Detecting slab contour...',
+              style: TextStyle(fontSize: 16),
             ),
-            SizedBox(height: 10),
-            if (contourResult != null)
-              Text(
-                'Slab contour detection complete',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
-              )
-            else
-              Text(
-                'Detecting slab contour...',
-                style: TextStyle(fontSize: 16),
+          if (contourResult != null)
+            Padding(
+              padding: const EdgeInsets.only(top: 8.0),
+              child: Text(
+                'Detected ${contourResult.pointCount} contour points',
+                style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
               ),
-            if (contourResult != null)
-              Padding(
-                padding: const EdgeInsets.only(top: 8.0),
-                child: Text(
-                  'Detected ${contourResult.pointCount} contour points',
-                  style: TextStyle(fontSize: 14, fontStyle: FontStyle.italic),
-                ),
-              ),
-          ],
-        ),
+            ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildGcodeGenerationView(ProcessingFlowManager flowManager) {
     return Center(
