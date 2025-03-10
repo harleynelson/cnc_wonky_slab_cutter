@@ -9,7 +9,6 @@ import 'package:image/image.dart' as img;
 import '../../models/settings_model.dart';
 import '../image_processing/marker_detector.dart';
 import '../image_processing/slab_contour_detector.dart';
-import '../image_processing/interactive_contour_detector.dart';
 import '../image_processing/slab_contour_result.dart';
 import '../gcode/machine_coordinates.dart';
 import '../gcode/gcode_generator.dart';
