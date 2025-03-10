@@ -4,10 +4,9 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../models/settings_model.dart';
-import 'camera_screen.dart';
 import 'file_picker_screen.dart';
+import 'image_selection_screen.dart';
 import 'settings_screen.dart';
-import '../utils/constants.dart';
 
 class HomePage extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -40,11 +39,7 @@ class _HomePageState extends State<HomePage> {
   void _initializePages() {
     _widgetOptions = <Widget>[
       _hasCameraSupport
-          ? CameraScreen(
-              cameras: widget.cameras,
-              settings: _settings,
-              onImageCaptured: _handleImageCaptured,
-            )
+          ? ImageSelectionScreen(settings: _settings)
           : FilePickerScreen(
               settings: _settings,
               onImageSelected: _handleImageCaptured,

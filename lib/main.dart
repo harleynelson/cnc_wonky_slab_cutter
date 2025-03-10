@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
-import 'dart:io' show Platform;
+import 'package:provider/provider.dart';
 
 import 'models/settings_model.dart';
+import 'providers/processing_provider.dart';
 import 'screens/home_page.dart';
 import 'utils/constants.dart';
 import 'utils/permissions_utils.dart';
@@ -71,7 +72,15 @@ void main() async {
     settings = SettingsModel.defaults();
   }
 
-  runApp(CncSlabScannerApp(cameras: cameras, settings: settings));
+  runApp(
+    // Wrap with MultiProvider
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => ProcessingProvider()),
+      ],
+      child: CncSlabScannerApp(cameras: cameras, settings: settings),
+    )
+  );
 }
 
 class CncSlabScannerApp extends StatelessWidget {
