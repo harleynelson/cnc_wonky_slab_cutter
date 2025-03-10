@@ -82,11 +82,18 @@ class _SettingsScreenState extends State<SettingsScreen> {
           
           _buildSectionTitle('Marker Settings'),
           SettingsTextField(
-            label: 'Marker Distance (mm)',
-            value: _settings.markerDistance,
-            onChanged: (value) => _settings.markerDistance = value,
-            icon: Icons.straighten,
-            helperText: 'Real-world distance between markers',
+            label: 'X-Axis Marker Distance (mm)',
+            value: _settings.markerXDistance,
+            onChanged: (value) => _settings.markerXDistance = value,
+            icon: Icons.arrow_right_alt,
+            helperText: 'Real-world distance between Origin and X-Axis markers',
+          ),
+          SettingsTextField(
+            label: 'Y-Axis Marker Distance (mm)',
+            value: _settings.markerYDistance,
+            onChanged: (value) => _settings.markerYDistance = value,
+            icon: Icons.arrow_upward,
+            helperText: 'Real-world distance between Origin and Y-Axis/Scale markers',
           ),
           
           _buildSectionTitle('Tool Settings'),

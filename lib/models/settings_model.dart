@@ -5,7 +5,8 @@ import '../utils/constants.dart';
 class SettingsModel {
   double cncWidth;
   double cncHeight;
-  double markerDistance;
+  double markerXDistance;  // Distance between origin and X-axis marker in mm
+  double markerYDistance;  // Distance between origin and Y-axis/scale marker in mm
   double toolDiameter;
   double stepover;
   double safetyHeight;
@@ -16,7 +17,8 @@ class SettingsModel {
   SettingsModel({
     required this.cncWidth,
     required this.cncHeight,
-    required this.markerDistance,
+    required this.markerXDistance,
+    required this.markerYDistance,
     required this.toolDiameter,
     required this.stepover,
     required this.safetyHeight,
@@ -24,13 +26,14 @@ class SettingsModel {
     required this.plungeRate,
     required this.cuttingDepth,
   });
-
+  
   // Create a copy of the settings
   SettingsModel copy() {
     return SettingsModel(
       cncWidth: cncWidth,
       cncHeight: cncHeight,
-      markerDistance: markerDistance,
+      markerXDistance: markerXDistance,
+      markerYDistance: markerYDistance,
       toolDiameter: toolDiameter,
       stepover: stepover,
       safetyHeight: safetyHeight,
@@ -45,7 +48,8 @@ class SettingsModel {
     return SettingsModel(
       cncWidth: defaultCncWidth,
       cncHeight: defaultCncHeight,
-      markerDistance: defaultMarkerDistance,
+      markerXDistance: defaultMarkerXDistance,
+      markerYDistance: defaultMarkerYDistance,
       toolDiameter: defaultToolDiameter,
       stepover: defaultStepover,
       safetyHeight: defaultSafetyHeight,
@@ -60,7 +64,8 @@ class SettingsModel {
     return {
       'cncWidth': cncWidth,
       'cncHeight': cncHeight,
-      'markerDistance': markerDistance,
+      'markerXDistance': markerXDistance,
+      'markerYDistance': markerYDistance,
       'toolDiameter': toolDiameter,
       'stepover': stepover,
       'safetyHeight': safetyHeight,
@@ -75,7 +80,8 @@ class SettingsModel {
     return SettingsModel(
       cncWidth: json['cncWidth'] ?? defaultCncWidth,
       cncHeight: json['cncHeight'] ?? defaultCncHeight,
-      markerDistance: json['markerDistance'] ?? defaultMarkerDistance,
+      markerXDistance: json['markerXDistance'] ?? defaultMarkerXDistance,
+      markerYDistance: json['markerYDistance'] ?? defaultMarkerYDistance,
       toolDiameter: json['toolDiameter'] ?? defaultToolDiameter,
       stepover: json['stepover'] ?? defaultStepover,
       safetyHeight: json['safetyHeight'] ?? defaultSafetyHeight,

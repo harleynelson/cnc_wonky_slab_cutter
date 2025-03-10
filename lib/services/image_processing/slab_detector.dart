@@ -93,7 +93,8 @@ class SlabDetector {
           'settings': {
             'cncWidth': settings.cncWidth,
             'cncHeight': settings.cncHeight,
-            'markerDistance': settings.markerDistance,
+            'markerXDistance': settings.markerXDistance,
+            'markerYDistance': settings.markerYDistance,
             'toolDiameter': settings.toolDiameter,
             'stepover': settings.stepover,
             'safetyHeight': settings.safetyHeight,
@@ -127,6 +128,8 @@ class SlabDetector {
     if (image == null) {
       throw Exception('Failed to decode image - invalid format or corrupted file');
     }
+
+    print('Image dimensions: ${image.width}x${image.height}');
     
     // Resize large images to conserve memory
     img.Image processImage = image;
@@ -139,11 +142,12 @@ class SlabDetector {
           height: (image.height * scaleFactor).round(),
           interpolation: img.Interpolation.average
         );
+        print('Resized Image dimensions: ${image.width}x${image.height}');
       } catch (e) {
         print('Warning: Failed to resize image: $e');
-        // Continue with original image if resize fails
         processImage = image;
       }
+      
     }
     
     // Create a copy for visualization
@@ -151,7 +155,7 @@ class SlabDetector {
     
     // 1. Detect markers with the improved marker detector
     final markerDetector = MarkerDetector(
-      markerRealDistanceMm: settings.markerDistance,
+      markerRealDistanceMm: settings.markerXDistance,
       generateDebugImage: true,
       maxImageSize: maxImageSize,
     );
@@ -160,12 +164,14 @@ class SlabDetector {
     final markerResult = await markerDetector.detectMarkers(processImage);
     
     // Create coordinate system from marker detection
-    final coordinateSystem = MachineCoordinateSystem.fromMarkerPoints(
-      markerResult.markers[0].toPoint(),
-      markerResult.markers[1].toPoint(),
-      markerResult.markers[2].toPoint(),
-      settings.markerDistance,
+    final coordinateSystem = MachineCoordinateSystem.fromMarkerPointsWithDistances(
+      markerResult.markers[0].toPoint(),  // Origin
+      markerResult.markers[1].toPoint(),  // X-axis
+      markerResult.markers[2].toPoint(),  // Scale/Y-axis
+      settings.markerXDistance,
+      settings.markerYDistance
     );
+    
     
     // If we have debug information from marker detection, copy to output
     if (markerResult.debugImage != null) {
@@ -177,14 +183,20 @@ class SlabDetector {
       }
     }
     
-    // 2. Detect slab contour with the new contour detector
+    // 2. Detect slab contour with the improved contour detector
     final contourDetector = SlabContourDetector(
       generateDebugImage: true,
       maxImageSize: maxImageSize,
+      processingTimeout: 20000, // Extended timeout for more thorough processing
     );
     
     print('Detecting slab contour...');
     final contourResult = await contourDetector.detectContour(processImage, coordinateSystem);
+    
+    // Post-process the contour to ensure we get a clean outline
+    final cleanedContour = _ensureCleanOuterContour(contourResult.machineContour);
+
+    
     
     // If we have debug information from contour detection, copy to output
     if (contourResult.debugImage != null) {
@@ -197,9 +209,7 @@ class SlabDetector {
     }
     
     // Draw machine contour on output image
-    final machineContourPixels = coordinateSystem.convertPointListToPixelCoords(
-      contourResult.machineContour
-    );
+    final machineContourPixels = coordinateSystem.convertPointListToPixelCoords(cleanedContour);
     
     try {
       for (int i = 0; i < machineContourPixels.length - 1; i++) {
@@ -217,10 +227,10 @@ class SlabDetector {
       print('Error drawing machine contour: $e');
     }
     
-    // 3. Generate toolpath
+    // 3. Generate toolpath - use the cleaned contour
     print('Generating toolpath...');
-    final toolpath = ToolpathGenerator.generatePocketToolpath(
-      contourResult.machineContour,
+    final toolpath = _generateOptimizedToolpath(
+      cleanedContour,
       settings.toolDiameter,
       settings.stepover,
     );
@@ -243,6 +253,9 @@ class SlabDetector {
     } catch (e) {
       print('Error drawing toolpath: $e');
     }
+
+    print('Contour points: ${cleanedContour.length}');
+    print('Toolpath points: ${toolpath.length}');
     
     // 4. Generate G-code
     print('Generating G-code...');
@@ -259,7 +272,7 @@ class SlabDetector {
       // Add metadata and statistics to output image
       _drawText(
         outputImage, 
-        "Area: ${contourResult.machineArea.toStringAsFixed(2)} sq mm", 
+        "Area: ${_calculatePolygonArea(cleanedContour).toStringAsFixed(2)} sq mm", 
         10, 
         10, 
         img.ColorRgba8(255, 255, 255, 255)
@@ -300,9 +313,9 @@ class SlabDetector {
     return SlabProcessingResult(
       processedImage: processedImageFile,
       gcodeFile: gcodeFile,
-      slabContour: contourResult.machineContour,
+      slabContour: cleanedContour,
       toolpath: toolpath,
-      contourAreaMm2: contourResult.machineArea,
+      contourAreaMm2: _calculatePolygonArea(cleanedContour),
     );
   }
   
@@ -466,6 +479,502 @@ class SlabDetector {
     // Default pattern for other chars
     return (x % 2 == 0 && y % 2 == 0);
   }
+
+  /// Ensure we have a clean outer contour without internal details
+  List<Point> _ensureCleanOuterContour(List<Point> contour) {
+    // If the contour is too small or invalid, return as is
+    if (contour.length < 10) {
+      return contour;
+    }
+    
+    try {
+      // 1. Make sure the contour is closed
+      List<Point> workingContour = List.from(contour);
+      if (workingContour.first.x != workingContour.last.x || 
+          workingContour.first.y != workingContour.last.y) {
+        workingContour.add(workingContour.first);
+      }
+      
+      // 2. Check if the contour is self-intersecting
+      if (_isContourSelfIntersecting(workingContour)) {
+        // If self-intersecting, compute convex hull instead
+        final points = List<Point>.from(workingContour);
+        return _computeConvexHull(points);
+      }
+      
+      // 3. Eliminate concave sections that are too deep
+      workingContour = _simplifyDeepConcavities(workingContour);
+      
+      // 4. Apply smoothing to get rid of jagged edges
+      workingContour = _applyGaussianSmoothing(workingContour, 5);
+      
+      return workingContour;
+    } catch (e) {
+      print('Error cleaning contour: $e');
+      return contour;
+    }
+  }
+
+  /// Check if a contour is self-intersecting
+  bool _isContourSelfIntersecting(List<Point> contour) {
+    if (contour.length < 4) return false;
+    
+    // Check each pair of non-adjacent line segments for intersection
+    for (int i = 0; i < contour.length - 1; i++) {
+      final p1 = contour[i];
+      final p2 = contour[i + 1];
+      
+      for (int j = i + 2; j < contour.length - 1; j++) {
+        // Skip adjacent segments
+        if (i == 0 && j == contour.length - 2) continue;
+        
+        final p3 = contour[j];
+        final p4 = contour[j + 1];
+        
+        if (_doLinesIntersect(p1, p2, p3, p4)) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /// Check if two line segments intersect
+  bool _doLinesIntersect(Point p1, Point p2, Point p3, Point p4) {
+    // Calculate the direction of the lines
+    final d1x = p2.x - p1.x;
+    final d1y = p2.y - p1.y;
+    final d2x = p4.x - p3.x;
+    final d2y = p4.y - p3.y;
+    
+    // Calculate the determinant
+    final det = d1x * d2y - d1y * d2x;
+    
+    // If lines are parallel, they don't intersect
+    if (det.abs() < 1e-10) return false;
+    
+    // Calculate the parameters of intersection
+    final dx = p3.x - p1.x;
+    final dy = p3.y - p1.y;
+    
+    final t = (dx * d2y - dy * d2x) / det;
+    final u = (dx * d1y - dy * d1x) / det;
+    
+    // Check if intersection point is within both line segments
+    return (t >= 0 && t <= 1 && u >= 0 && u <= 1);
+  }
+
+  /// Compute convex hull using Graham scan algorithm
+  List<Point> _computeConvexHull(List<Point> points) {
+    if (points.length <= 3) return List.from(points);
+    
+    // Find point with lowest y-coordinate (and leftmost if tied)
+    int lowestIndex = 0;
+    for (int i = 1; i < points.length; i++) {
+      if (points[i].y < points[lowestIndex].y || 
+          (points[i].y == points[lowestIndex].y && points[i].x < points[lowestIndex].x)) {
+        lowestIndex = i;
+      }
+    }
+    
+    // Swap lowest point to first position
+    final temp = points[0];
+    points[0] = points[lowestIndex];
+    points[lowestIndex] = temp;
+    
+    // Sort points by polar angle with respect to the lowest point
+    final p0 = points[0];
+    points.sort((a, b) {
+      if (a == p0) return -1;
+      if (b == p0) return 1;
+      
+      final angleA = math.atan2(a.y - p0.y, a.x - p0.x);
+      final angleB = math.atan2(b.y - p0.y, b.x - p0.x);
+      
+      if (angleA < angleB) return -1;
+      if (angleA > angleB) return 1;
+      
+      // If angles are the same, pick the closer point
+      final distA = _squaredDistance(p0, a);
+      final distB = _squaredDistance(p0, b);
+      return distA.compareTo(distB);
+    });
+    
+    // Build convex hull
+    final hull = <Point>[];
+    hull.add(points[0]);
+    hull.add(points[1]);
+    
+    for (int i = 2; i < points.length; i++) {
+      while (hull.length > 1 && _ccw(hull[hull.length - 2], hull[hull.length - 1], points[i]) <= 0) {
+        hull.removeLast();
+      }
+      hull.add(points[i]);
+    }
+    
+    // Ensure hull is closed
+    if (hull.length > 2 && (hull.first.x != hull.last.x || hull.first.y != hull.last.y)) {
+      hull.add(hull.first);
+    }
+    
+    return hull;
+  }
+
+  /// Cross product for determining counter-clockwise order
+  double _ccw(Point a, Point b, Point c) {
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  }
+
+  /// Squared distance between two points
+  double _squaredDistance(Point a, Point b) {
+    final dx = b.x - a.x;
+    final dy = b.y - a.y;
+    return dx * dx + dy * dy;
+  }
+
+  /// Simplify deep concavities in the contour
+  List<Point> _simplifyDeepConcavities(List<Point> contour) {
+    if (contour.length < 4) return contour;
+    
+    final result = <Point>[];
+    final thresholdRatio = 0.2;  // Concavity must be at least 20% of perimeter
+    
+    // Calculate perimeter
+    double perimeter = 0;
+    for (int i = 0; i < contour.length - 1; i++) {
+      perimeter += _distanceBetween(contour[i], contour[i + 1]);
+    }
+    
+    // Calculate threshold distance
+    final threshold = perimeter * thresholdRatio;
+    
+    // Add first point
+    result.add(contour.first);
+    
+    // Process internal points
+    for (int i = 1; i < contour.length - 1; i++) {
+      final prev = result.last;
+      final current = contour[i];
+      final next = contour[i + 1];
+      
+      // Check if this forms a deep concavity
+      final direct = _distanceBetween(prev, next);
+      final detour = _distanceBetween(prev, current) + _distanceBetween(current, next);
+      
+      // If detour is much longer than direct path, skip this point
+      if (detour > direct + threshold) {
+        // Skip this point as it forms a deep concavity
+        continue;
+      }
+      
+      result.add(current);
+    }
+    
+    // Add last point
+    result.add(contour.last);
+    
+    return result;
+  }
+
+  /// Apply Gaussian smoothing to contour points
+  List<Point> _applyGaussianSmoothing(List<Point> contour, int windowSize) {
+    if (contour.length <= windowSize) return contour;
+    
+    final result = <Point>[];
+    final halfWindow = windowSize ~/ 2;
+    
+    // Generate Gaussian kernel
+    final kernel = _generateGaussianKernel(windowSize);
+    
+    // Apply smoothing
+    for (int i = 0; i < contour.length; i++) {
+      double sumX = 0;
+      double sumY = 0;
+      double sumWeight = 0;
+      
+      for (int j = -halfWindow; j <= halfWindow; j++) {
+        final idx = (i + j + contour.length) % contour.length;
+        final weight = kernel[j + halfWindow];
+        
+        sumX += contour[idx].x * weight;
+        sumY += contour[idx].y * weight;
+        sumWeight += weight;
+      }
+      
+      if (sumWeight > 0) {
+        result.add(Point(sumX / sumWeight, sumY / sumWeight));
+      } else {
+        result.add(contour[i]);
+      }
+    }
+    
+    return result;
+  }
+
+  /// Generate a Gaussian kernel for smoothing
+  List<double> _generateGaussianKernel(int size) {
+    final kernel = List<double>.filled(size, 0);
+    final sigma = size / 6.0;  // Standard deviation
+    final halfSize = size ~/ 2;
+    
+    double sum = 0;
+    for (int i = 0; i < size; i++) {
+      final x = i - halfSize;
+      kernel[i] = math.exp(-(x * x) / (2 * sigma * sigma));
+      sum += kernel[i];
+    }
+    
+    // Normalize kernel
+    for (int i = 0; i < size; i++) {
+      kernel[i] /= sum;
+    }
+    
+    return kernel;
+  }
+
+  /// Calculate distance between two points
+  double _distanceBetween(Point a, Point b) {
+    final dx = b.x - a.x;
+    final dy = b.y - a.y;
+    return math.sqrt(dx * dx + dy * dy);
+  }
+
+  /// Calculate area of a polygon
+  double _calculatePolygonArea(List<Point> points) {
+    if (points.length < 3) return 0.0;
+    
+    double area = 0.0;
+    
+    // Apply the Shoelace formula (Gauss's area formula)
+    for (int i = 0; i < points.length - 1; i++) {
+      area += points[i].x * points[i + 1].y;
+      area -= points[i + 1].x * points[i].y;
+    }
+    
+    return area.abs() / 2.0;
+  }
+
+  /// Generate an optimized toolpath for the given contour
+  List<Point> _generateOptimizedToolpath(
+    List<Point> contour, 
+    double toolDiameter, 
+    double stepover
+  ) {
+    // If the contour is too small or invalid, use the basic toolpath generator
+    if (contour.length < 10) {
+      return ToolpathGenerator.generatePocketToolpath(contour, toolDiameter, stepover);
+    }
+    
+    try {
+      // Find the bounding box of the contour
+      double minX = double.infinity;
+      double minY = double.infinity;
+      double maxX = double.negativeInfinity;
+      double maxY = double.negativeInfinity;
+      
+      for (final point in contour) {
+        minX = math.min(minX, point.x);
+        minY = math.min(minY, point.y);
+        maxX = math.max(maxX, point.x);
+        maxY = math.max(maxY, point.y);
+      }
+      
+      // Inset by half tool diameter to account for tool radius
+      final inset = toolDiameter / 2;
+      minX += inset;
+      minY += inset;
+      maxX -= inset;
+      maxY -= inset;
+      
+      // Check if bounding box is valid after inset
+      if (minX >= maxX || minY >= maxY) {
+        // Contour is too small for the tool, use a simpler approach
+        return ToolpathGenerator.generatePocketToolpath(contour, toolDiameter, stepover);
+      }
+      
+      // Generate zigzag pattern for efficient material removal
+      // Calculate direction based on longest dimension
+      final width = maxX - minX;
+      final height = maxY - minY;
+      final horizontal = width > height;
+      
+      final toolpath = <Point>[];
+      
+      if (horizontal) {
+        // Generate horizontal zigzag (moving along Y)
+        double y = minY;
+        bool movingRight = true;
+        
+        while (y <= maxY) {
+          if (movingRight) {
+            toolpath.add(Point(minX, y));
+            toolpath.add(Point(maxX, y));
+          } else {
+            toolpath.add(Point(maxX, y));
+            toolpath.add(Point(minX, y));
+          }
+          
+          y += stepover;
+          movingRight = !movingRight;
+        }
+      } else {
+        // Generate vertical zigzag (moving along X)
+        double x = minX;
+        bool movingDown = true;
+        
+        while (x <= maxX) {
+          if (movingDown) {
+            toolpath.add(Point(x, minY));
+            toolpath.add(Point(x, maxY));
+          } else {
+            toolpath.add(Point(x, maxY));
+            toolpath.add(Point(x, minY));
+          }
+          
+          x += stepover;
+          movingDown = !movingDown;
+        }
+      }
+      
+      // Post-process the toolpath to ensure it stays within the contour
+      return _clipToolpathToContour(toolpath, contour);
+    } catch (e) {
+      print('Error generating optimized toolpath: $e');
+      // Fall back to basic toolpath generation
+      return ToolpathGenerator.generatePocketToolpath(contour, toolDiameter, stepover);
+    }
+  }
+
+  /// Clip a toolpath to ensure it stays within the contour
+  List<Point> _clipToolpathToContour(List<Point> toolpath, List<Point> contour) {
+    if (toolpath.isEmpty || contour.length < 3) {
+      return toolpath;
+    }
+    
+    final result = <Point>[];
+    
+    // For each segment in the toolpath
+    for (int i = 0; i < toolpath.length - 1; i++) {
+      final p1 = toolpath[i];
+      final p2 = toolpath[i + 1];
+      
+      // Check if both points are inside the contour
+      final p1Inside = _isPointInPolygon(p1, contour);
+      final p2Inside = _isPointInPolygon(p2, contour);
+      
+      if (p1Inside && p2Inside) {
+        // Both points inside, add the entire segment
+        result.add(p1);
+        result.add(p2);
+      } else if (p1Inside || p2Inside) {
+        // One point inside, one outside - find intersection with contour
+        final intersections = _findLinePolygonIntersections(p1, p2, contour);
+        
+        if (intersections.isNotEmpty) {
+          // Sort intersections by distance from p1
+          intersections.sort((a, b) {
+            final distA = _squaredDistance(p1, a);
+            final distB = _squaredDistance(p1, b);
+            return distA.compareTo(distB);
+          });
+          
+          if (p1Inside) {
+            // p1 inside, p2 outside
+            result.add(p1);
+            result.add(intersections.first);
+          } else {
+            // p2 inside, p1 outside
+            result.add(intersections.last);
+            result.add(p2);
+          }
+        }
+      } else {
+        // Both points outside, check if the line segment intersects the contour
+        final intersections = _findLinePolygonIntersections(p1, p2, contour);
+        
+        if (intersections.length >= 2) {
+          // If multiple intersections, add the segment between first and last
+          intersections.sort((a, b) {
+            final distA = _squaredDistance(p1, a);
+            final distB = _squaredDistance(p1, b);
+            return distA.compareTo(distB);
+          });
+          
+          result.add(intersections.first);
+          result.add(intersections.last);
+        }
+      }
+    }
+    
+    return result;
+  }
+
+  /// Check if a point is inside a polygon
+  bool _isPointInPolygon(Point point, List<Point> polygon) {
+    bool inside = false;
+    int j = polygon.length - 1;
+    
+    for (int i = 0; i < polygon.length; i++) {
+      if ((polygon[i].y > point.y) != (polygon[j].y > point.y) &&
+          point.x < (polygon[j].x - polygon[i].x) * (point.y - polygon[i].y) / 
+          (polygon[j].y - polygon[i].y) + polygon[i].x) {
+        inside = !inside;
+      }
+      j = i;
+    }
+    
+    return inside;
+  }
+
+  /// Find intersections between a line segment and a polygon
+  List<Point> _findLinePolygonIntersections(Point p1, Point p2, List<Point> polygon) {
+    final intersections = <Point>[];
+    
+    for (int i = 0; i < polygon.length - 1; i++) {
+      final q1 = polygon[i];
+      final q2 = polygon[i + 1];
+      
+      final intersection = _lineLineIntersection(p1, p2, q1, q2);
+      if (intersection != null) {
+        intersections.add(intersection);
+      }
+    }
+    
+    return intersections;
+  }
+
+  /// Calculate intersection point between two line segments
+  Point? _lineLineIntersection(Point p1, Point p2, Point q1, Point q2) {
+    // Calculate the direction of the lines
+    final d1x = p2.x - p1.x;
+    final d1y = p2.y - p1.y;
+    final d2x = q2.x - q1.x;
+    final d2y = q2.y - q1.y;
+    
+    // Calculate the determinant
+    final det = d1x * d2y - d1y * d2x;
+    
+    // If lines are parallel, they don't intersect
+    if (det.abs() < 1e-10) return null;
+    
+    // Calculate the parameters of intersection
+    final dx = q1.x - p1.x;
+    final dy = q1.y - p1.y;
+    
+    final t = (dx * d2y - dy * d2x) / det;
+    final u = (dx * d1y - dy * d1x) / det;
+    
+    // Check if intersection point is within both line segments
+    if (t >= 0 && t <= 1 && u >= 0 && u <= 1) {
+      return Point(
+        p1.x + t * d1x,
+        p1.y + t * d1y
+      );
+    }
+    
+    return null;
+  }
 }
 
 /// Function to process the image in an isolate (separate thread)
@@ -483,7 +992,8 @@ Future<SlabProcessingResult> _processImageIsolate(Map<String, dynamic> data) asy
     final settings = SettingsModel(
       cncWidth: settingsMap['cncWidth'],
       cncHeight: settingsMap['cncHeight'],
-      markerDistance: settingsMap['markerDistance'],
+      markerXDistance: settingsMap['markerXDistance'],
+      markerYDistance: settingsMap['markerYDistance'],
       toolDiameter: settingsMap['toolDiameter'],
       stepover: settingsMap['stepover'],
       safetyHeight: settingsMap['safetyHeight'],
