@@ -64,6 +64,9 @@ class MarkerDetector {
   }
 
   MarkerDetectionResult _detectMarkersInternal(img.Image image) {
+    // Log input image dimensions
+    print('Marker detection - input image dimensions: ${image.width}x${image.height}');
+    
     // Downsample large images to conserve memory
     img.Image processImage = image;
     if (image.width > maxImageSize || image.height > maxImageSize) {
@@ -75,9 +78,9 @@ class MarkerDetector {
           height: (image.height * scaleFactor).round(),
           interpolation: img.Interpolation.average
         );
+        print('Marker detection - resized to: ${processImage.width}x${processImage.height}');
       } catch (e) {
         print('Warning: Failed to resize image: $e');
-        // Continue with original image if resize fails
       }
     }
     
@@ -88,24 +91,45 @@ class MarkerDetector {
         debugImage = img.copyResize(processImage, width: processImage.width, height: processImage.height);
       } catch (e) {
         print('Warning: Failed to create debug image: $e');
-        // Continue without debug image if creation fails
       }
     }
     
     try {
-      // 1. Convert to grayscale for processing
+      // STRATEGY 1: Try corner detection
+      print('Attempting corner marker detection...');
+      var markers = _findCornerMarkers(processImage, debugImage);
+      if (markers.length >= 3) {
+        print('Found ${markers.length} corner markers');
+        final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
+        final calibrationResult = _calculateCalibration(identifiedMarkers, debugImage);
+        return calibrationResult;
+      }
+      
+      // STRATEGY 2: Try high contrast blob detection
+      print('Attempting high contrast blob detection...');
+      markers = _findHighContrastBlobs(processImage, debugImage);
+      if (markers.length >= 3) {
+        print('Found ${markers.length} high contrast markers');
+        final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
+        final calibrationResult = _calculateCalibration(identifiedMarkers, debugImage);
+        return calibrationResult;
+      }
+      
+      // STRATEGY 3: Try the original method
+      print('Attempting original marker detection...');
+      // Convert to grayscale for processing
       final grayscale = ImageUtils.convertToGrayscale(processImage);
       
-      // 2. Preprocess the image to make markers stand out
+      // Preprocess the image to make markers stand out
       final preprocessed = _preprocessImage(grayscale);
       
-      // 3. Find potential marker regions
-      final markers = _findMarkerCandidates(preprocessed, debugImage);
+      // Find potential marker regions
+      markers = _findMarkerCandidates(preprocessed, debugImage);
       
-      // 4. Identify which marker is which based on their relative positions
+      // Identify which marker is which based on their relative positions
       final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
       
-      // 5. Calculate calibration parameters with validation
+      // Calculate calibration parameters with validation
       final calibrationResult = _calculateCalibration(identifiedMarkers, debugImage);
       
       return calibrationResult;
@@ -115,6 +139,351 @@ class MarkerDetector {
       return _createFallbackResult(processImage, debugImage);
     }
   }
+
+  /// Find markers in corner regions of the image
+List<MarkerPoint> _findCornerMarkers(img.Image image, img.Image? debugImage) {
+  final markers = <MarkerPoint>[];
+  final width = image.width;
+  final height = image.height;
+  
+  // Define corner regions to search (relative to image size)
+  final searchRegions = [
+    // Bottom left (origin)
+    [0.05, 0.75, 0.30, 0.95],
+    // Bottom right (x-axis)
+    [0.70, 0.75, 0.95, 0.95],
+    // Top left (scale/y-axis)
+    [0.05, 0.05, 0.30, 0.25],
+  ];
+  
+  for (int regionIndex = 0; regionIndex < searchRegions.length; regionIndex++) {
+    final region = searchRegions[regionIndex];
+    final x1 = (width * region[0]).round();
+    final y1 = (height * region[1]).round();
+    final x2 = (width * region[2]).round();
+    final y2 = (height * region[3]).round();
+    
+    // Visualize region on debug image
+    if (debugImage != null) {
+      _drawRegion(debugImage, x1, y1, x2, y2, regionIndex);
+    }
+    
+    final regionMarker = _findMarkerInRegion(image, x1, y1, x2, y2, debugImage);
+    if (regionMarker != null) {
+      markers.add(regionMarker);
+    }
+  }
+  
+  return markers;
+}
+
+/// Find a marker within a specific region
+MarkerPoint? _findMarkerInRegion(img.Image image, int x1, int y1, int x2, int y2, img.Image? debugImage) {
+  try {
+    // Create a cropped image for the region
+    final regionWidth = x2 - x1;
+    final regionHeight = y2 - y1;
+    
+    // Skip very small regions
+    if (regionWidth < 10 || regionHeight < 10) return null;
+    
+    // Extract region statistics
+    int totalPixels = 0;
+    double sumBrightness = 0;
+    
+    for (int y = y1; y < y2; y++) {
+      for (int x = x1; x < x2; x++) {
+        if (x >= 0 && x < image.width && y >= 0 && y < image.height) {
+          final pixel = image.getPixel(x, y);
+          final brightness = ImageUtils.calculateLuminance(
+            pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+          ) / 255.0; // Normalize to 0-1
+          
+          sumBrightness += brightness;
+          totalPixels++;
+        }
+      }
+    }
+    
+    // Calculate average brightness
+    final avgBrightness = totalPixels > 0 ? sumBrightness / totalPixels : 0.5;
+    
+    // Look for the darkest or brightest area in the region as the marker
+    int bestX = -1, bestY = -1;
+    double bestDifference = -1;
+    
+    // Determine if we should look for dark markers on light background or vice versa
+    final lookForDark = avgBrightness > 0.5;
+    
+    // Slide a detection window through the region
+    final windowSize = math.min(regionWidth, regionHeight) ~/ 4;
+    
+    for (int y = y1; y < y2 - windowSize; y += windowSize ~/ 2) {
+      for (int x = x1; x < x2 - windowSize; x += windowSize ~/ 2) {
+        int windowPixels = 0;
+        double windowSum = 0;
+        
+        // Calculate window statistics
+        for (int wy = 0; wy < windowSize; wy++) {
+          for (int wx = 0; wx < windowSize; wx++) {
+            final px = x + wx;
+            final py = y + wy;
+            
+            if (px >= 0 && px < image.width && py >= 0 && py < image.height) {
+              final pixel = image.getPixel(px, py);
+              final brightness = ImageUtils.calculateLuminance(
+                pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+              ) / 255.0; // Normalize to 0-1
+              
+              windowSum += brightness;
+              windowPixels++;
+            }
+          }
+        }
+        
+        if (windowPixels > 0) {
+          final windowAvg = windowSum / windowPixels;
+          double difference;
+          
+          if (lookForDark) {
+            // Looking for dark markers on light background
+            difference = avgBrightness - windowAvg;
+          } else {
+            // Looking for light markers on dark background
+            difference = windowAvg - avgBrightness;
+          }
+          
+          if (difference > bestDifference) {
+            bestDifference = difference;
+            bestX = x + windowSize ~/ 2;
+            bestY = y + windowSize ~/ 2;
+          }
+        }
+      }
+    }
+    
+    // Require a minimum contrast difference
+    if (bestDifference < 0.2 || bestX < 0 || bestY < 0) {
+      return null;
+    }
+    
+    // Draw marker on debug image if available
+    if (debugImage != null) {
+      final color = lookForDark ? 
+        img.ColorRgba8(255, 0, 0, 255) : 
+        img.ColorRgba8(0, 255, 0, 255);
+      
+      ImageUtils.drawCircle(debugImage, bestX, bestY, 10, color);
+      ImageUtils.drawText(debugImage, "Contrast: ${bestDifference.toStringAsFixed(2)}", 
+                         bestX + 15, bestY, color);
+    }
+    
+    return MarkerPoint(bestX, bestY, MarkerRole.origin, confidence: bestDifference);
+  } catch (e) {
+    print('Error finding marker in region: $e');
+    return null;
+  }
+}
+
+/// Draw a region on the debug image
+void _drawRegion(img.Image image, int x1, int y1, int x2, int y2, int regionIndex) {
+  final colors = [
+    img.ColorRgba8(255, 0, 0, 128),  // Red for origin
+    img.ColorRgba8(0, 255, 0, 128),  // Green for X-axis
+    img.ColorRgba8(0, 0, 255, 128)   // Blue for scale
+  ];
+  
+  final color = colors[regionIndex % colors.length];
+  
+  // Draw rectangle border
+  for (int x = x1; x <= x2; x++) {
+    if (x >= 0 && x < image.width) {
+      if (y1 >= 0 && y1 < image.height) image.setPixel(x, y1, color);
+      if (y2 >= 0 && y2 < image.height) image.setPixel(x, y2, color);
+    }
+  }
+  
+  for (int y = y1; y <= y2; y++) {
+    if (y >= 0 && y < image.height) {
+      if (x1 >= 0 && x1 < image.width) image.setPixel(x1, y, color);
+      if (x2 >= 0 && x2 < image.width) image.setPixel(x2, y, color);
+    }
+  }
+  
+  // Add label
+  final labels = ["Origin", "X-Axis", "Scale"];
+  ImageUtils.drawText(image, labels[regionIndex % labels.length], x1 + 5, y1 + 5, color);
+}
+
+/// Find high contrast blobs that could be markers
+List<MarkerPoint> _findHighContrastBlobs(img.Image image, img.Image? debugImage) {
+  final markers = <MarkerPoint>[];
+  
+  try {
+    // Convert to grayscale
+    final grayscale = ImageUtils.convertToGrayscale(image);
+    
+    // Apply adaptive thresholding to find high contrast areas
+    final thresholded = _applyMultipleThresholds(grayscale);
+    
+    // Find connected components (blobs)
+    final blobs = _findConnectedComponents(thresholded);
+    
+    // Sort blobs by size (we want medium-sized blobs, not too big or small)
+    blobs.sort((a, b) => a.length.compareTo(b.length));
+    
+    // Filter by size and shape
+    final filteredBlobs = <List<int>>[];
+    for (final blob in blobs) {
+      if (blob.length >= 40 && blob.length <= 2000) {
+        // Calculate blob properties
+        final properties = _calculateBlobProperties(blob);
+        
+        // Filter by compactness (close to square/circle)
+        if (properties['compactness']! < 2.5) {
+          filteredBlobs.add(blob);
+          
+          if (debugImage != null) {
+            // Visualize blob
+            for (int i = 0; i < blob.length; i += 2) {
+              if (i + 1 < blob.length) {
+                final x = blob[i];
+                final y = blob[i + 1];
+                if (x >= 0 && x < debugImage.width && y >= 0 && y < debugImage.height) {
+                  debugImage.setPixel(x, y, img.ColorRgba8(255, 0, 255, 100));
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+    
+    // Keep only the largest 10 blobs to avoid false positives
+    if (filteredBlobs.length > 10) {
+      filteredBlobs.sort((a, b) => b.length.compareTo(a.length));
+      filteredBlobs.removeRange(10, filteredBlobs.length);
+    }
+    
+    // Convert blobs to marker points
+    for (final blob in filteredBlobs) {
+      final properties = _calculateBlobProperties(blob);
+      
+      markers.add(MarkerPoint(
+        properties['centerX']!.round(), 
+        properties['centerY']!.round(), 
+        MarkerRole.origin,
+        confidence: 0.8
+      ));
+      
+      if (debugImage != null) {
+        ImageUtils.drawCircle(
+          debugImage, 
+          properties['centerX']!.round(), 
+          properties['centerY']!.round(), 
+          8, 
+          img.ColorRgba8(0, 255, 255, 255)
+        );
+      }
+    }
+  } catch (e) {
+    print('Error finding high contrast blobs: $e');
+  }
+  
+  return markers;
+}
+
+/// Apply multiple thresholds to find high contrast regions
+img.Image _applyMultipleThresholds(img.Image grayscale) {
+  final result = img.Image(width: grayscale.width, height: grayscale.height);
+  
+  // Initialize with white
+  for (int y = 0; y < grayscale.height; y++) {
+    for (int x = 0; x < grayscale.width; x++) {
+      result.setPixel(x, y, img.ColorRgba8(255, 255, 255, 255));
+    }
+  }
+  
+  // Try both dark and light thresholds
+  final thresholds = [50, 200]; // Look for very dark and very light regions
+  
+  for (int y = 0; y < grayscale.height; y++) {
+    for (int x = 0; x < grayscale.width; x++) {
+      final pixel = grayscale.getPixel(x, y);
+      final intensity = ImageUtils.calculateLuminance(
+        pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+      );
+      
+      // Mark pixel as feature (black) if it's either very dark or very light
+      if (intensity < thresholds[0] || intensity > thresholds[1]) {
+        result.setPixel(x, y, img.ColorRgba8(0, 0, 0, 255));
+      }
+    }
+  }
+  
+  return result;
+}
+
+/// Calculate blob properties like center, area, and compactness
+Map<String, double> _calculateBlobProperties(List<int> blob) {
+  if (blob.isEmpty) {
+    return {
+      'centerX': 0,
+      'centerY': 0,
+      'area': 0,
+      'compactness': double.infinity
+    };
+  }
+  
+  // Calculate centroid
+  double sumX = 0, sumY = 0;
+  for (int i = 0; i < blob.length; i += 2) {
+    if (i + 1 < blob.length) {
+      sumX += blob[i];
+      sumY += blob[i + 1];
+    }
+  }
+  
+  final centerX = sumX / (blob.length / 2);
+  final centerY = sumY / (blob.length / 2);
+  
+  // Calculate area and perimeter
+  final area = blob.length / 2;
+  
+  // Find extreme points for perimeter estimation
+  double minX = double.infinity, minY = double.infinity;
+  double maxX = double.negativeInfinity, maxY = double.negativeInfinity;
+  
+  for (int i = 0; i < blob.length; i += 2) {
+    if (i + 1 < blob.length) {
+      final x = blob[i].toDouble();
+      final y = blob[i + 1].toDouble();
+      
+      minX = math.min(minX, x);
+      minY = math.min(minY, y);
+      maxX = math.max(maxX, x);
+      maxY = math.max(maxY, y);
+    }
+  }
+  
+  // Simple perimeter approximation
+  final width = maxX - minX;
+  final height = maxY - minY;
+  final perimeter = 2 * (width + height);
+  
+  // Compactness (1 for circle, higher for complex shapes)
+  // Using 4π·Area / Perimeter²
+  final compactness = perimeter <= 0 ? 
+    double.infinity : 
+    perimeter * perimeter / (4 * math.pi * area);
+  
+  return {
+    'centerX': centerX,
+    'centerY': centerY,
+    'area': area,
+    'compactness': compactness
+  };
+}
   
   /// Create a fallback result when detection fails
   MarkerDetectionResult _createFallbackResult(img.Image image, img.Image? debugImage) {
