@@ -1,16 +1,14 @@
-// lib/services/image_processing/contour_detection/algorithms/color_contour_algorithm.dart
+// lib/services/image_processing/contour_algorithms/color_contour_algorithm.dart
 // Color-based contour detection algorithm
 
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:cnc_wonky_slab_cutter/utils/image_processing/contour_detection_utils.dart';
 import 'package:image/image.dart' as img;
 
 import '../../gcode/machine_coordinates.dart';
 import '../../../utils/image_processing/color_utils.dart';
 import '../../../utils/image_processing/drawing_utils.dart';
-import '../../../utils/image_processing/geometry_utils.dart';
-import '../../../utils/image_processing/threshold_utils.dart';
+import '../../../utils/image_processing/contour_detection_utils.dart';
 import '../slab_contour_result.dart';
 import 'contour_algorithm_interface.dart';
 
@@ -53,10 +51,10 @@ class ColorContourAlgorithm implements ContourDetectionAlgorithm {
       final seedHsv = ColorUtils.rgbToHsv(seedColor['r']!, seedColor['g']!, seedColor['b']!);
       
       // 3. Create binary mask using color-based region growing
-      final mask = _colorBasedRegionGrowing(image, seedX, seedY, seedHsv);
+      final mask = ColorUtils.colorBasedRegionGrowing(image, seedX, seedY, seedHsv, threshold: colorThreshold);
       
       // 4. Apply morphological closing to fill gaps
-      final closedMask = _applyMorphologicalClosing(mask);
+      final closedMask = ContourDetectionUtils.applyMorphologicalClosing(mask, 3);
       
       // 5. Find contour points
       final contourPoints = ContourDetectionUtils.findOuterContour(closedMask);
@@ -98,151 +96,6 @@ class ColorContourAlgorithm implements ContourDetectionAlgorithm {
       print('Error in $name algorithm: $e');
       return _createFallbackResult(image, coordSystem, debugImage, seedX, seedY);
     }
-  }
-  
-  /// Region growing based on color similarity in HSV space
-  List<List<bool>> _colorBasedRegionGrowing(
-    img.Image image, 
-    int seedX, 
-    int seedY, 
-    Map<String, double> seedHsv
-  ) {
-    final mask = List.generate(
-      image.height, 
-      (_) => List<bool>.filled(image.width, false)
-    );
-    
-    // Queue for processing
-    final queue = <List<int>>[];
-    queue.add([seedX, seedY]);
-    mask[seedY][seedX] = true;
-    
-    // 4-connected neighbors
-    final dx = [1, 0, -1, 0];
-    final dy = [0, 1, 0, -1];
-    
-    while (queue.isNotEmpty) {
-      final point = queue.removeAt(0);
-      final x = point[0];
-      final y = point[1];
-      
-      // Check neighbors
-      for (int i = 0; i < 4; i++) {
-        final nx = x + dx[i];
-        final ny = y + dy[i];
-        
-        // Skip if out of bounds or already visited
-        if (nx < 0 || nx >= image.width || ny < 0 || ny >= image.height || mask[ny][nx]) {
-          continue;
-        }
-        
-        // Get pixel color
-        final pixel = image.getPixel(nx, ny);
-        final pixelRgb = {
-          'r': pixel.r.toInt(),
-          'g': pixel.g.toInt(),
-          'b': pixel.b.toInt()
-        };
-        
-        // Convert to HSV
-        final pixelHsv = ColorUtils.rgbToHsv(pixelRgb['r']!, pixelRgb['g']!, pixelRgb['b']!);
-        
-        // Calculate color difference in HSV space
-        // Weight hue more than saturation or value
-        double hueDiff = _getHueDifference(seedHsv['h']!, pixelHsv['h']!);
-        double satDiff = (seedHsv['s']! - pixelHsv['s']!).abs();
-        double valDiff = (seedHsv['v']! - pixelHsv['v']!).abs();
-        
-        // Combined color difference with weights
-        double colorDiff = (hueDiff * 0.5) + (satDiff * 0.3) + (valDiff * 0.2);
-        
-        // If color is similar enough, add to region
-        if (colorDiff < colorThreshold / 100.0) {
-          mask[ny][nx] = true;
-          queue.add([nx, ny]);
-        }
-      }
-    }
-    
-    return mask;
-  }
-  
-  /// Calculate the smallest angular difference between two hues
-  double _getHueDifference(double hue1, double hue2) {
-    double diff = (hue1 - hue2).abs();
-    return diff > 180 ? 360 - diff : diff;
-  }
-  
-  /// Apply morphological closing to fill gaps
-  List<List<bool>> _applyMorphologicalClosing(List<List<bool>> mask) {
-    // First apply dilation
-    final dilated = _applyDilation(mask, 3);
-    
-    // Then apply erosion
-    return _applyErosion(dilated, 3);
-  }
-  
-  /// Apply dilation morphological operation
-  List<List<bool>> _applyDilation(List<List<bool>> mask, int kernelSize) {
-    final height = mask.length;
-    final width = mask[0].length;
-    final result = List.generate(height, (_) => List<bool>.filled(width, false));
-    
-    final halfKernel = kernelSize ~/ 2;
-    
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
-        // Check kernel neighborhood
-        bool shouldDilate = false;
-        
-        for (int ky = -halfKernel; ky <= halfKernel && !shouldDilate; ky++) {
-          for (int kx = -halfKernel; kx <= halfKernel && !shouldDilate; kx++) {
-            final ny = y + ky;
-            final nx = x + kx;
-            
-            if (nx >= 0 && nx < width && ny >= 0 && ny < height && mask[ny][nx]) {
-              shouldDilate = true;
-            }
-          }
-        }
-        
-        result[y][x] = shouldDilate;
-      }
-    }
-    
-    return result;
-  }
-  
-  /// Apply erosion morphological operation
-  List<List<bool>> _applyErosion(List<List<bool>> mask, int kernelSize) {
-    final height = mask.length;
-    final width = mask[0].length;
-    final result = List.generate(height, (_) => List<bool>.filled(width, false));
-    
-    final halfKernel = kernelSize ~/ 2;
-    
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
-        // Assume should erode
-        bool shouldErode = true;
-        
-        // Check if all pixels in kernel are true
-        for (int ky = -halfKernel; ky <= halfKernel && shouldErode; ky++) {
-          for (int kx = -halfKernel; kx <= halfKernel && shouldErode; kx++) {
-            final ny = y + ky;
-            final nx = x + kx;
-            
-            if (nx < 0 || nx >= width || ny < 0 || ny >= height || !mask[ny][nx]) {
-              shouldErode = false;
-            }
-          }
-        }
-        
-        result[y][x] = shouldErode;
-      }
-    }
-    
-    return result;
   }
   
   /// Create a fallback result when detection fails

@@ -1,4 +1,4 @@
-// lib/services/image_processing/contour_detection/algorithms/edge_contour_algorithm.dart
+// lib/services/image_processing/contour_algorithms/edge_contour_algorithm.dart
 // Edge-based contour detection algorithm
 
 import 'dart:async';
@@ -9,7 +9,6 @@ import '../../gcode/machine_coordinates.dart';
 import '../../../utils/image_processing/contour_detection_utils.dart';
 import '../../../utils/image_processing/filter_utils.dart';
 import '../../../utils/image_processing/drawing_utils.dart';
-import '../../../utils/image_processing/geometry_utils.dart';
 import '../slab_contour_result.dart';
 import 'contour_algorithm_interface.dart';
 
@@ -56,11 +55,8 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
       List<Point> processedContour = contourPoints;
       
       if (contourPoints.length > 10) {
-        // Apply Douglas-Peucker simplification
-        processedContour = GeometryUtils.simplifyPolygon(contourPoints, 2.0);
-        
-        // Apply Gaussian smoothing
-        processedContour = ContourDetectionUtils.smoothContour(processedContour, windowSize: 5);
+        // Apply Douglas-Peucker simplification and smoothing
+        processedContour = ContourDetectionUtils.smoothAndSimplifyContour(contourPoints, 2.0);
       }
       
       // 6. Convert to machine coordinates

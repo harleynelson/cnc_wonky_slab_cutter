@@ -37,9 +37,16 @@ class ColorUtils {
       'v': value,
     };
   }
+
+  /// Calculate the smallest angular difference between two hues
+  static double getHueDifference(double hue1, double hue2) {
+    double diff = (hue1 - hue2).abs();
+    return diff > 180 ? 360 - diff : diff;
+  }
   
   /// Convert HSV to RGB color space
   static Map<String, int> hsvToRgb(double h, double s, double v) {
+    // Existing implementation
     int r, g, b;
     
     if (s <= 0.0) {
@@ -94,6 +101,7 @@ class ColorUtils {
   
   /// Calculate color histogram for an image
   static Map<String, List<int>> calculateHistogram(img.Image image) {
+    // Existing implementation
     final histR = List<int>.filled(256, 0);
     final histG = List<int>.filled(256, 0);
     final histB = List<int>.filled(256, 0);
@@ -121,6 +129,74 @@ class ColorUtils {
       'b': histB,
       'gray': histGray,
     };
+  }
+
+  /// Perform color-based region growing from a seed point
+  static List<List<bool>> colorBasedRegionGrowing(
+    img.Image image, 
+    int seedX, 
+    int seedY, 
+    Map<String, double> seedHsv,
+    {double threshold = 30.0}
+  ) {
+    final mask = List.generate(
+      image.height, 
+      (_) => List<bool>.filled(image.width, false)
+    );
+    
+    // Queue for processing
+    final queue = <List<int>>[];
+    queue.add([seedX, seedY]);
+    mask[seedY][seedX] = true;
+    
+    // 4-connected neighbors
+    final dx = [1, 0, -1, 0];
+    final dy = [0, 1, 0, -1];
+    
+    while (queue.isNotEmpty) {
+      final point = queue.removeAt(0);
+      final x = point[0];
+      final y = point[1];
+      
+      // Check neighbors
+      for (int i = 0; i < 4; i++) {
+        final nx = x + dx[i];
+        final ny = y + dy[i];
+        
+        // Skip if out of bounds or already visited
+        if (nx < 0 || nx >= image.width || ny < 0 || ny >= image.height || mask[ny][nx]) {
+          continue;
+        }
+        
+        // Get pixel color
+        final pixel = image.getPixel(nx, ny);
+        final pixelRgb = {
+          'r': pixel.r.toInt(),
+          'g': pixel.g.toInt(),
+          'b': pixel.b.toInt()
+        };
+        
+        // Convert to HSV
+        final pixelHsv = rgbToHsv(pixelRgb['r']!, pixelRgb['g']!, pixelRgb['b']!);
+        
+        // Calculate color difference in HSV space
+        // Weight hue more than saturation or value
+        double hueDiff = getHueDifference(seedHsv['h']!, pixelHsv['h']!);
+        double satDiff = (seedHsv['s']! - pixelHsv['s']!).abs();
+        double valDiff = (seedHsv['v']! - pixelHsv['v']!).abs();
+        
+        // Combined color difference with weights
+        double colorDiff = (hueDiff * 0.5) + (satDiff * 0.3) + (valDiff * 0.2);
+        
+        // If color is similar enough, add to region
+        if (colorDiff < threshold / 100.0) {
+          mask[ny][nx] = true;
+          queue.add([nx, ny]);
+        }
+      }
+    }
+    
+    return mask;
   }
   
   /// Apply a color adjustment to an image

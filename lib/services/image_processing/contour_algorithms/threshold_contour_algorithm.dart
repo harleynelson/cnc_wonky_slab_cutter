@@ -1,15 +1,15 @@
-// lib/services/image_processing/contour_detection/algorithms/threshold_contour_algorithm.dart
+// lib/services/image_processing/contour_algorithms/threshold_contour_algorithm.dart
 // Threshold-based contour detection algorithm
 
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:cnc_wonky_slab_cutter/utils/image_processing/geometry_utils.dart';
 import 'package:image/image.dart' as img;
 
 import '../../gcode/machine_coordinates.dart';
 import '../../../utils/image_processing/contour_detection_utils.dart';
 import '../../../utils/image_processing/threshold_utils.dart';
 import '../../../utils/image_processing/drawing_utils.dart';
+import '../../../utils/image_processing/base_image_utils.dart';
 import '../slab_contour_result.dart';
 import 'contour_algorithm_interface.dart';
 
@@ -98,7 +98,9 @@ class ThresholdContourAlgorithm implements ContourDetectionAlgorithm {
     
     // Get seed pixel value
     final seedPixel = image.getPixel(seedX, seedY);
-    final seedIntensity = (seedPixel.r.toInt() + seedPixel.g.toInt() + seedPixel.b.toInt()) ~/ 3;
+    final seedIntensity = BaseImageUtils.calculateLuminance(
+      seedPixel.r.toInt(), seedPixel.g.toInt(), seedPixel.b.toInt()
+    );
     
     // Queue for processing
     final queue = <List<int>>[];
@@ -126,7 +128,9 @@ class ThresholdContourAlgorithm implements ContourDetectionAlgorithm {
         
         // Check intensity similarity
         final pixel = image.getPixel(nx, ny);
-        final intensity = (pixel.r.toInt() + pixel.g.toInt() + pixel.b.toInt()) ~/ 3;
+        final intensity = BaseImageUtils.calculateLuminance(
+          pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+        );
         
         if ((intensity - seedIntensity).abs() <= threshold) {
           mask[ny][nx] = true;

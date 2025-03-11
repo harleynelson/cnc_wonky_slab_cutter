@@ -108,10 +108,10 @@ class SlabContourDetector {
       final binaryImage = ThresholdUtils.applyAdaptiveThreshold(blurred, 25, 5);
       
       // 5. Apply morphological operations to close gaps
-      final closed = ContourDetectionUtils.applyMorphologicalClosing(binaryImage, 5);
+      final closed = ContourDetectionUtils.applyMorphologicalClosing(binaryImage as List<List<bool>>, 5);
       
       // 6. Find the outer contour using boundary tracing
-      final contourPoints = ContourDetectionUtils.findOuterContour(closed as List<List<bool>>);
+      final contourPoints = ContourDetectionUtils.findOuterContour(closed);
       
       // 7. Apply smoothing and simplification
       final simplifiedContour = ContourDetectionUtils.smoothAndSimplifyContour(contourPoints, 5.0);
@@ -155,10 +155,10 @@ class SlabContourDetector {
         final binary = ThresholdUtils.applyBinaryThreshold(grayscale, threshold);
         
         // Apply morphological operations
-        final processed = ContourDetectionUtils.applyMorphologicalOpening(binary, 3);
+        final processed = ContourDetectionUtils.applyMorphologicalOpening(binary as List<List<bool>>, 3);
         
         // Find contour
-        final contourPoints = ContourDetectionUtils.findLargestContour(processed);
+        final contourPoints = ContourDetectionUtils.findLargestContour(processed as img.Image);
         
         // Check if this contour is better than the previous best
         if (contourPoints.length > bestContour.length && contourPoints.length >= 10) {
