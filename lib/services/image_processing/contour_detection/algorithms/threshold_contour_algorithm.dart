@@ -6,7 +6,9 @@ import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 
 import '../../../gcode/machine_coordinates.dart';
-import '../../image_utils.dart';
+import '../../image_processing_utils/threshold_utils.dart';
+import '../../image_processing_utils/drawing_utils.dart';
+import '../../image_processing_utils/contour_utils.dart';
 import '../../slab_contour_result.dart';
 import 'contour_algorithm_interface.dart';
 
@@ -37,41 +39,42 @@ class ThresholdContourAlgorithm implements ContourDetectionAlgorithm {
     }
 
     try {
-      // 1. Convert to grayscale
-      final grayscale = ImageUtils.convertToGrayscale(image);
+      // 1. Find optimal threshold automatically
+      final threshold = ThresholdUtils.findOptimalThreshold(image);
       
-      // 2. Apply region growing from seed point
-      final mask = _regionGrow(grayscale, seedX, seedY, threshold: regionGrowThreshold);
+      // 2. Apply binary thresholding
+      final binaryImage = ThresholdUtils.applyThreshold(image, threshold);
       
-      // 3. Find contour pixels from the mask
-      final contourPixels = _findContourPixels(mask);
+      // 3. Apply region growing from seed point
+      final List<List<bool>> mask = _applyRegionGrowing(
+        binaryImage, 
+        seedX, 
+        seedY, 
+        threshold: regionGrowThreshold
+      );
       
-      // 4. Convert to Point objects
-      final contourPoints = contourPixels.map((p) => Point(p[0].toDouble(), p[1].toDouble())).toList();
+      // 4. Find contour from the mask
+      final List<Point> contourPoints = ContourUtils.findOuterContour(mask);
       
       // 5. Smooth and simplify the contour
-      final smoothContour = _smoothAndSimplifyContour(contourPoints);
+      final List<Point> smoothContour = ContourUtils.smoothAndSimplifyContour(
+        contourPoints,
+        5.0 // epsilon for simplification
+      );
       
       // 6. Convert to machine coordinates
-      final machineContour = coordSystem.convertPointListToMachineCoords(smoothContour);
+      final List<Point> machineContour = coordSystem.convertPointListToMachineCoords(smoothContour);
       
-      // 7. Draw visualization if debug image is requested
+      // 7. Draw debug visualization if requested
       if (debugImage != null) {
         // Draw seed point
-        _drawCircle(debugImage, seedX, seedY, 5, img.ColorRgba8(255, 255, 0, 255));
+        DrawingUtils.drawCircle(debugImage, seedX, seedY, 8, img.ColorRgba8(255, 255, 0, 255));
         
         // Draw contour
-        for (int i = 0; i < smoothContour.length - 1; i++) {
-          _drawLine(
-            debugImage, 
-            smoothContour[i].x.round(), smoothContour[i].y.round(),
-            smoothContour[i + 1].x.round(), smoothContour[i + 1].y.round(),
-            img.ColorRgba8(0, 255, 0, 255)
-          );
-        }
+        DrawingUtils.drawContour(debugImage, smoothContour, img.ColorRgba8(0, 255, 0, 255), thickness: 2);
         
         // Add algorithm name label
-        _drawText(debugImage, "Algorithm: $name", 10, 10, img.ColorRgba8(255, 255, 255, 255));
+        DrawingUtils.drawText(debugImage, "Algorithm: $name", 10, 10, img.ColorRgba8(255, 255, 255, 255));
       }
       
       return SlabContourResult(
@@ -79,23 +82,22 @@ class ThresholdContourAlgorithm implements ContourDetectionAlgorithm {
         machineContour: machineContour,
         debugImage: debugImage,
       );
+      
     } catch (e) {
       print('Error in $name algorithm: $e');
       return _createFallbackResult(image, coordSystem, debugImage, seedX, seedY);
     }
   }
 
-  /// Region growing algorithm
-  List<List<bool>> _regionGrow(img.Image image, int seedX, int seedY, {int threshold = 30}) {
-    final mask = List.generate(
+  /// Apply region growing from seed point
+  List<List<bool>> _applyRegionGrowing(img.Image image, int seedX, int seedY, {int threshold = 30}) {
+    final List<List<bool>> mask = List.generate(
       image.height, (_) => List<bool>.filled(image.width, false)
     );
     
     // Get seed pixel value
     final seedPixel = image.getPixel(seedX, seedY);
-    final seedIntensity = ImageUtils.calculateLuminance(
-      seedPixel.r.toInt(), seedPixel.g.toInt(), seedPixel.b.toInt()
-    );
+    final seedIntensity = (seedPixel.r.toInt() + seedPixel.g.toInt() + seedPixel.b.toInt()) ~/ 3;
     
     // Queue for processing
     final queue = <List<int>>[];
@@ -123,9 +125,7 @@ class ThresholdContourAlgorithm implements ContourDetectionAlgorithm {
         
         // Check intensity similarity
         final pixel = image.getPixel(nx, ny);
-        final intensity = ImageUtils.calculateLuminance(
-          pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
-        );
+        final intensity = (pixel.r.toInt() + pixel.g.toInt() + pixel.b.toInt()) ~/ 3;
         
         if ((intensity - seedIntensity).abs() <= threshold) {
           mask[ny][nx] = true;
@@ -136,121 +136,8 @@ class ThresholdContourAlgorithm implements ContourDetectionAlgorithm {
     
     return mask;
   }
-
-  /// Find contour pixels from binary mask
-  List<List<int>> _findContourPixels(List<List<bool>> mask) {
-    final contourPixels = <List<int>>[];
-    final height = mask.length;
-    final width = mask[0].length;
-    
-    // Directions for 8-connected neighborhood
-    final dx8 = [1, 1, 0, -1, -1, -1, 0, 1];
-    final dy8 = [0, 1, 1, 1, 0, -1, -1, -1];
-    
-    // Find boundary pixels
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
-        if (!mask[y][x]) continue;
-        
-        // Check if this is a boundary pixel
-        bool isBoundary = false;
-        for (int i = 0; i < 8; i++) {
-          final nx = x + dx8[i];
-          final ny = y + dy8[i];
-          
-          if (nx < 0 || nx >= width || ny < 0 || ny >= height || !mask[ny][nx]) {
-            isBoundary = true;
-            break;
-          }
-        }
-        
-        if (isBoundary) {
-          contourPixels.add([x, y]);
-        }
-      }
-    }
-    
-    return contourPixels;
-  }
-
-  /// Basic contour smoothing and simplification
-  List<Point> _smoothAndSimplifyContour(List<Point> contour) {
-    if (contour.length <= 3) return contour;
-    
-    // Just return a simplified contour for the boilerplate
-    final simplified = <Point>[];
-    
-    // Take every Nth point to simplify
-    final N = math.max(1, contour.length ~/ 50);
-    for (int i = 0; i < contour.length; i += N) {
-      simplified.add(contour[i]);
-    }
-    
-    // Make sure to close the contour
-    if (simplified.isNotEmpty && 
-        (simplified.first.x != simplified.last.x || simplified.first.y != simplified.last.y)) {
-      simplified.add(simplified.first);
-    }
-    
-    return simplified;
-  }
   
-  /// Draw a circle on the image
-  void _drawCircle(img.Image image, int x, int y, int radius, img.Color color) {
-    for (int dy = -radius; dy <= radius; dy++) {
-      for (int dx = -radius; dx <= radius; dx++) {
-        if (dx * dx + dy * dy <= radius * radius) {
-          final px = x + dx;
-          final py = y + dy;
-          
-          if (px >= 0 && px < image.width && py >= 0 && py < image.height) {
-            image.setPixel(px, py, color);
-          }
-        }
-      }
-    }
-  }
-  
-  /// Draw a line on the image
-  void _drawLine(img.Image image, int x1, int y1, int x2, int y2, img.Color color) {
-    // Basic Bresenham line algorithm
-    int dx = (x2 - x1).abs();
-    int dy = (y2 - y1).abs();
-    int sx = x1 < x2 ? 1 : -1;
-    int sy = y1 < y2 ? 1 : -1;
-    int err = dx - dy;
-    
-    while (true) {
-      if (x1 >= 0 && x1 < image.width && y1 >= 0 && y1 < image.height) {
-        image.setPixel(x1, y1, color);
-      }
-      
-      if (x1 == x2 && y1 == y2) break;
-      
-      int e2 = 2 * err;
-      if (e2 > -dy) {
-        err -= dy;
-        x1 += sx;
-      }
-      if (e2 < dx) {
-        err += dx;
-        y1 += sy;
-      }
-    }
-  }
-  
-  /// Draw text on the image
-  void _drawText(img.Image image, String text, int x, int y, img.Color color) {
-    // Very simple text rendering
-    int cursorX = x;
-    for (int i = 0; i < text.length; i++) {
-      // Just draw dots to represent text for simplicity
-      image.setPixel(cursorX, y, color);
-      cursorX += 7; // Move cursor forward
-    }
-  }
-  
-  /// Create a fallback result if detection fails
+  /// Create a fallback result when detection fails
   SlabContourResult _createFallbackResult(
     img.Image image, 
     MachineCoordinateSystem coordSystem,
@@ -258,12 +145,13 @@ class ThresholdContourAlgorithm implements ContourDetectionAlgorithm {
     int seedX,
     int seedY
   ) {
-    // Create a simple circular contour around the seed point
-    final radius = math.min(image.width, image.height) / 5;
-    final contour = <Point>[];
+    // Create a circular contour around the seed point
+    final List<Point> contour = [];
+    final radius = math.min(image.width, image.height) * 0.3;
     
-    for (int i = 0; i <= 360; i += 10) {
-      final angle = i * math.pi / 180;
+    // Generate circular contour
+    for (int i = 0; i <= 36; i++) {
+      final angle = i * math.pi / 18; // 10 degrees in radians
       final x = seedX + radius * math.cos(angle);
       final y = seedY + radius * math.sin(angle);
       contour.add(Point(x, y));
@@ -275,20 +163,13 @@ class ThresholdContourAlgorithm implements ContourDetectionAlgorithm {
     // Draw on debug image if available
     if (debugImage != null) {
       // Draw the fallback contour
-      for (int i = 0; i < contour.length - 1; i++) {
-        _drawLine(
-          debugImage, 
-          contour[i].x.round(), contour[i].y.round(),
-          contour[i + 1].x.round(), contour[i + 1].y.round(),
-          img.ColorRgba8(255, 0, 0, 255) // Red for fallback
-        );
-      }
+      DrawingUtils.drawContour(debugImage, contour, img.ColorRgba8(255, 0, 0, 255));
       
       // Draw seed point
-      _drawCircle(debugImage, seedX, seedY, 5, img.ColorRgba8(255, 255, 0, 255));
+      DrawingUtils.drawCircle(debugImage, seedX, seedY, 8, img.ColorRgba8(255, 255, 0, 255));
       
       // Add fallback label
-      _drawText(debugImage, "FALLBACK: $name algorithm", 10, 10, img.ColorRgba8(255, 0, 0, 255));
+      DrawingUtils.drawText(debugImage, "FALLBACK: $name algorithm", 10, 10, img.ColorRgba8(255, 0, 0, 255));
     }
     
     return SlabContourResult(
