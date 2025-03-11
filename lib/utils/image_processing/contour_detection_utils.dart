@@ -255,6 +255,170 @@ class ContourDetectionUtils {
     return points;
   }
 
+  /// Check if a contour is self-intersecting
+  static bool isContourSelfIntersecting(List<Point> contour) {
+    if (contour.length < 4) return false;
+    
+    // Check each pair of non-adjacent line segments for intersection
+    for (int i = 0; i < contour.length - 1; i++) {
+      final p1 = contour[i];
+      final p2 = contour[i + 1];
+      
+      for (int j = i + 2; j < contour.length - 1; j++) {
+        // Skip adjacent segments
+        if (i == 0 && j == contour.length - 2) continue;
+        
+        final p3 = contour[j];
+        final p4 = contour[j + 1];
+        
+        if (GeometryUtils.lineSegmentIntersection(p1, p2, p3, p4) != null) {
+          return true;
+        }
+      }
+    }
+    
+    return false;
+  }
+
+  /// Simplify deep concavities in the contour
+  static List<Point> simplifyDeepConcavities(List<Point> contour, [double thresholdRatio = 0.2]) {
+    if (contour.length < 4) return contour;
+    
+    final result = <Point>[];
+    
+    // Calculate perimeter
+    double perimeter = GeometryUtils.polygonPerimeter(contour);
+    
+    // Calculate threshold distance
+    final threshold = perimeter * thresholdRatio;
+    
+    // Add first point
+    result.add(contour.first);
+    
+    // Process internal points
+    for (int i = 1; i < contour.length - 1; i++) {
+      final prev = result.last;
+      final current = contour[i];
+      final next = contour[i + 1];
+      
+      // Check if this forms a deep concavity
+      final direct = GeometryUtils.distanceBetween(prev, next);
+      final detour = GeometryUtils.distanceBetween(prev, current) + GeometryUtils.distanceBetween(current, next);
+      
+      // If detour is much longer than direct path, skip this point
+      if (detour > direct + threshold) {
+        // Skip this point as it forms a deep concavity
+        continue;
+      }
+      
+      result.add(current);
+    }
+    
+    // Add last point
+    result.add(contour.last);
+    
+    return result;
+  }
+
+  /// Ensure we have a clean outer contour without internal details
+  static List<Point> ensureCleanOuterContour(List<Point> contour) {
+    // If the contour is too small or invalid, return as is
+    if (contour.length < 10) {
+      return contour;
+    }
+    
+    try {
+      // 1. Make sure the contour is closed
+      List<Point> workingContour = List.from(contour);
+      if (workingContour.first.x != workingContour.last.x || 
+          workingContour.first.y != workingContour.last.y) {
+        workingContour.add(workingContour.first);
+      }
+      
+      // 2. Check if the contour is self-intersecting
+      if (isContourSelfIntersecting(workingContour)) {
+        // If self-intersecting, compute convex hull instead
+        final points = List<Point>.from(workingContour);
+        return GeometryUtils.convexHull(points);
+      }
+      
+      // 3. Eliminate concave sections that are too deep
+      workingContour = simplifyDeepConcavities(workingContour);
+      
+      // 4. Apply smoothing to get rid of jagged edges
+      workingContour = smoothContour(workingContour, windowSize: 5);
+      
+      return workingContour;
+    } catch (e) {
+      print('Error cleaning contour: $e');
+      return contour;
+    }
+  }
+
+  /// Clip a toolpath to ensure it stays within the contour
+  static List<Point> clipToolpathToContour(List<Point> toolpath, List<Point> contour) {
+    if (toolpath.isEmpty || contour.length < 3) {
+      return toolpath;
+    }
+    
+    final result = <Point>[];
+    
+    // For each segment in the toolpath
+    for (int i = 0; i < toolpath.length - 1; i++) {
+      final p1 = toolpath[i];
+      final p2 = toolpath[i + 1];
+      
+      // Check if both points are inside the contour
+      final p1Inside = GeometryUtils.isPointInPolygon(p1, contour);
+      final p2Inside = GeometryUtils.isPointInPolygon(p2, contour);
+      
+      if (p1Inside && p2Inside) {
+        // Both points inside, add the entire segment
+        result.add(p1);
+        result.add(p2);
+      } else if (p1Inside || p2Inside) {
+        // One point inside, one outside - find intersection with contour
+        final intersections = GeometryUtils.findLinePolygonIntersections(p1, p2, contour);
+        
+        if (intersections.isNotEmpty) {
+          // Sort intersections by distance from p1
+          intersections.sort((a, b) {
+            final distA = GeometryUtils.squaredDistance(p1, a);
+            final distB = GeometryUtils.squaredDistance(p1, b);
+            return distA.compareTo(distB);
+          });
+          
+          if (p1Inside) {
+            // p1 inside, p2 outside
+            result.add(p1);
+            result.add(intersections.first);
+          } else {
+            // p2 inside, p1 outside
+            result.add(intersections.last);
+            result.add(p2);
+          }
+        }
+      } else {
+        // Both points outside, check if the line segment intersects the contour
+        final intersections = GeometryUtils.findLinePolygonIntersections(p1, p2, contour);
+        
+        if (intersections.length >= 2) {
+          // If multiple intersections, add the segment between first and last
+          intersections.sort((a, b) {
+            final distA = GeometryUtils.squaredDistance(p1, a);
+            final distB = GeometryUtils.squaredDistance(p1, b);
+            return distA.compareTo(distB);
+          });
+          
+          result.add(intersections.first);
+          result.add(intersections.last);
+        }
+      }
+    }
+    
+    return result;
+  }
+
   /// Create a fallback contour shape for cases where detection fails
   static List<Point> createFallbackContour(int width, int height) {
     final centerX = width * 0.5;

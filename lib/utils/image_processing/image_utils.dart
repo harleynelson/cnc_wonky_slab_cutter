@@ -74,6 +74,54 @@ class ImageUtils {
   static int calculateLuminance(int r, int g, int b) {
     return (0.299 * r + 0.587 * g + 0.114 * b).round().clamp(0, 255);
   }
+
+  /// Apply Gaussian smoothing to contour points
+  static List<Point> applyGaussianSmoothing(List<Point> contour, int windowSize, [double sigma = 1.0]) {
+    if (contour.length <= windowSize) return contour;
+    
+    final result = <Point>[];
+    final halfWindow = windowSize ~/ 2;
+    
+    // Generate Gaussian kernel
+    final kernel = List<double>.filled(windowSize, 0);
+    final halfSize = windowSize ~/ 2;
+    
+    double sum = 0;
+    for (int i = 0; i < windowSize; i++) {
+      final x = i - halfSize;
+      kernel[i] = math.exp(-(x * x) / (2 * sigma * sigma));
+      sum += kernel[i];
+    }
+    
+    // Normalize kernel
+    for (int i = 0; i < windowSize; i++) {
+      kernel[i] /= sum;
+    }
+    
+    // Apply smoothing
+    for (int i = 0; i < contour.length; i++) {
+      double sumX = 0;
+      double sumY = 0;
+      double sumWeight = 0;
+      
+      for (int j = -halfWindow; j <= halfWindow; j++) {
+        final idx = (i + j + contour.length) % contour.length;
+        final weight = kernel[j + halfWindow];
+        
+        sumX += contour[idx].x * weight;
+        sumY += contour[idx].y * weight;
+        sumWeight += weight;
+      }
+      
+      if (sumWeight > 0) {
+        result.add(Point(sumX / sumWeight, sumY / sumWeight));
+      } else {
+        result.add(contour[i]);
+      }
+    }
+    
+    return result;
+  }
   
   /// Apply threshold to create a binary image
   static img.Image applyThreshold(img.Image grayscale, int threshold) {

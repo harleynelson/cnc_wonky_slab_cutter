@@ -97,6 +97,23 @@ class GeometryUtils {
     }
   }
 
+  /// Find intersections between a line segment and a polygon
+  static List<Point> findLinePolygonIntersections(Point p1, Point p2, List<Point> polygon) {
+    final intersections = <Point>[];
+    
+    for (int i = 0; i < polygon.length - 1; i++) {
+      final q1 = polygon[i];
+      final q2 = polygon[i + 1];
+      
+      final intersection = lineSegmentIntersection(p1, p2, q1, q2);
+      if (intersection != null) {
+        intersections.add(intersection);
+      }
+    }
+    
+    return intersections;
+  }
+  
   /// Calculate perpendicular distance from point to line segment
   static double _perpendicularDistance(Point point, Point lineStart, Point lineEnd) {
     try {
