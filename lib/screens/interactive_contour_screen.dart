@@ -16,7 +16,7 @@ import '../services/processing/processing_flow_manager.dart';
 import '../services/image_processing/slab_contour_result.dart';
 import '../services/image_processing/marker_detector.dart';
 import '../services/image_processing/contour_algorithms/contour_algorithm_registry.dart';
-import '../services/image_processing/contour_algorithms/contour_algorithm_interface.dart';
+import 'parameter_tuning_screen.dart';
 
 class InteractiveContourScreen extends StatefulWidget {
   final File imageFile;
@@ -622,7 +622,7 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
     );
   }
 
-  Widget _buildControlButtons() {
+    Widget _buildControlButtons() {
     return Container(
       padding: EdgeInsets.all(16),
       child: Column(
@@ -675,8 +675,66 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
               ),
             ],
           ),
+          
+          // Add parameter tuning button (NEW)
+          SizedBox(height: 8),
+          ElevatedButton.icon(
+            icon: Icon(Icons.tune),
+            label: Text('Fine-tune Parameters'),
+            onPressed: _contourPoints != null ? null : _openParameterTuning,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.orange,
+            ),
+          ),
         ],
       ),
     );
+  }
+
+  void _openParameterTuning() async {
+    if (widget.markerResult == null || widget.imageFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Marker detection must be completed first'))
+      );
+      return;
+    }
+
+    // First, make sure we have a seed point
+    int seedX, seedY;
+    if (_selectedImagePoint != null) {
+      // Use the selected point if available
+      seedX = _selectedImagePoint!.x.round();
+      seedY = _selectedImagePoint!.y.round();
+    } else {
+      // Use the center of the image if no point is selected
+      if (_sourceImage != null) {
+        seedX = _sourceImage!.width ~/ 2;
+        seedY = _sourceImage!.height ~/ 2;
+      } else {
+        // Default to marker coordinates if image dimensions aren't available
+        final centerMarker = widget.markerResult.markers[0]; // Use origin marker as fallback
+        seedX = centerMarker.x;
+        seedY = centerMarker.y;
+      }
+    }
+
+    // Navigate to parameter tuning screen
+    final bool? result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => ParameterTuningScreen(
+          imageFile: widget.imageFile,
+          markers: widget.markerResult.markers,
+          settings: widget.settings,
+          seedX: seedX,
+          seedY: seedY,
+        ),
+      ),
+    );
+    
+    if (result == true) {
+      // Refresh the UI and use the updated contour
+      setState(() {});
+    }
   }
 }

@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 import '../../models/settings_model.dart';
+import '../image_processing/contour_algorithms/default_contour_algorithm.dart';
 import '../image_processing/marker_detector.dart';
 import '../image_processing/slab_contour_detector.dart';
 import '../image_processing/slab_contour_result.dart';
@@ -193,80 +194,93 @@ class ProcessingFlowManager with ChangeNotifier {
   
   /// Process slab contour detection using automatic method
   Future<void> detectSlabContourAutomatic() async {
-    if (_result.markerResult == null || _result.processedImage == null) {
-      _setErrorState('Marker detection must be completed first');
-      return;
-    }
-    
-    try {
-      _updateState(ProcessingState.slabDetection);
-      
-      // Create coordinate system from marker detection result
-      final markerResult = _result.markerResult!;
-      final coordinateSystem = MachineCoordinateSystem.fromMarkerPointsWithDistances(
-        markerResult.markers[0].toPoint(),  // Origin
-        markerResult.markers[1].toPoint(),  // X-axis
-        markerResult.markers[2].toPoint(),  // Scale/Y-axis
-        settings.markerXDistance,
-        settings.markerYDistance
-      );
-      
-      // Create contour detector
-      final contourDetector = SlabContourDetector(
-        generateDebugImage: true,
-      );
-      
-      // Process image to detect slab contour
-      final contourResult = await contourDetector.detectContour(
-        _result.processedImage!,
-        coordinateSystem
-      );
-      
-      // Create composite visualization image
-      final compositeImage = _createCompositeImage(
-        _result.processedImage!,
-        markerResult.debugImage,
-        contourResult.debugImage
-      );
-      
-      // Update result
-      _result = _result.copyWith(
-        contourResult: contourResult,
-        processedImage: compositeImage,
-        contourMethod: ContourDetectionMethod.automatic,
-      );
-      
-      notifyListeners();
-    } catch (e, stackTrace) {
-      ErrorUtils().logError(
-        'Error during automatic slab contour detection',
-        e,
-        stackTrace: stackTrace,
-        context: 'slab_detection_automatic',
-      );
-      _setErrorState('Automatic slab detection failed: ${e.toString()}');
-    }
+  if (_result.markerResult == null || _result.processedImage == null) {
+    _setErrorState('Marker detection must be completed first');
+    return;
   }
+  
+  try {
+    _updateState(ProcessingState.slabDetection);
+    
+    // Create coordinate system from marker detection result
+    final markerResult = _result.markerResult!;
+    final coordinateSystem = MachineCoordinateSystem.fromMarkerPointsWithDistances(
+      markerResult.markers[0].toPoint(),  // Origin
+      markerResult.markers[1].toPoint(),  // X-axis
+      markerResult.markers[2].toPoint(),  // Scale/Y-axis
+      settings.markerXDistance,
+      settings.markerYDistance
+    );
+    
+    // Use our default contour algorithm (better for wood slabs)
+    final contourAlgorithm = DefaultContourAlgorithm(
+      // Default parameters that work well for wood slabs
+      contrastEnhancementFactor: 1.8,
+      blurRadius: 3,
+      edgeThreshold: 40,
+      morphologySize: 3,
+      useDarkBackgroundDetection: true,
+      simplifyEpsilon: 3.0,
+      smoothingWindowSize: 5,
+    );
+    
+    // Estimate a seed point in the center of the image
+    final seedX = _result.processedImage!.width ~/ 2;
+    final seedY = _result.processedImage!.height ~/ 2;
+    
+    // Process image to detect slab contour
+    final contourResult = await contourAlgorithm.detectContour(
+      _result.processedImage!,
+      seedX,
+      seedY,
+      coordinateSystem
+    );
+    
+    // Create composite visualization image
+    final compositeImage = _createCompositeImage(
+      _result.processedImage!,
+      markerResult.debugImage,
+      contourResult.debugImage
+    );
+    
+    // Update result
+    _result = _result.copyWith(
+      contourResult: contourResult,
+      processedImage: compositeImage,
+      contourMethod: ContourDetectionMethod.automatic,
+    );
+    
+    notifyListeners();
+  } catch (e, stackTrace) {
+    ErrorUtils().logError(
+      'Error during automatic slab contour detection',
+      e,
+      stackTrace: stackTrace,
+      context: 'slab_detection_automatic',
+    );
+    _setErrorState('Automatic slab detection failed: ${e.toString()}');
+  }
+}
   
   /// Process slab contour detection
   Future<void> detectSlabContour() async {
-    // Use the preferred method
-    switch (_preferredContourMethod) {
-      case ContourDetectionMethod.automatic:
-        await detectSlabContourAutomatic();
-        break;
-      case ContourDetectionMethod.interactive:
-        // Interactive method is handled by the UI via updateContourResult
-        _updateState(ProcessingState.slabDetection);
-        notifyListeners();
-        break;
-      case ContourDetectionMethod.manual:
-        // Manual method is handled by the UI via updateContourResult
-        _updateState(ProcessingState.slabDetection);
-        notifyListeners();
-        break;
-    }
+  // Use the preferred method
+  switch (_preferredContourMethod) {
+    case ContourDetectionMethod.automatic:
+      await detectSlabContourAutomatic();
+      break;
+    case ContourDetectionMethod.interactive:
+      // Interactive method is handled by the UI via updateContourResult
+      _updateState(ProcessingState.slabDetection);
+      notifyListeners();
+      break;
+    case ContourDetectionMethod.manual:
+      // Manual method is handled by the UI via updateContourResult
+      _updateState(ProcessingState.slabDetection);
+      notifyListeners();
+      break;
   }
+}
   
   /// Update contour result from external source (interactive or manual methods)
   void updateContourResult(SlabContourResult contourResult, {ContourDetectionMethod? method}) {

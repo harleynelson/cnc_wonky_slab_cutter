@@ -28,6 +28,27 @@ class ThresholdUtils {
     return result;
   }
 
+  /// Create a binary mask from an image using a threshold
+static List<List<bool>> createBinaryMask(img.Image image, int threshold) {
+  final mask = List.generate(
+    image.height, 
+    (_) => List<bool>.filled(image.width, false)
+  );
+  
+  for (int y = 0; y < image.height; y++) {
+    for (int x = 0; x < image.width; x++) {
+      final pixel = image.getPixel(x, y);
+      final intensity = BaseImageUtils.calculateLuminance(
+        pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+      );
+      
+      mask[y][x] = intensity < threshold;
+    }
+  }
+  
+  return mask;
+}
+
   /// Apply adaptive thresholding for better results in varying lighting conditions
   static img.Image applyAdaptiveThreshold(img.Image image, int blockSize, int constant) {
     final grayscale = BaseImageUtils.convertToGrayscale(image);
