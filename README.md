@@ -43,6 +43,58 @@ lib/
     └── settings_fields.dart    # Settings form fields
 ```
 
+// Organization structure for image processing utilities
+1. BaseImageUtils.dart
+   - Core utility functions common to all operations
+   - Image format conversion, loading, saving
+   - Simple pixel operations
+
+2. ColorUtils.dart
+   - Color space conversions (RGB, HSV, Lab)
+   - Color manipulation functions
+   - Histogram calculation and operations
+
+3. FilterUtils.dart
+   - Blur operations (Gaussian, Box, Median)
+   - Sharpening filters
+   - Noise reduction
+   - Edge detection filters
+
+4. MorphologyUtils.dart
+   - Binary morphology operations (erosion, dilation)
+   - Opening, closing operations
+   - Advanced morphological transforms
+
+5. ThresholdUtils.dart
+   - Global thresholding
+   - Adaptive thresholding
+   - Automatic threshold calculation (Otsu, etc)
+
+6. ContourUtils.dart
+   - Contour extraction
+   - Contour simplification
+   - Contour analysis (area, perimeter, etc)
+
+7. DrawingUtils.dart
+   - Drawing functions for visualization
+   - Text rendering
+   - Shape drawing (lines, circles, etc)
+
+8. GeometryUtils.dart
+   - Point and vector operations
+   - Geometric algorithms (convex hull, etc)
+   - Coordinate transforms
+
+9. EnhancementUtils.dart
+   - Histogram equalization
+   - Contrast enhancement
+   - Brightness adjustment
+
+10. AnalysisUtils.dart
+    - Component analysis
+    - Feature detection
+    - Blob analysis
+
 ## Setup and Installation
 
 1. Install Flutter (v3.7.0 or higher)
