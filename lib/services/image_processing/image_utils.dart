@@ -29,6 +29,46 @@ class ImageUtils {
       return result;
     }
   }
+
+  /// Enhance contrast in an image
+  static img.Image enhanceContrast(img.Image grayscale) {
+    final result = img.Image(width: grayscale.width, height: grayscale.height);
+    
+    // Find min and max pixel values
+    int min = 255;
+    int max = 0;
+    
+    for (int y = 0; y < grayscale.height; y++) {
+      for (int x = 0; x < grayscale.width; x++) {
+        final pixel = grayscale.getPixel(x, y);
+        final intensity = calculateLuminance(
+          pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+        );
+        min = math.min(min, intensity);
+        max = math.max(max, intensity);
+      }
+    }
+    
+    // Avoid division by zero
+    if (max == min) {
+      return grayscale;
+    }
+    
+    // Apply contrast stretching
+    for (int y = 0; y < grayscale.height; y++) {
+      for (int x = 0; x < grayscale.width; x++) {
+        final pixel = grayscale.getPixel(x, y);
+        final intensity = calculateLuminance(
+          pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+        );
+        
+        final newIntensity = (255 * (intensity - min) / (max - min)).round().clamp(0, 255);
+        result.setPixel(x, y, img.ColorRgba8(newIntensity, newIntensity, newIntensity, 255));
+      }
+    }
+    
+    return result;
+  }
   
   /// Calculate luminance (brightness) from RGB values
   static int calculateLuminance(int r, int g, int b) {

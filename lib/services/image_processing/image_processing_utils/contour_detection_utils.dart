@@ -213,6 +213,71 @@ class ContourDetectionUtils {
     
     return boundary;
   }
+
+  /// Find the largest contour in a binary image
+  static List<Point> findLargestContour(img.Image binary) {
+    final blobs = findConnectedComponents(binary);
+    
+    // If no blobs found, return empty list
+    if (blobs.isEmpty) {
+      return [];
+    }
+    
+    // Find the largest blob by area
+    int largestBlobIndex = 0;
+    int largestBlobSize = blobs[0].length;
+    
+    for (int i = 1; i < blobs.length; i++) {
+      if (blobs[i].length > largestBlobSize) {
+        largestBlobIndex = i;
+        largestBlobSize = blobs[i].length;
+      }
+    }
+    
+    // Extract the largest blob
+    final List<int> largestBlob = blobs[largestBlobIndex].cast<int>();
+    
+    // Convert to Point objects
+    final points = <Point>[];
+    for (int i = 0; i < largestBlob.length; i += 2) {
+      if (i + 1 < largestBlob.length) {
+        final int x = largestBlob[i];
+        final int y = largestBlob[i+1];
+        points.add(Point(x.toDouble(), y.toDouble()));
+      }
+    }
+    
+    // If we have enough points, compute the convex hull
+    if (points.length >= 3) {
+      return GeometryUtils.convexHull(points);
+    }
+    
+    return points;
+  }
+
+  /// Create a fallback contour shape for cases where detection fails
+  static List<Point> createFallbackContour(int width, int height) {
+    final centerX = width * 0.5;
+    final centerY = height * 0.5;
+    final radius = math.min(width, height) * 0.3;
+    
+    final numPoints = 20;
+    final contour = <Point>[];
+    
+    for (int i = 0; i < numPoints; i++) {
+      final angle = i * 2 * math.pi / numPoints;
+      // Add some randomness to make it look like a natural slab
+      final r = radius * (0.8 + 0.2 * math.sin(i * 3));
+      final x = centerX + r * math.cos(angle);
+      final y = centerY + r * math.sin(angle);
+      contour.add(Point(x, y));
+    }
+    
+    // Close the contour
+    contour.add(contour.first);
+    
+    return contour;
+  }
   
   /// Apply an adaptive threshold to an image
   static img.Image applyAdaptiveThreshold(img.Image grayscale, int blockSize, int constant) {

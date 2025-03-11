@@ -114,7 +114,7 @@ class SlabContourDetector {
       final grayscale = ImageUtils.convertToGrayscale(image);
       
       // 2. Apply contrast enhancement
-      final enhanced = _enhanceContrast(grayscale);
+      final enhanced = ImageUtils.enhanceContrast(grayscale);
       
       // 3. Apply gaussian blur to reduce noise
       final blurred = FilterUtils.applyGaussianBlur(enhanced, 3);
@@ -173,7 +173,7 @@ class SlabContourDetector {
         final processed = ContourDetectionUtils.applyMorphologicalOpening(binary, 3);
         
         // Find contour
-        final contourPoints = _findLargestContour(processed);
+        final contourPoints = ContourDetectionUtils.findLargestContour(processed);
         
         // Check if this contour is better than the previous best
         if (contourPoints.length > bestContour.length && contourPoints.length >= 10) {
@@ -266,7 +266,7 @@ class SlabContourDetector {
     MachineCoordinateSystem coordSystem,
     img.Image? debugImage
   ) {
-    final pixelContour = _createFallbackContour(image.width, image.height);
+    final pixelContour = ContourDetectionUtils.createFallbackContour(image.width, image.height);
     final machineContour = coordSystem.convertPointListToMachineCoords(pixelContour);
     
     // Draw fallback contour on debug image
@@ -279,85 +279,6 @@ class SlabContourDetector {
       machineContour: machineContour,
       debugImage: debugImage,
     );
-  }
-  
-  /// Enhance contrast in an image
-  img.Image _enhanceContrast(img.Image grayscale) {
-    final result = img.Image(width: grayscale.width, height: grayscale.height);
-    
-    // Find min and max pixel values
-    int min = 255;
-    int max = 0;
-    
-    for (int y = 0; y < grayscale.height; y++) {
-      for (int x = 0; x < grayscale.width; x++) {
-        final pixel = grayscale.getPixel(x, y);
-        final intensity = ImageUtils.calculateLuminance(
-          pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
-        );
-        min = math.min(min, intensity);
-        max = math.max(max, intensity);
-      }
-    }
-    
-    // Avoid division by zero
-    if (max == min) {
-      return grayscale;
-    }
-    
-    // Apply contrast stretching
-    for (int y = 0; y < grayscale.height; y++) {
-      for (int x = 0; x < grayscale.width; x++) {
-        final pixel = grayscale.getPixel(x, y);
-        final intensity = ImageUtils.calculateLuminance(
-          pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
-        );
-        
-        final newIntensity = (255 * (intensity - min) / (max - min)).round().clamp(0, 255);
-        result.setPixel(x, y, img.ColorRgba8(newIntensity, newIntensity, newIntensity, 255));
-      }
-    }
-    
-    return result;
-  }
-
-  /// Find the largest contour in the binary image
-  List<Point> _findLargestContour(img.Image binary) {
-    final blobs = ContourDetectionUtils.findConnectedComponents(binary);
-    
-    // If no blobs found, return empty list
-    if (blobs.isEmpty) {
-      return [];
-    }
-    
-    // Find the largest blob by area
-    int largestBlobIndex = 0;
-    int largestBlobSize = blobs[0].length;
-    
-    for (int i = 1; i < blobs.length; i++) {
-      if (blobs[i].length > largestBlobSize) {
-        largestBlobIndex = i;
-        largestBlobSize = blobs[i].length;
-      }
-    }
-    
-    // Extract the largest blob
-    final largestBlob = blobs[largestBlobIndex];
-    
-    // Convert to Point objects
-    final points = <Point>[];
-    for (int i = 0; i < largestBlob.length; i += 2) {
-      if (i + 1 < largestBlob.length) {
-        points.add(Point(largestBlob[i] as double, largestBlob[i + 1] as double));
-      }
-    }
-    
-    // If we have enough points, compute the convex hull
-    if (points.length >= 3) {
-      return GeometryUtils.convexHull(points);
-    }
-    
-    return points;
   }
   
   /// Visualize contour on debug image
@@ -400,29 +321,5 @@ class SlabContourDetector {
     } catch (e) {
       print('Error visualizing contour: $e');
     }
-  }
-  
-  /// Create a fallback contour for cases where detection fails
-  List<Point> _createFallbackContour(int width, int height) {
-    final centerX = width * 0.5;
-    final centerY = height * 0.5;
-    final radius = math.min(width, height) * 0.3;
-    
-    final numPoints = 20;
-    final contour = <Point>[];
-    
-    for (int i = 0; i < numPoints; i++) {
-      final angle = i * 2 * math.pi / numPoints;
-      // Add some randomness to make it look like a natural slab
-      final r = radius * (0.8 + 0.2 * math.sin(i * 3));
-      final x = centerX + r * math.cos(angle);
-      final y = centerY + r * math.sin(angle);
-      contour.add(Point(x, y));
-    }
-    
-    // Close the contour
-    contour.add(contour.first);
-    
-    return contour;
   }
 }
