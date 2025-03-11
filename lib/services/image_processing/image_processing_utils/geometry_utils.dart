@@ -9,6 +9,13 @@ class GeometryUtils {
     final dy = p2.y - p1.y;
     return math.sqrt(dx * dx + dy * dy);
   }
+
+  /// Calculate distance between two points
+  static double distanceBetween(Point a, Point b) {
+    final dx = b.x - a.x;
+    final dy = b.y - a.y;
+    return math.sqrt(dx * dx + dy * dy);
+  }
   
   /// Calculate squared distance between two points (faster when only comparing distances)
   static double squaredDistance(Point p1, Point p2) {
@@ -76,6 +83,237 @@ class GeometryUtils {
     
     // Distance = |Ax + By + C| / sqrt(A^2 + B^2)
     return (A * point.x + B * point.y + C).abs() / math.sqrt(A * A + B * B);
+  }
+
+  /// Simplify a polygon using the Douglas-Peucker algorithm
+  static List<Point> simplifyPolygon(List<Point> points, double epsilon, {int maxDepth = 100}) {
+    if (points.length <= 2) return List.from(points);
+    
+    try {
+      return _douglasPeucker(points, epsilon, 0, maxDepth);
+    } catch (e) {
+      // If simplification fails, return original points
+      return points;
+    }
+  }
+
+  /// Calculate perpendicular distance from point to line segment
+  static double _perpendicularDistance(Point point, Point lineStart, Point lineEnd) {
+    try {
+      final dx = lineEnd.x - lineStart.x;
+      final dy = lineEnd.y - lineStart.y;
+      
+      // If line is just a point, return distance to that point
+      if (dx == 0 && dy == 0) {
+        return math.sqrt(math.pow(point.x - lineStart.x, 2) + 
+                       math.pow(point.y - lineStart.y, 2));
+      }
+      
+      // Calculate perpendicular distance
+      final norm = math.sqrt(dx * dx + dy * dy);
+      return ((dy * point.x - dx * point.y + lineEnd.x * lineStart.y - 
+                      lineEnd.y * lineStart.x) / norm).abs();
+    } catch (e) {
+      // Simple fallback distance calculation
+      return 0.0;
+    }
+  }
+
+  /// Find the outer contour of a binary mask using boundary tracing
+  static List<Point> findOuterContour(List<List<bool>> mask) {
+    final contourPoints = <Point>[];
+    final height = mask.length;
+    final width = mask[0].length;
+    
+    // Find a starting point (first true pixel)
+    int startX = -1, startY = -1;
+    
+    // Start search from the center and spiral outward
+    final centerX = width ~/ 2;
+    final centerY = height ~/ 2;
+    
+    // First try to find a starting point near the center
+    for (int radius = 0; radius < math.max(width, height) / 2; radius++) {
+      // Check in spiral pattern
+      for (int y = centerY - radius; y <= centerY + radius; y++) {
+        for (int x = centerX - radius; x <= centerX + radius; x++) {
+          // Only check perimeter of spiral
+          if ((y == centerY - radius || y == centerY + radius) ||
+              (x == centerX - radius || x == centerX + radius)) {
+            if (x >= 0 && x < width && y >= 0 && y < height && mask[y][x]) {
+              startX = x;
+              startY = y;
+              break;
+            }
+          }
+        }
+        if (startX != -1) break;
+      }
+      if (startX != -1) break;
+    }
+    
+    // If no starting point was found, try scanning entire image
+    if (startX == -1) {
+      for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+          if (mask[y][x]) {
+            startX = x;
+            startY = y;
+            break;
+          }
+        }
+        if (startX != -1) break;
+      }
+    }
+    
+    // No contour found
+    if (startX == -1 || startY == -1) {
+      return contourPoints;
+    }
+    
+    // Moore boundary tracing algorithm
+    // Direction codes: 0=E, 1=SE, 2=S, 3=SW, 4=W, 5=NW, 6=N, 7=NE
+    final dx = [1, 1, 0, -1, -1, -1, 0, 1];
+    final dy = [0, 1, 1, 1, 0, -1, -1, -1];
+    
+    int x = startX;
+    int y = startY;
+    int dir = 7;  // Start looking in the NE direction
+    
+    final visited = <String>{};
+    const maxSteps = 10000;  // Safety limit
+    int steps = 0;
+    
+    do {
+      // Add current point to contour
+      contourPoints.add(Point(x.toDouble(), y.toDouble()));
+      
+      // Mark as visited
+      final key = "$x,$y";
+      visited.add(key);
+      
+      // Look for next boundary pixel
+      bool found = false;
+      for (int i = 0; i < 8 && !found; i++) {
+        // Check in a counter-clockwise direction starting from dir
+        int checkDir = (dir + i) % 8;
+        int nx = x + dx[checkDir];
+        int ny = y + dy[checkDir];
+        
+        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+        
+        // If this is an object pixel (true in mask)
+        if (mask[ny][nx]) {
+          x = nx;
+          y = ny;
+          dir = (checkDir + 5) % 8;  // Backtrack direction
+          found = true;
+        }
+      }
+      
+      if (!found) break;
+      
+      steps++;
+      if (steps >= maxSteps) break;  // Safety check
+      
+    } while (!(x == startX && y == startY) || contourPoints.length <= 1);
+    
+    return contourPoints;
+  }
+
+  /// Smooth contour using Gaussian smoothing
+  static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, double sigma = 1.0}) {
+    if (contour.length <= 3) return contour;
+    
+    final result = <Point>[];
+    final halfWindow = windowSize ~/ 2;
+    
+    // Generate Gaussian kernel
+    final kernel = <double>[];
+    double sum = 0.0;
+    
+    for (int i = -halfWindow; i <= halfWindow; i++) {
+      final weight = math.exp(-(i * i) / (2 * sigma * sigma));
+      kernel.add(weight);
+      sum += weight;
+    }
+    
+    // Normalize kernel
+    for (int i = 0; i < kernel.length; i++) {
+      kernel[i] /= sum;
+    }
+    
+    // Apply smoothing
+    for (int i = 0; i < contour.length; i++) {
+      double sumX = 0.0;
+      double sumY = 0.0;
+      
+      for (int j = -halfWindow; j <= halfWindow; j++) {
+        final idx = (i + j + contour.length) % contour.length;
+        final weight = kernel[j + halfWindow];
+        
+        sumX += contour[idx].x * weight;
+        sumY += contour[idx].y * weight;
+      }
+      
+      result.add(Point(sumX, sumY));
+    }
+    
+    return result;
+  }
+
+  /// Smooth and simplify a contour
+  static List<Point> smoothAndSimplifyContour(List<Point> contour, double epsilon) {
+    if (contour.length <= 3) return contour;
+    
+    try {
+      // 1. Apply Douglas-Peucker simplification
+      final simplified = _douglasPeucker(contour, epsilon, 0, 100);
+      
+      // 2. Apply Gaussian smoothing to the simplified contour
+      return smoothContour(simplified, windowSize: 3);
+    } catch (e) {
+      print('Error smoothing contour: $e');
+      return contour;
+    }
+  }
+
+  /// Douglas-Peucker algorithm with stack overflow prevention
+  static List<Point> _douglasPeucker(List<Point> points, double epsilon, int depth, int maxDepth) {
+    if (points.length <= 2) return List.from(points);
+    if (depth >= maxDepth) return List.from(points);
+    
+    // Find point with maximum distance
+    double maxDistance = 0;
+    int index = 0;
+    
+    final start = points.first;
+    final end = points.last;
+    
+    for (int i = 1; i < points.length - 1; i++) {
+      final point = points[i];
+      final distance = _perpendicularDistance(point, start, end);
+      
+      if (distance > maxDistance) {
+        maxDistance = distance;
+        index = i;
+      }
+    }
+
+    
+    
+    // If max distance exceeds epsilon, recursively simplify
+    if (maxDistance > epsilon) {
+      // Recursive simplification
+      final firstPart = _douglasPeucker(points.sublist(0, index + 1), epsilon, depth + 1, maxDepth);
+      final secondPart = _douglasPeucker(points.sublist(index), epsilon, depth + 1, maxDepth);
+      
+      // Concatenate results, excluding duplicate middle point
+      return [...firstPart.sublist(0, firstPart.length - 1), ...secondPart];
+    } else {
+      // Base case - just use endpoints
+      return [start, end];
+    }
   }
   
   /// Check if a point is on a line segment

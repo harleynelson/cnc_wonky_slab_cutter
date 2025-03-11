@@ -8,7 +8,7 @@ import 'package:image/image.dart' as img;
 import '../../../gcode/machine_coordinates.dart';
 import '../../image_processing_utils/color_utils.dart';
 import '../../image_processing_utils/drawing_utils.dart';
-import '../../image_processing_utils/contour_utils.dart';
+import '../../image_processing_utils/geometry_utils.dart';
 import '../../image_processing_utils/threshold_utils.dart';
 import '../../slab_contour_result.dart';
 import 'contour_algorithm_interface.dart';
@@ -58,10 +58,10 @@ class ColorContourAlgorithm implements ContourDetectionAlgorithm {
       final closedMask = _applyMorphologicalClosing(mask);
       
       // 5. Find contour points
-      final contourPoints = ContourUtils.findOuterContour(closedMask);
+      final contourPoints = GeometryUtils.findOuterContour(closedMask);
       
       // 6. Simplify and smooth contour
-      final smoothedContour = ContourUtils.smoothAndSimplifyContour(contourPoints, 3.0);
+      final smoothedContour = GeometryUtils.smoothAndSimplifyContour(contourPoints, 3.0);
       
       // 7. Convert to machine coordinates
       final machineContour = coordSystem.convertPointListToMachineCoords(smoothedContour);
