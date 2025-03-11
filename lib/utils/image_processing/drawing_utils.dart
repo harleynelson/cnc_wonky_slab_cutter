@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
-import '../../gcode/machine_coordinates.dart';
+import '../../services/gcode/machine_coordinates.dart';
 
 /// Utilities for drawing shapes, lines, and text on images
 class DrawingUtils {

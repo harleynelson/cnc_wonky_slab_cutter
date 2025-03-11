@@ -15,8 +15,8 @@ import '../services/gcode/machine_coordinates.dart';
 import '../services/processing/processing_flow_manager.dart';
 import '../services/image_processing/slab_contour_result.dart';
 import '../services/image_processing/marker_detector.dart';
-import '../services/image_processing/contour_detection/algorithms/contour_algorithm_registry.dart';
-import '../services/image_processing/contour_detection/algorithms/contour_algorithm_interface.dart';
+import '../services/image_processing/contour_algorithms/contour_algorithm_registry.dart';
+import '../services/image_processing/contour_algorithms/contour_algorithm_interface.dart';
 
 class InteractiveContourScreen extends StatefulWidget {
   final File imageFile;

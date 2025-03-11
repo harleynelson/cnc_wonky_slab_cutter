@@ -1,29 +1,29 @@
-// lib/services/image_processing/contour_detection/algorithms/threshold_contour_algorithm.dart
-// Threshold-based contour detection algorithm
+// lib/services/image_processing/contour_detection/algorithms/edge_contour_algorithm.dart
+// Edge-based contour detection algorithm
 
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:cnc_wonky_slab_cutter/services/image_processing/image_processing_utils/geometry_utils.dart';
 import 'package:image/image.dart' as img;
 
-import '../../../gcode/machine_coordinates.dart';
-import '../../image_processing_utils/contour_detection_utils.dart';
-import '../../image_processing_utils/threshold_utils.dart';
-import '../../image_processing_utils/drawing_utils.dart';
-import '../../slab_contour_result.dart';
+import '../../gcode/machine_coordinates.dart';
+import '../../../utils/image_processing/contour_detection_utils.dart';
+import '../../../utils/image_processing/filter_utils.dart';
+import '../../../utils/image_processing/drawing_utils.dart';
+import '../../../utils/image_processing/geometry_utils.dart';
+import '../slab_contour_result.dart';
 import 'contour_algorithm_interface.dart';
 
-/// Threshold-based contour detection algorithm
-class ThresholdContourAlgorithm implements ContourDetectionAlgorithm {
+/// Edge-based contour detection algorithm
+class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
   @override
-  String get name => "Threshold";
+  String get name => "Edge";
   
   final bool generateDebugImage;
-  final int regionGrowThreshold;
+  final double edgeThreshold;
 
-  ThresholdContourAlgorithm({
+  EdgeContourAlgorithm({
     this.generateDebugImage = true,
-    this.regionGrowThreshold = 30,
+    this.edgeThreshold = 50,
   });
 
   @override
@@ -40,72 +40,68 @@ class ThresholdContourAlgorithm implements ContourDetectionAlgorithm {
     }
 
     try {
-      // 1. Find optimal threshold automatically
-      final threshold = ThresholdUtils.findOptimalThreshold(image);
+      // 1. Apply Gaussian blur to reduce noise
+      final blurred = FilterUtils.applyGaussianBlur(image, 3);
       
-      // 2. Apply binary thresholding
-      final binaryImage = ThresholdUtils.applyThreshold(image, threshold);
+      // 2. Apply edge detection
+      final edges = FilterUtils.applyEdgeDetection(blurred, threshold: edgeThreshold.toInt());
       
-      // 3. Apply region growing from seed point
-      final List<List<bool>> mask = _applyRegionGrowing(
-        binaryImage, 
-        seedX, 
-        seedY, 
-        threshold: regionGrowThreshold
-      );
+      // 3. Create binary mask from edge detection result
+      final mask = _createMaskFromEdges(edges, seedX, seedY);
       
-      // 4. Find contour from the mask
+      // 4. Extract contour points from mask
       final List<Point> contourPoints = ContourDetectionUtils.findOuterContour(mask);
       
-      // 5. Smooth and simplify the contour
-      final List<Point> smoothContour = ContourDetectionUtils.smoothAndSimplifyContour(
-        contourPoints,
-        5.0 // epsilon for simplification
-      );
+      // 5. Simplify and smooth contour
+      List<Point> processedContour = contourPoints;
+      
+      if (contourPoints.length > 10) {
+        // Apply Douglas-Peucker simplification
+        processedContour = GeometryUtils.simplifyPolygon(contourPoints, 2.0);
+        
+        // Apply Gaussian smoothing
+        processedContour = ContourDetectionUtils.smoothContour(processedContour, windowSize: 5);
+      }
       
       // 6. Convert to machine coordinates
-      final List<Point> machineContour = coordSystem.convertPointListToMachineCoords(smoothContour);
+      final machineContour = coordSystem.convertPointListToMachineCoords(processedContour);
       
-      // 7. Draw debug visualization if requested
+      // 7. Draw visualization if debug image is requested
       if (debugImage != null) {
         // Draw seed point
         DrawingUtils.drawCircle(debugImage, seedX, seedY, 8, img.ColorRgba8(255, 255, 0, 255));
         
         // Draw contour
-        DrawingUtils.drawContour(debugImage, smoothContour, img.ColorRgba8(0, 255, 0, 255), thickness: 2);
+        DrawingUtils.drawContour(debugImage, processedContour, img.ColorRgba8(0, 255, 0, 255), thickness: 2);
         
         // Add algorithm name label
         DrawingUtils.drawText(debugImage, "Algorithm: $name", 10, 10, img.ColorRgba8(255, 255, 255, 255));
       }
       
       return SlabContourResult(
-        pixelContour: smoothContour,
+        pixelContour: processedContour,
         machineContour: machineContour,
         debugImage: debugImage,
       );
-      
     } catch (e) {
       print('Error in $name algorithm: $e');
       return _createFallbackResult(image, coordSystem, debugImage, seedX, seedY);
     }
   }
-
-  /// Apply region growing from seed point
-  List<List<bool>> _applyRegionGrowing(img.Image image, int seedX, int seedY, {int threshold = 30}) {
-    final List<List<bool>> mask = List.generate(
-      image.height, (_) => List<bool>.filled(image.width, false)
+  
+  /// Create a binary mask from edge detection result using flood fill from seed
+  List<List<bool>> _createMaskFromEdges(img.Image edges, int seedX, int seedY) {
+    final mask = List.generate(
+      edges.height, 
+      (_) => List<bool>.filled(edges.width, false)
     );
     
-    // Get seed pixel value
-    final seedPixel = image.getPixel(seedX, seedY);
-    final seedIntensity = (seedPixel.r.toInt() + seedPixel.g.toInt() + seedPixel.b.toInt()) ~/ 3;
-    
-    // Queue for processing
+    // Queue for flood fill
     final queue = <List<int>>[];
     queue.add([seedX, seedY]);
     mask[seedY][seedX] = true;
     
-    // 4-connected neighbors
+    // 4-connected directions
     final dx = [1, 0, -1, 0];
     final dy = [0, 1, 0, -1];
     
@@ -120,15 +116,16 @@ class ThresholdContourAlgorithm implements ContourDetectionAlgorithm {
         final ny = y + dy[i];
         
         // Skip if out of bounds or already visited
-        if (nx < 0 || nx >= image.width || ny < 0 || ny >= image.height || mask[ny][nx]) {
+        if (nx < 0 || nx >= edges.width || ny < 0 || ny >= edges.height || mask[ny][nx]) {
           continue;
         }
         
-        // Check intensity similarity
-        final pixel = image.getPixel(nx, ny);
+        // Check if pixel is not an edge (edges are dark)
+        final pixel = edges.getPixel(nx, ny);
         final intensity = (pixel.r.toInt() + pixel.g.toInt() + pixel.b.toInt()) ~/ 3;
         
-        if ((intensity - seedIntensity).abs() <= threshold) {
+        // If pixel is bright (not an edge), add to mask
+        if (intensity > 128) {
           mask[ny][nx] = true;
           queue.add([nx, ny]);
         }
@@ -146,13 +143,12 @@ class ThresholdContourAlgorithm implements ContourDetectionAlgorithm {
     int seedX,
     int seedY
   ) {
-    // Create a circular contour around the seed point
-    final List<Point> contour = [];
-    final radius = math.min(image.width, image.height) * 0.3;
+    // Create a simple circular contour around the seed point
+    final radius = math.min(image.width, image.height) / 5;
+    final contour = <Point>[];
     
-    // Generate circular contour
-    for (int i = 0; i <= 36; i++) {
-      final angle = i * math.pi / 18; // 10 degrees in radians
+    for (int i = 0; i <= 360; i += 10) {
+      final angle = i * math.pi / 180;
       final x = seedX + radius * math.cos(angle);
       final y = seedY + radius * math.sin(angle);
       contour.add(Point(x, y));

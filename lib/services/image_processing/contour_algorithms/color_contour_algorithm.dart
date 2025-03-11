@@ -3,15 +3,15 @@
 
 import 'dart:async';
 import 'dart:math' as math;
-import 'package:cnc_wonky_slab_cutter/services/image_processing/image_processing_utils/contour_detection_utils.dart';
+import 'package:cnc_wonky_slab_cutter/utils/image_processing/contour_detection_utils.dart';
 import 'package:image/image.dart' as img;
 
-import '../../../gcode/machine_coordinates.dart';
-import '../../image_processing_utils/color_utils.dart';
-import '../../image_processing_utils/drawing_utils.dart';
-import '../../image_processing_utils/geometry_utils.dart';
-import '../../image_processing_utils/threshold_utils.dart';
-import '../../slab_contour_result.dart';
+import '../../gcode/machine_coordinates.dart';
+import '../../../utils/image_processing/color_utils.dart';
+import '../../../utils/image_processing/drawing_utils.dart';
+import '../../../utils/image_processing/geometry_utils.dart';
+import '../../../utils/image_processing/threshold_utils.dart';
+import '../slab_contour_result.dart';
 import 'contour_algorithm_interface.dart';
 
 /// Color-based contour detection algorithm that analyzes color distribution

@@ -7,8 +7,8 @@ import 'package:flutter/services.dart';
 
 import '../models/settings_model.dart';
 import '../services/image_processing/slab_detector.dart';
-import '../utils/file_utils.dart';
-import '../utils/constants.dart';
+import '../utils/general/file_utils.dart';
+import '../utils/general/constants.dart';
 import 'file_picker_screen.dart';  // Import for MemoryFile type
 
 class PreviewScreen extends StatefulWidget {

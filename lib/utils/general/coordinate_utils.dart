@@ -1,5 +1,5 @@
 import 'dart:math' as math;
-import '../services/gcode/machine_coordinates.dart';
+import '../../services/gcode/machine_coordinates.dart';
 
 /// Utility class for coordinate transformations and operations
 class CoordinateUtils {

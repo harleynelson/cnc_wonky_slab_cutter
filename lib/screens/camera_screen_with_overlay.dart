@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 
 import '../models/settings_model.dart';
-import '../utils/constants.dart';
-import '../utils/permissions_utils.dart';
+import '../utils/general/constants.dart';
+import '../utils/general/permissions_utils.dart';
 import '../widgets/camera_overlay.dart';
 
 class CameraScreenWithOverlay extends StatefulWidget {

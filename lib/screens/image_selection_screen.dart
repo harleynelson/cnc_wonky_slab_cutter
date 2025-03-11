@@ -8,7 +8,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
-import '../utils/permissions_utils.dart';
+import '../utils/general/permissions_utils.dart';
 import 'processing_screen.dart';
 import 'camera_screen_with_overlay.dart';
 

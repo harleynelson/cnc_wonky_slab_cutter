@@ -5,13 +5,13 @@ import 'package:image/image.dart' as img;
 import 'dart:math' as math;
 import 'dart:async';
 import '../gcode/machine_coordinates.dart';
-import 'image_utils.dart';
+import '../../utils/image_processing/image_utils.dart';
 import 'slab_contour_result.dart';
-import 'image_processing_utils/base_image_utils.dart';
-import 'image_processing_utils/filter_utils.dart';
-import 'image_processing_utils/threshold_utils.dart';
-import 'image_processing_utils/geometry_utils.dart';
-import 'image_processing_utils/contour_detection_utils.dart';
+import '../../utils/image_processing/base_image_utils.dart';
+import '../../utils/image_processing/filter_utils.dart';
+import '../../utils/image_processing/threshold_utils.dart';
+import '../../utils/image_processing/geometry_utils.dart';
+import '../../utils/image_processing/contour_detection_utils.dart';
 
 /// Enhanced detector for finding slab outlines in images
 class SlabContourDetector {

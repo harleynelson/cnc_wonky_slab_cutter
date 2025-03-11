@@ -9,8 +9,8 @@ import 'package:provider/provider.dart';
 import 'models/settings_model.dart';
 import 'providers/processing_provider.dart';
 import 'screens/home_page.dart';
-import 'utils/constants.dart';
-import 'utils/permissions_utils.dart';
+import 'utils/general/constants.dart';
+import 'utils/general/permissions_utils.dart';
 
 // Initialize compute engine for Flutter background isolates
 // This must be called early

@@ -9,8 +9,8 @@ import 'package:image/image.dart' as img;
 
 import '../services/processing/processing_flow_manager.dart';
 import '../models/settings_model.dart';
-import '../utils/constants.dart';
-import '../utils/file_utils.dart';
+import '../utils/general/constants.dart';
+import '../utils/general/file_utils.dart';
 import 'interactive_contour_screen.dart';
 
 class ProcessingScreen extends StatefulWidget {

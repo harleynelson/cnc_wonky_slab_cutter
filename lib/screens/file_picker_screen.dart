@@ -6,7 +6,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../models/settings_model.dart';
 import 'preview_screen.dart';
-import '../utils/constants.dart';
+import '../utils/general/constants.dart';
 
 class FilePickerScreen extends StatefulWidget {
   final SettingsModel settings;

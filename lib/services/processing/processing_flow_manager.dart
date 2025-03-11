@@ -12,7 +12,7 @@ import '../image_processing/slab_contour_detector.dart';
 import '../image_processing/slab_contour_result.dart';
 import '../gcode/machine_coordinates.dart';
 import '../gcode/gcode_generator.dart';
-import '../../utils/error_utils.dart';
+import '../../utils/general/error_utils.dart';
 
 /// Represents the current state of the processing flow
 enum ProcessingState {
