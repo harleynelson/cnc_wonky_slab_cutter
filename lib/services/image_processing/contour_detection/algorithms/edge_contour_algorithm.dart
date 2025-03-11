@@ -6,6 +6,7 @@ import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 
 import '../../../gcode/machine_coordinates.dart';
+import '../../image_processing_utils/contour_detection_utils.dart';
 import '../../image_processing_utils/filter_utils.dart';
 import '../../image_processing_utils/drawing_utils.dart';
 import '../../image_processing_utils/geometry_utils.dart';
@@ -49,7 +50,7 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
       final mask = _createMaskFromEdges(edges, seedX, seedY);
       
       // 4. Extract contour points from mask
-      final List<Point> contourPoints = GeometryUtils.findOuterContour(mask);
+      final List<Point> contourPoints = ContourDetectionUtils.findOuterContour(mask);
       
       // 5. Simplify and smooth contour
       List<Point> processedContour = contourPoints;
@@ -59,7 +60,7 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
         processedContour = GeometryUtils.simplifyPolygon(contourPoints, 2.0);
         
         // Apply Gaussian smoothing
-        processedContour = GeometryUtils.smoothContour(processedContour, windowSize: 5);
+        processedContour = ContourDetectionUtils.smoothContour(processedContour, windowSize: 5);
       }
       
       // 6. Convert to machine coordinates

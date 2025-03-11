@@ -3,6 +3,7 @@
 
 import 'dart:async';
 import 'dart:math' as math;
+import 'package:cnc_wonky_slab_cutter/services/image_processing/image_processing_utils/contour_detection_utils.dart';
 import 'package:image/image.dart' as img;
 
 import '../../../gcode/machine_coordinates.dart';
@@ -58,10 +59,10 @@ class ColorContourAlgorithm implements ContourDetectionAlgorithm {
       final closedMask = _applyMorphologicalClosing(mask);
       
       // 5. Find contour points
-      final contourPoints = GeometryUtils.findOuterContour(closedMask);
+      final contourPoints = ContourDetectionUtils.findOuterContour(closedMask);
       
       // 6. Simplify and smooth contour
-      final smoothedContour = GeometryUtils.smoothAndSimplifyContour(contourPoints, 3.0);
+      final smoothedContour = ContourDetectionUtils.smoothAndSimplifyContour(contourPoints, 3.0);
       
       // 7. Convert to machine coordinates
       final machineContour = coordSystem.convertPointListToMachineCoords(smoothedContour);

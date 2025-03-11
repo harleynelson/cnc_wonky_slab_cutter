@@ -7,6 +7,7 @@ import 'package:cnc_wonky_slab_cutter/services/image_processing/image_processing
 import 'package:image/image.dart' as img;
 
 import '../../../gcode/machine_coordinates.dart';
+import '../../image_processing_utils/contour_detection_utils.dart';
 import '../../image_processing_utils/threshold_utils.dart';
 import '../../image_processing_utils/drawing_utils.dart';
 import '../../slab_contour_result.dart';
@@ -54,10 +55,10 @@ class ThresholdContourAlgorithm implements ContourDetectionAlgorithm {
       );
       
       // 4. Find contour from the mask
-      final List<Point> contourPoints = GeometryUtils.findOuterContour(mask);
+      final List<Point> contourPoints = ContourDetectionUtils.findOuterContour(mask);
       
       // 5. Smooth and simplify the contour
-      final List<Point> smoothContour = GeometryUtils.smoothAndSimplifyContour(
+      final List<Point> smoothContour = ContourDetectionUtils.smoothAndSimplifyContour(
         contourPoints,
         5.0 // epsilon for simplification
       );

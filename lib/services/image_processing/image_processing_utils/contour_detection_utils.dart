@@ -4,7 +4,6 @@
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 import '../../gcode/machine_coordinates.dart';
-import 'drawing_utils.dart';
 import 'geometry_utils.dart';
 import 'base_image_utils.dart';
 
@@ -498,4 +497,148 @@ class ContourDetectionUtils {
     
     return result;
   }
+
+  /// Find the outer contour of a binary mask using boundary tracing
+  static List<Point> findOuterContour(List<List<bool>> mask) {
+    final contourPoints = <Point>[];
+    final height = mask.length;
+    final width = mask[0].length;
+    
+    // Find a starting point (first true pixel)
+    int startX = -1, startY = -1;
+    
+    // Start search from the center and spiral outward
+    final centerX = width ~/ 2;
+    final centerY = height ~/ 2;
+    
+    // First try to find a starting point near the center
+    for (int radius = 0; radius < math.max(width, height) / 2; radius++) {
+      // Check in spiral pattern
+      for (int y = centerY - radius; y <= centerY + radius; y++) {
+        for (int x = centerX - radius; x <= centerX + radius; x++) {
+          // Only check perimeter of spiral
+          if ((y == centerY - radius || y == centerY + radius) ||
+              (x == centerX - radius || x == centerX + radius)) {
+            if (x >= 0 && x < width && y >= 0 && y < height && mask[y][x]) {
+              startX = x;
+              startY = y;
+              break;
+            }
+          }
+        }
+        if (startX != -1) break;
+      }
+      if (startX != -1) break;
+    }
+    
+    // If no starting point was found, try scanning entire image
+    if (startX == -1) {
+      for (int y = 0; y < height; y++) {
+        for (int x = 0; x < width; x++) {
+          if (mask[y][x]) {
+            startX = x;
+            startY = y;
+            break;
+          }
+        }
+        if (startX != -1) break;
+      }
+    }
+    
+    // No contour found
+    if (startX == -1 || startY == -1) {
+      return contourPoints;
+    }
+    
+    // Moore boundary tracing algorithm
+    // Direction codes: 0=E, 1=SE, 2=S, 3=SW, 4=W, 5=NW, 6=N, 7=NE
+    final dx = [1, 1, 0, -1, -1, -1, 0, 1];
+    final dy = [0, 1, 1, 1, 0, -1, -1, -1];
+    
+    int x = startX;
+    int y = startY;
+    int dir = 7;  // Start looking in the NE direction
+    
+    final visited = <String>{};
+    const maxSteps = 10000;  // Safety limit
+    int steps = 0;
+    
+    do {
+      // Add current point to contour
+      contourPoints.add(Point(x.toDouble(), y.toDouble()));
+      
+      // Mark as visited
+      final key = "$x,$y";
+      visited.add(key);
+      
+      // Look for next boundary pixel
+      bool found = false;
+      for (int i = 0; i < 8 && !found; i++) {
+        // Check in a counter-clockwise direction starting from dir
+        int checkDir = (dir + i) % 8;
+        int nx = x + dx[checkDir];
+        int ny = y + dy[checkDir];
+        
+        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
+        
+        // If this is an object pixel (true in mask)
+        if (mask[ny][nx]) {
+          x = nx;
+          y = ny;
+          dir = (checkDir + 5) % 8;  // Backtrack direction
+          found = true;
+        }
+      }
+      
+      if (!found) break;
+      
+      steps++;
+      if (steps >= maxSteps) break;  // Safety check
+      
+    } while (!(x == startX && y == startY) || contourPoints.length <= 1);
+    
+    return contourPoints;
+  }
+
+  /// Smooth contour using Gaussian smoothing
+  static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, double sigma = 1.0}) {
+    if (contour.length <= 3) return contour;
+    
+    final result = <Point>[];
+    final halfWindow = windowSize ~/ 2;
+    
+    // Generate Gaussian kernel
+    final kernel = <double>[];
+    double sum = 0.0;
+    
+    for (int i = -halfWindow; i <= halfWindow; i++) {
+      final weight = math.exp(-(i * i) / (2 * sigma * sigma));
+      kernel.add(weight);
+      sum += weight;
+    }
+    
+    // Normalize kernel
+    for (int i = 0; i < kernel.length; i++) {
+      kernel[i] /= sum;
+    }
+    
+    // Apply smoothing
+    for (int i = 0; i < contour.length; i++) {
+      double sumX = 0.0;
+      double sumY = 0.0;
+      
+      for (int j = -halfWindow; j <= halfWindow; j++) {
+        final idx = (i + j + contour.length) % contour.length;
+        final weight = kernel[j + halfWindow];
+        
+        sumX += contour[idx].x * weight;
+        sumY += contour[idx].y * weight;
+      }
+      
+      result.add(Point(sumX, sumY));
+    }
+    
+    return result;
+  }
+
 }
