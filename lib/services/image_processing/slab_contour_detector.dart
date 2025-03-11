@@ -1,30 +1,28 @@
 // lib/services/image_processing/slab_contour_detector.dart
-// Enhanced detector for finding slab outlines in images
+// Detector responsible for finding slab contours in images
 
-import 'package:image/image.dart' as img;
-import 'dart:math' as math;
 import 'dart:async';
+import 'package:image/image.dart' as img;
+
+import '../../utils/image_processing/drawing_utils.dart';
 import '../gcode/machine_coordinates.dart';
-import '../../utils/image_processing/image_utils.dart';
 import 'slab_contour_result.dart';
-import '../../utils/image_processing/base_image_utils.dart';
+import '../../utils/image_processing/contour_detection_utils.dart';
 import '../../utils/image_processing/filter_utils.dart';
+import '../../utils/image_processing/image_utils.dart';
 import '../../utils/image_processing/threshold_utils.dart';
 import '../../utils/image_processing/geometry_utils.dart';
-import '../../utils/image_processing/contour_detection_utils.dart';
 
-/// Enhanced detector for finding slab outlines in images
+/// Detector for finding slab outlines in images
 class SlabContourDetector {
   final bool generateDebugImage;
   final int maxImageSize;
   final int processingTimeout;
-  final int maxRecursionDepth;
   
   SlabContourDetector({
     this.generateDebugImage = true,
     this.maxImageSize = 1200,
     this.processingTimeout = 10000,
-    this.maxRecursionDepth = 100,
   });
   
   /// Detect a slab contour in the given image
@@ -43,57 +41,40 @@ class SlabContourDetector {
   }
   
   SlabContourResult _detectContourInternal(img.Image image, MachineCoordinateSystem coordSystem) {
-    // Downsample large images to conserve memory
+    // Downsample large images if needed
     img.Image processImage = image;
     if (image.width > maxImageSize || image.height > maxImageSize) {
-      final scaleFactor = maxImageSize / math.max(image.width, image.height);
-      try {
-        processImage = BaseImageUtils.resizeImage(
-          image,
-          width: (image.width * scaleFactor).round(),
-          height: (image.height * scaleFactor).round()
-        );
-      } catch (e) {
-        print('Warning: Failed to resize image: $e');
-      }
+      processImage = ImageUtils.safeResize(image, maxSize: maxImageSize);
     }
     
     // Create a debug image if needed
     img.Image? debugImage;
     if (generateDebugImage) {
-      try {
-        debugImage = img.copyResize(processImage, width: processImage.width, height: processImage.height);
-      } catch (e) {
-        print('Warning: Failed to create debug image: $e');
-      }
+      debugImage = img.copyResize(processImage, width: processImage.width, height: processImage.height);
     }
     
     try {
-      // STRATEGY 1: Try to detect the contour using advanced preprocessing
+      // Try each detection strategy in order of preference
+      
+      // STRATEGY 1: Advanced preprocessing with adaptive thresholding
       SlabContourResult? result = _tryAdvancedContourDetection(processImage, coordSystem, debugImage);
-      
-      // If successful, return the result
-      if (result != null && result.isValid && result.pointCount >= 10) {
-        return result;
+      if (_isValidResult(result)) {
+        return result!;
       }
       
-      // STRATEGY 2: If advanced detection fails, try binary thresholding with multiple levels
+      // STRATEGY 2: Multi-threshold approach
       result = _tryMultiThresholdDetection(processImage, coordSystem, debugImage);
-      
-      // If successful, return the result
-      if (result != null && result.isValid && result.pointCount >= 10) {
-        return result;
+      if (_isValidResult(result)) {
+        return result!;
       }
       
-      // STRATEGY 3: If all else fails, try convex hull detection
+      // STRATEGY 3: Convex hull detection
       result = _tryConvexHullDetection(processImage, coordSystem, debugImage);
-      
-      // If successful, return the result
-      if (result != null && result.isValid) {
-        return result;
+      if (_isValidResult(result)) {
+        return result!;
       }
       
-      // If all strategies fail, return a fallback result
+      // Fallback: Generate a basic shape
       return _createFallbackResult(processImage, coordSystem, debugImage);
       
     } catch (e) {
@@ -103,7 +84,11 @@ class SlabContourDetector {
     }
   }
   
-  /// Try to detect contour using advanced preprocessing
+  bool _isValidResult(SlabContourResult? result) {
+    return result != null && result.isValid && result.pointCount >= 10;
+  }
+  
+  /// Strategy 1: Advanced preprocessing with adaptive thresholding
   SlabContourResult? _tryAdvancedContourDetection(
     img.Image image,
     MachineCoordinateSystem coordSystem,
@@ -150,7 +135,7 @@ class SlabContourDetector {
     }
   }
   
-  /// Try to detect contour using multiple threshold levels
+  /// Strategy 2: Multi-threshold approach
   SlabContourResult? _tryMultiThresholdDetection(
     img.Image image,
     MachineCoordinateSystem coordSystem,
@@ -209,7 +194,7 @@ class SlabContourDetector {
     }
   }
   
-  /// Try to detect contour using convex hull approach
+  /// Strategy 3: Convex hull detection
   SlabContourResult? _tryConvexHullDetection(
     img.Image image,
     MachineCoordinateSystem coordSystem,
@@ -289,7 +274,7 @@ class SlabContourDetector {
         final p1 = contour[i];
         final p2 = contour[i + 1];
         
-        ImageUtils.drawLine(
+        DrawingUtils.drawLine(
           debugImage,
           p1.x.round(), p1.y.round(),
           p2.x.round(), p2.y.round(),
@@ -299,7 +284,7 @@ class SlabContourDetector {
       
       // Draw label
       if (contour.isNotEmpty) {
-        ImageUtils.drawText(
+        DrawingUtils.drawText(
           debugImage,
           label,
           contour[0].x.round() + 10,
@@ -310,7 +295,7 @@ class SlabContourDetector {
       
       // Draw points
       for (final point in contour) {
-        ImageUtils.drawCircle(
+        DrawingUtils.drawCircle(
           debugImage,
           point.x.round(),
           point.y.round(),
