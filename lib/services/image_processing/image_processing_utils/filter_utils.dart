@@ -19,7 +19,8 @@ class FilterUtils {
   /// Apply box blur to an image
   static img.Image applyBoxBlur(img.Image image, int radius) {
     try {
-      return img.blur(image, radius);
+      // The correct function is gaussianBlur with radius parameter
+      return img.gaussianBlur(image, radius: radius);
     } catch (e) {
       print('Error applying box blur: $e');
       return image; // Return original if blur fails
@@ -117,9 +118,9 @@ class FilterUtils {
     try {
       // Convert to grayscale for edge detection
       final grayscale = BaseImageUtils.convertToGrayscale(image);
-      
-      // Apply Sobel edge detection
-      return img.sobel(grayscale, threshold: threshold);
+    
+      // Apply Sobel edge detection - the params in image package may have changed
+      return img.sobel(grayscale);  // Remove threshold parameter
     } catch (e) {
       print('Error in edge detection: $e');
       return _applySimpleEdgeDetection(image, threshold);

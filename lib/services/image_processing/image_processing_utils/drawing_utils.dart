@@ -606,9 +606,12 @@ class DrawingUtils {
     {
       int scale = 1,
       bool drawBackground = false,
-      img.Color backgroundColor = const img.ColorRgba8(0, 0, 0, 128),
+      img.Color? backgroundColor,
     }
   ) {
+    // Use default background color if not provided
+    final bgColor = backgroundColor ?? img.ColorRgba8(0, 0, 0, 128);
+    
     // Simple bitmap font implementation
     if (drawBackground) {
       // Calculate text size
@@ -620,7 +623,7 @@ class DrawingUtils {
         image, 
         x - scale, y - scale, 
         x + textWidth + scale, y + textHeight + scale, 
-        backgroundColor,
+        bgColor,
         fill: true
       );
     }

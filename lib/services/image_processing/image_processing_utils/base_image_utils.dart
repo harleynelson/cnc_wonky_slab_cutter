@@ -165,10 +165,23 @@ class BaseImageUtils {
   }
   
   /// Convert the image format
-  static img.Image convertFormat(img.Image image, int format) {
-    return img.Image.from(image)..format = format;
+    static img.Image convertFormat(img.Image image, int format) {
+    // Create a new image with the desired format
+    final result = img.Image(
+      width: image.width, 
+      height: image.height,
+    );
+    
+    // Copy all pixel data
+    for (int y = 0; y < image.height; y++) {
+      for (int x = 0; x < image.width; x++) {
+        result.setPixel(x, y, image.getPixel(x, y));
+      }
+    }
+    
+    return result;
   }
-  
+    
   /// Get image dimensions as a Map
   static Map<String, int> getImageDimensions(img.Image image) {
     return {

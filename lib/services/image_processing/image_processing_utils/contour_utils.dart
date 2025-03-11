@@ -814,10 +814,13 @@ class ContourUtils {
     img.Image image,
     List<List<Point>> contours,
     {
-      img.Color color = const img.ColorRgba8(0, 255, 0, 255),
+      img.Color? color,
       int thickness = 1,
     }
   ) {
+    // Use a default color if not provided
+    final drawColor = color ?? img.ColorRgba8(0, 255, 0, 255);
+    
     final result = img.copyResize(image, width: image.width, height: image.height);
     
     for (final contour in contours) {
@@ -829,7 +832,7 @@ class ContourUtils {
           contour[i].y.round(),
           contour[i + 1].x.round(),
           contour[i + 1].y.round(),
-          color,
+          drawColor,
           thickness,
         );
       }
