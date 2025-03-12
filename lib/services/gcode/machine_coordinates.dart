@@ -1,4 +1,5 @@
 import 'dart:math' as math;
+import 'dart:ui';
 
 /// Represents a point in 2D space
 class Point {
@@ -29,6 +30,66 @@ class MachineCoordinateSystem {
     required this.orientationRad,
     required this.pixelToMmRatio,
   });
+
+  /// Convert a point from image coordinates to display (canvas) coordinates
+static Point imageToDisplayCoordinates(Point imagePoint, Size imageSize, Size displaySize) {
+  // Calculate scale and offset - maintain aspect ratio
+  final imageAspect = imageSize.width / imageSize.height;
+  final displayAspect = displaySize.width / displaySize.height;
+  
+  double displayWidth, displayHeight, offsetX = 0, offsetY = 0;
+  
+  if (imageAspect > displayAspect) {
+    // Image is wider than display (letterboxed)
+    displayWidth = displaySize.width;
+    displayHeight = displaySize.width / imageAspect;
+    offsetY = (displaySize.height - displayHeight) / 2;
+  } else {
+    // Image is taller than display (pillarboxed)
+    displayHeight = displaySize.height;
+    displayWidth = displaySize.height * imageAspect;
+    offsetX = (displaySize.width - displayWidth) / 2;
+  }
+  
+  // Calculate display coordinates - normalized then scaled
+  final normalizedX = imagePoint.x / imageSize.width;
+  final normalizedY = imagePoint.y / imageSize.height;
+  
+  final displayX = normalizedX * displayWidth + offsetX;
+  final displayY = normalizedY * displayHeight + offsetY;
+  
+  return Point(displayX, displayY);
+}
+
+/// Convert a point from display (canvas) coordinates to image coordinates
+static Point displayToImageCoordinates(Point displayPoint, Size imageSize, Size displaySize) {
+  // Calculate scale and offset - maintain aspect ratio
+  final imageAspect = imageSize.width / imageSize.height;
+  final displayAspect = displaySize.width / displaySize.height;
+  
+  double displayWidth, displayHeight, offsetX = 0, offsetY = 0;
+  
+  if (imageAspect > displayAspect) {
+    // Image is wider than display (letterboxed)
+    displayWidth = displaySize.width;
+    displayHeight = displaySize.width / imageAspect;
+    offsetY = (displaySize.height - displayHeight) / 2;
+  } else {
+    // Image is taller than display (pillarboxed)
+    displayHeight = displaySize.height;
+    displayWidth = displaySize.height * imageAspect;
+    offsetX = (displaySize.width - displayWidth) / 2;
+  }
+  
+  // Reverse the transformation - account for offset then normalize
+  final normalizedX = (displayPoint.x - offsetX) / displayWidth;
+  final normalizedY = (displayPoint.y - offsetY) / displayHeight;
+  
+  final imageX = normalizedX * imageSize.width;
+  final imageY = normalizedY * imageSize.height;
+  
+  return Point(imageX, imageY);
+}
   
   /// Convert a point from pixel coordinates to machine (mm) coordinates
   Point pixelToMachineCoords(Point pixelPoint) {

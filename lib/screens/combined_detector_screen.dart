@@ -9,6 +9,7 @@ import 'package:image/image.dart' as img;
 
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
+import '../services/gcode/machine_coordinates.dart';
 import '../services/image_processing/marker_detector.dart';
 import '../services/processing/processing_flow_manager.dart';
 import '../widgets/marker_overlay.dart';
@@ -220,61 +221,67 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
     
     setState(() {
       _selectedPoint = details.localPosition;
-      _statusMessage = 'Seed point selected. Now tap "Detect Contour" to proceed.';
+      
+      // Calculate image point
+      final imagePoint = _calculateImagePoint(_selectedPoint!);
+      
+      // Update status message with tap coordinates
+      _statusMessage = 'Tap at: (${_selectedPoint!.dx.toInt()},${_selectedPoint!.dy.toInt()}) → Image: (${imagePoint.x.toInt()},${imagePoint.y.toInt()}). Tap "Detect Contour" to proceed.';
     });
   }
   
-  // Calculate the actual point in the image coordinates
   Point _calculateImagePoint(Offset tapPosition) {
-    if (_imageSize == null) {
-      return Point(0, 0);
-    }
-    
-    // Consider only the area of the screen that actually contains the image
-    final imageContainer = context.findRenderObject() as RenderBox;
-    final containerSize = Size(
-      imageContainer.size.width,
-      imageContainer.size.height - 100, // Account for status bar and buttons
-    );
-    
-    print('Image size: ${_imageSize!.width}x${_imageSize!.height}');
-    print('Container size: ${containerSize.width}x${containerSize.height}');
-    print('Tap position: ${tapPosition.dx}x${tapPosition.dy}');
-    
-    // Calculate how the image is displayed (accounting for aspect ratio)
-    final imageAspect = _imageSize!.width / _imageSize!.height;
-    final containerAspect = containerSize.width / containerSize.height;
-    
-    double displayWidth, displayHeight, offsetX = 0, offsetY = 0;
-    
-    if (imageAspect > containerAspect) {
-      // Image is wider than container (letterboxed)
-      displayWidth = containerSize.width;
-      displayHeight = containerSize.width / imageAspect;
-      offsetY = (containerSize.height - displayHeight) / 2;
-      print('Letterboxed - offsetY: $offsetY');
-    } else {
-      // Image is taller than container (pillarboxed)
-      displayHeight = containerSize.height;
-      displayWidth = containerSize.height * imageAspect;
-      offsetX = (containerSize.width - displayWidth) / 2;
-      print('Pillarboxed - offsetX: $offsetX');
-    }
-    
-    // Scale factors
-    final scaleX = _imageSize!.width / displayWidth;
-    final scaleY = _imageSize!.height / displayHeight;
-    
-    print('Display dimensions: ${displayWidth}x${displayHeight}');
-    print('Scale factors: $scaleX x $scaleY');
-    
-    // Convert tap position to image coordinates
-    final imageX = (tapPosition.dx - offsetX) * scaleX;
-    final imageY = (tapPosition.dy - offsetY) * scaleY;
-    
-    print('Calculated image point: ${imageX}x${imageY}');
-    return Point(imageX, imageY);
+    //TODO:  Look into all the hard coding for container sizes and offset corrections.  I feel like this could screw us at some point
+  if (_imageSize == null) {
+    return Point(0, 0);
   }
+  
+  final imageContainer = context.findRenderObject() as RenderBox;
+  final containerSize = Size(
+    imageContainer.size.width,
+    imageContainer.size.height - 100, // Account for status bar and buttons
+  );
+  
+  // Calculate how the image is displayed
+  final imageAspect = _imageSize!.width / _imageSize!.height;
+  final containerAspect = containerSize.width / containerSize.height;
+  
+  double displayWidth, displayHeight, offsetX = 0, offsetY = 0;
+  
+  if (imageAspect > containerAspect) {
+    // Image is wider than container (letterboxed)
+    displayWidth = containerSize.width;
+    displayHeight = containerSize.width / imageAspect;
+    // The key fix - use a relative offset calculation
+    offsetY = (containerSize.height - displayHeight) / 2;
+    
+    // Critical correction - compensate for the different container contexts
+    // The overlay uses 7.0 offset vs our 92.5
+    final offsetCorrection = 85.5; // 92.5 - 7.0
+    offsetY = offsetY - offsetCorrection;
+  } else {
+    // Image is taller than container (pillarboxed)
+    // Similar fix would apply here if needed
+    displayHeight = containerSize.height;
+    displayWidth = containerSize.height * imageAspect;
+    offsetX = (containerSize.width - displayWidth) / 2;
+  }
+  
+  // Scale factors
+  final scaleX = _imageSize!.width / displayWidth;
+  final scaleY = _imageSize!.height / displayHeight;
+  
+  // Convert tap position to image coordinates
+  final imageX = (tapPosition.dx - offsetX) * scaleX;
+  final imageY = (tapPosition.dy - offsetY) * scaleY;
+  
+  // Debugging
+  print('DEBUG: Corrected offsetY: $offsetY');
+  print('DEBUG: Scale factors: $scaleX x $scaleY');
+  print('DEBUG: Calculated image point: ${imageX}x${imageY}');
+  
+  return Point(imageX, imageY);
+}
   
   @override
   Widget build(BuildContext context) {

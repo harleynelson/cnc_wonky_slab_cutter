@@ -54,77 +54,82 @@ class ContourPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    if (contourPoints.isEmpty) return;
-
-    // Create paints
-    final pathPaint = Paint()
+  if (contourPoints.isEmpty) return;
+  
+  print('DEBUG CONTOUR: Painting contour on canvas size: ${size.width}x${size.height}');
+  print('DEBUG CONTOUR: Image size: ${imageSize.width}x${imageSize.height}');
+  
+  // Create paints
+  final pathPaint = Paint()
+    ..color = color
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = strokeWidth
+    ..strokeJoin = StrokeJoin.round;
+  
+  final glowPaint = Paint()
+    ..color = color.withOpacity(0.3)
+    ..style = PaintingStyle.stroke
+    ..strokeWidth = strokeWidth + 4
+    ..strokeJoin = StrokeJoin.round
+    ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3);
+  
+  // Create path with the standardized transformation logic
+  final path = Path();
+  bool isFirst = true;
+  
+  for (final point in contourPoints) {
+    // Use the standard utility method
+    final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
+      point,
+      imageSize,
+      size
+    );
+    
+    final x = displayPoint.x;
+    final y = displayPoint.y;
+    
+    if (isFirst) {
+      path.moveTo(x, y);
+      isFirst = false;
+    } else {
+      path.lineTo(x, y);
+    }
+  }
+  
+  // Close the contour if needed
+  if (contourPoints.length > 2 && 
+      (contourPoints.first.x != contourPoints.last.x || 
+       contourPoints.first.y != contourPoints.last.y)) {
+    path.close();
+  }
+  
+  // Draw the contour with glow effect
+  canvas.drawPath(path, glowPaint);
+  canvas.drawPath(path, pathPaint);
+  
+  // Draw points if requested
+  if (showPoints) {
+    final pointPaint = Paint()
+      ..color = Colors.white
+      ..style = PaintingStyle.fill;
+    
+    final outlinePaint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth
-      ..strokeJoin = StrokeJoin.round;
-    
-    final glowPaint = Paint()
-      ..color = color.withOpacity(0.3)
-      ..style = PaintingStyle.stroke
-      ..strokeWidth = strokeWidth + 4
-      ..strokeJoin = StrokeJoin.round
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3);
-
-    // Create path
-    final path = Path();
-    bool isFirst = true;
+      ..strokeWidth = 1.0;
     
     for (final point in contourPoints) {
-      // Normalize the point to 0-1 range
-      final normalizedX = point.x / imageSize.width;
-      final normalizedY = point.y / imageSize.height;
+      final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
+        point,
+        imageSize,
+        size
+      );
       
-      // Convert to canvas coordinates
-      final x = normalizedX * size.width;
-      final y = normalizedY * size.height;
-      
-      if (isFirst) {
-        path.moveTo(x, y);
-        isFirst = false;
-      } else {
-        path.lineTo(x, y);
-      }
+      // Draw point
+      canvas.drawCircle(Offset(displayPoint.x, displayPoint.y), 3, pointPaint);
+      canvas.drawCircle(Offset(displayPoint.x, displayPoint.y), 3, outlinePaint);
     }
-    
-    // Close the contour if needed
-    if (contourPoints.length > 2 && 
-        (contourPoints.first.x != contourPoints.last.x || 
-         contourPoints.first.y != contourPoints.last.y)) {
-      path.close();
-    }
-    
-    // Draw the contour with glow effect
-    canvas.drawPath(path, glowPaint);
-    canvas.drawPath(path, pathPaint);
-    
-    // Draw points if requested
-    if (showPoints) {
-      final pointPaint = Paint()
-        ..color = Colors.white
-        ..style = PaintingStyle.fill;
-      
-      final outlinePaint = Paint()
-        ..color = color
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 1.0;
-      
-      for (final point in contourPoints) {
-        // Normalize and convert coordinates
-        final normalizedX = point.x / imageSize.width;
-        final normalizedY = point.y / imageSize.height;
-        final x = normalizedX * size.width;
-        final y = normalizedY * size.height;
-        
-        // Draw point
-        canvas.drawCircle(Offset(x, y), 3, pointPaint);
-        canvas.drawCircle(Offset(x, y), 3, outlinePaint);
-      }
-    }
+  }
     
     // Calculate and show area
     if (contourPoints.length > 2) {

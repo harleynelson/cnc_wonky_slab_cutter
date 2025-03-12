@@ -794,17 +794,17 @@ Map<String, double> _calculateBlobProperties(List<int> blob) {
 
 /// Fallback detection to ensure we always get some markers
 List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
-  print('Using fallback marker detection');
-  return [
-    // Use wider spread for reliable placement
-    MarkerPoint((width * 0.2).round(), (height * 0.8).round(), MarkerRole.origin, confidence: 0.5),   // Bottom left
-    MarkerPoint((width * 0.8).round(), (height * 0.8).round(), MarkerRole.xAxis, confidence: 0.5),    // Bottom right
-    MarkerPoint((width * 0.2).round(), (height * 0.2).round(), MarkerRole.scale, confidence: 0.5),    // Top left
-  ];
-}
-  
-  /// Calculate calibration parameters from detected markers
-  MarkerDetectionResult _calculateCalibration(List<MarkerPoint> markers, img.Image? debugImage) {
+    print('Using fallback marker detection');
+    return [
+      // Use wider spread for reliable placement
+      MarkerPoint((width * 0.2).round(), (height * 0.8).round(), MarkerRole.origin, confidence: 0.5),   // Bottom left
+      MarkerPoint((width * 0.8).round(), (height * 0.8).round(), MarkerRole.xAxis, confidence: 0.5),    // Bottom right
+      MarkerPoint((width * 0.2).round(), (height * 0.2).round(), MarkerRole.scale, confidence: 0.5),    // Top left
+    ];
+  }
+    
+    /// Calculate calibration parameters from detected markers
+    MarkerDetectionResult _calculateCalibration(List<MarkerPoint> markers, img.Image? debugImage) {
     // Ensure we have enough markers
     if (markers.length < 3) {
       throw Exception('Insufficient markers detected (${markers.length})');
@@ -832,6 +832,11 @@ List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
       throw Exception('Missing markers after identification');
     }
     
+    // Log the detected marker positions
+    print('DEBUG MARKERS: Origin: (${originMarker.x}, ${originMarker.y})');
+    print('DEBUG MARKERS: X-Axis: (${xAxisMarker.x}, ${xAxisMarker.y})');
+    print('DEBUG MARKERS: Scale: (${scaleMarker.x}, ${scaleMarker.y})');
+    
     // Calculate orientation angle
     final dx = xAxisMarker.x - originMarker.x;
     final dy = xAxisMarker.y - originMarker.y;
@@ -848,6 +853,11 @@ List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
     }
     
     double pixelToMmRatio = markerRealDistanceMm / distancePx;
+    
+    // Log the calculated values
+    print('DEBUG MARKERS: Orientation angle: ${orientationAngle * 180 / math.pi} degrees');
+    print('DEBUG MARKERS: Distance in pixels: $distancePx');
+    print('DEBUG MARKERS: Pixel-to-mm ratio: $pixelToMmRatio');
     
     // Sanity check on ratio
     if (pixelToMmRatio.isNaN || pixelToMmRatio.isInfinite || 
