@@ -286,98 +286,91 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
   }
 
   Future<void> _detectContour() async {
-    if (_sourceImage == null || !_hasSelectedPoint || _selectedImagePoint == null) {
-      setState(() {
-        _errorMessage = 'Please tap on the slab to select a seed point first';
-      });
-      return;
-    }
-    
-    if (_selectedAlgorithm.isEmpty) {
-      setState(() {
-        _errorMessage = 'No detection algorithm selected';
-      });
-      return;
-    }
-    
+  if (_sourceImage == null || !_hasSelectedPoint || _selectedImagePoint == null) {
     setState(() {
-      _isProcessing = true;
-      _statusMessage = 'Detecting contour using $_selectedAlgorithm algorithm...';
-      _errorMessage = '';
+      _errorMessage = 'Please tap on the slab to select a seed point first';
     });
+    return;
+  }
+  
+  setState(() {
+    _isProcessing = true;
+    _statusMessage = 'Detecting contour using Edge algorithm...';
+    _errorMessage = '';
+  });
 
-    try {
-      // Use the stored image coordinates
-      final int seedX = _selectedImagePoint!.x.round();
-      final int seedY = _selectedImagePoint!.y.round();
-      
-      // Get the selected algorithm
-      final algorithm = ContourAlgorithmRegistry.getAlgorithm(_selectedAlgorithm);
-      
-      if (algorithm == null) {
-        throw Exception('Selected algorithm not found');
-      }
-      
-      // Run contour detection
-      final contourResult = await algorithm.detectContour(
-        _sourceImage!,
+  try {
+    // Use the stored image coordinates
+    final int seedX = _selectedImagePoint!.x.round();
+    final int seedY = _selectedImagePoint!.y.round();
+    
+    // Get the edge algorithm directly
+    final algorithm = ContourAlgorithmRegistry.getAlgorithm('Edge');
+    
+    if (algorithm == null) {
+      throw Exception('Edge algorithm not found');
+    }
+    
+    // Run contour detection
+    final contourResult = await algorithm.detectContour(
+      _sourceImage!,
+      seedX,
+      seedY,
+      _coordinateSystem
+    );
+    
+    // Calculate area if we have a valid contour
+    double? areaMm2;
+    if (contourResult.machineContour.length >= 3) {
+      areaMm2 = GeometryUtils.polygonArea(contourResult.machineContour);
+    }
+    
+    // Create enhanced visualization
+    img.Image enhancedVisualization;
+    if (contourResult.debugImage != null) {
+      enhancedVisualization = _createEnhancedVisualization(
+        contourResult.debugImage!,
+        contourResult.pixelContour,
         seedX,
         seedY,
-        _coordinateSystem
+        areaMm2
       );
-      
-      // Calculate area if we have a valid contour
-      double? areaMm2;
-      if (contourResult.machineContour.length >= 3) {
-        areaMm2 = GeometryUtils.polygonArea(contourResult.machineContour);
-      }
-      
-      // Create enhanced visualization
-      img.Image enhancedVisualization;
-      if (contourResult.debugImage != null) {
-        enhancedVisualization = _createEnhancedVisualization(
-          contourResult.debugImage!,
-          contourResult.pixelContour,
-          seedX,
-          seedY,
-          areaMm2
-        );
-      } else {
-        // If no debug image, create one from the source image
-        enhancedVisualization = img.copyResize(_sourceImage!, 
-            width: _sourceImage!.width, height: _sourceImage!.height);
-            
-        // Apply enhancements to the source image copy
-        _enhanceSourceImageVisualization(
-          enhancedVisualization,
-          contourResult.pixelContour,
-          seedX,
-          seedY,
-          areaMm2
-        );
-      }
-      
-      final resultBytes = Uint8List.fromList(img.encodePng(enhancedVisualization));
-      
-      setState(() {
-        _resultImageBytes = resultBytes;
-        _contourPoints = contourResult.pixelContour;
-        _contourMachinePoints = contourResult.machineContour;
-        _contourAreaMm2 = areaMm2;
-        _isProcessing = false;
-        
-        final pointCount = contourResult.pointCount;
-        final areaText = areaMm2 != null ? ' Area: ${areaMm2.toStringAsFixed(2)} mm²' : '';
-        _statusMessage = 'Contour detected with $_selectedAlgorithm algorithm! (${pointCount} points).$areaText';
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Error detecting contour: $e';
-        _isProcessing = false;
-        _statusMessage = 'Failed to detect contour';
-      });
+    } else {
+      // If no debug image, create one from the source image
+      enhancedVisualization = img.copyResize(_sourceImage!, 
+          width: _sourceImage!.width, height: _sourceImage!.height);
+          
+      // Apply enhancements to the source image copy
+      _enhanceSourceImageVisualization(
+        enhancedVisualization,
+        contourResult.pixelContour,
+        seedX,
+        seedY,
+        areaMm2
+      );
     }
+    
+    final resultBytes = Uint8List.fromList(img.encodePng(enhancedVisualization));
+    
+    setState(() {
+      _resultImageBytes = resultBytes;
+      _contourPoints = contourResult.pixelContour;
+      _contourMachinePoints = contourResult.machineContour;
+      _contourAreaMm2 = areaMm2;
+      _isProcessing = false;
+      
+      final pointCount = contourResult.pointCount;
+      final areaText = areaMm2 != null ? ' Area: ${areaMm2.toStringAsFixed(2)} mm²' : '';
+      _statusMessage = 'Contour detected with Edge algorithm! (${pointCount} points).$areaText';
+    });
+  } catch (e) {
+    setState(() {
+      _errorMessage = 'Error detecting contour: $e';
+      _isProcessing = false;
+      _statusMessage = 'Failed to detect contour';
+    });
   }
+}
 
   // Create an enhanced visualization from the debug image
   img.Image _createEnhancedVisualization(
@@ -574,7 +567,7 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
     // Add algorithm info
     DrawingUtils.drawText(
       image, 
-      "Algorithm: $_selectedAlgorithm", 
+      "Algorithm: Edge", 
       10, 
       10, 
       img.ColorRgba8(255, 255, 255, 255),

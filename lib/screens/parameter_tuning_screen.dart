@@ -1,12 +1,12 @@
 // lib/screens/parameter_tuning_screen.dart
-// Screen for interactive parameter tuning of contour detection algorithms
+// Screen for interactive parameter tuning of edge contour detection algorithm
 
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:image/image.dart' as img;
 import 'package:provider/provider.dart';
 
-import '../services/image_processing/contour_algorithms/default_contour_algorithm.dart';
+import '../services/image_processing/contour_algorithms/edge_contour_algorithm.dart';
 import '../services/image_processing/marker_detector.dart';
 import '../services/gcode/machine_coordinates.dart';
 import '../models/settings_model.dart';
@@ -39,14 +39,12 @@ class _ParameterTuningScreenState extends State<ParameterTuningScreen> {
   img.Image? _originalImage;
   img.Image? _resultImage;
   
-  // Parameter values
-  double _contrastFactor = 1.5;
-  int _blurRadius = 3;
+  // Parameter values for Edge algorithm
   int _edgeThreshold = 30;
-  int _morphologySize = 3;
-  bool _useDarkBackground = true;
+  int _blurRadius = 3;
   double _simplifyEpsilon = 3.0;
   int _smoothingWindow = 5;
+  bool _useConvexHull = true;
   
   @override
   void initState() {
@@ -96,15 +94,14 @@ class _ParameterTuningScreenState extends State<ParameterTuningScreen> {
         widget.settings.markerYDistance
       );
       
-      // Create algorithm with current parameters
-      final algorithm = DefaultContourAlgorithm(
-        contrastEnhancementFactor: _contrastFactor,
+      // Create Edge algorithm with current parameters
+      final algorithm = EdgeContourAlgorithm(
+        generateDebugImage: true,
+        edgeThreshold: _edgeThreshold.toDouble(),
         blurRadius: _blurRadius,
-        edgeThreshold: _edgeThreshold,
-        morphologySize: _morphologySize,
-        useDarkBackgroundDetection: _useDarkBackground,
-        simplifyEpsilon: _simplifyEpsilon,
+        simplificationEpsilon: _simplifyEpsilon,
         smoothingWindowSize: _smoothingWindow,
+        useConvexHull: _useConvexHull,
       );
       
       // Run detection
@@ -145,7 +142,7 @@ class _ParameterTuningScreenState extends State<ParameterTuningScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Parameter Tuning'),
+        title: Text('Edge Algorithm Parameters'),
         actions: [
           IconButton(
             icon: Icon(Icons.save),
@@ -205,37 +202,11 @@ class _ParameterTuningScreenState extends State<ParameterTuningScreen> {
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
           Text(
-            'Algorithm Parameters',
+            'Edge Algorithm Parameters',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
             textAlign: TextAlign.center,
           ),
           SizedBox(height: 8),
-          
-          // Contrast Factor
-          _buildParameterSlider(
-            'Contrast Enhancement',
-            _contrastFactor,
-            1.0,
-            3.0,
-            (value) {
-              setState(() {
-                _contrastFactor = value;
-              });
-            },
-          ),
-          
-          // Blur Radius
-          _buildIntSlider(
-            'Blur Radius',
-            _blurRadius,
-            1,
-            7,
-            (value) {
-              setState(() {
-                _blurRadius = value;
-              });
-            },
-          ),
           
           // Edge Threshold
           _buildIntSlider(
@@ -250,15 +221,15 @@ class _ParameterTuningScreenState extends State<ParameterTuningScreen> {
             },
           ),
           
-          // Morphology Size
+          // Blur Radius
           _buildIntSlider(
-            'Morphology Size',
-            _morphologySize,
+            'Blur Radius',
+            _blurRadius,
             1,
             7,
             (value) {
               setState(() {
-                _morphologySize = value;
+                _blurRadius = value;
               });
             },
           ),
@@ -290,16 +261,16 @@ class _ParameterTuningScreenState extends State<ParameterTuningScreen> {
             step: 2, // Only odd values
           ),
           
-          // Dark Background
+          // Use Convex Hull
           Row(
             children: [
-              Text('Use Dark Background Detection'),
+              Text('Use Convex Hull'),
               Spacer(),
               Switch(
-                value: _useDarkBackground,
+                value: _useConvexHull,
                 onChanged: (value) {
                   setState(() {
-                    _useDarkBackground = value;
+                    _useConvexHull = value;
                   });
                 },
               ),
