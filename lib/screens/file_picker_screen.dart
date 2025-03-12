@@ -1,3 +1,6 @@
+// lib/screens/file_picker_screen.dart
+// Screen for picking image files from device storage
+
 import 'package:flutter/material.dart';
 import 'dart:io';
 import 'dart:typed_data';
@@ -5,8 +8,6 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 import '../models/settings_model.dart';
-import 'preview_screen.dart';
-import '../utils/general/constants.dart';
 
 class FilePickerScreen extends StatefulWidget {
   final SettingsModel settings;
@@ -91,7 +92,7 @@ class _FilePickerScreenState extends State<FilePickerScreen> {
               ElevatedButton.icon(
                 icon: Icon(Icons.arrow_forward),
                 label: Text('Continue'),
-                onPressed: _continueToPreview,
+                onPressed: _continueToDetection,
               ),
             ],
           ),
@@ -120,8 +121,8 @@ class _FilePickerScreenState extends State<FilePickerScreen> {
           SizedBox(height: 16),
           Text(
             'The image should contain your slab with three markers positioned at:\n'
-            '• Top left (Origin)\n'
-            '• Top right (X-axis)\n'
+            '• Bottom left (Origin)\n'
+            '• Bottom right (X-axis)\n'
             '• Bottom left (Scale)',
             style: TextStyle(fontSize: 16),
             textAlign: TextAlign.center,
@@ -191,25 +192,19 @@ class _FilePickerScreenState extends State<FilePickerScreen> {
     }
   }
 
-  void _continueToPreview() {
+  void _continueToDetection() {
     if (_selectedImage != null) {
       if (widget.onImageSelected != null) {
         if (_selectedImage is File) {
           widget.onImageSelected!(_selectedImage);
         } else if (_selectedImage is MemoryFile) {
           // In web, we need special handling in the parent component
-          // This is simplified - actual implementation would need more care
           widget.onImageSelected!(_selectedImage);
         }
       } else {
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => PreviewScreen(
-              imageFile: _selectedImage,
-              settings: widget.settings,
-            ),
-          ),
+        // This should never happen in the new flow, but keeping as a fallback
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: No handler for selected image')),
         );
       }
     }
