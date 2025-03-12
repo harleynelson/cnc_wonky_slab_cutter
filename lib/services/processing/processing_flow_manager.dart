@@ -7,6 +7,7 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 import '../../models/settings_model.dart';
+import '../image_processing/contour_algorithms/contour_algorithm_registry.dart';
 import '../image_processing/contour_algorithms/edge_contour_algorithm.dart';
 import '../image_processing/marker_detector.dart';
 import '../image_processing/slab_contour_result.dart';
@@ -117,7 +118,7 @@ class ProcessingFlowManager with ChangeNotifier {
   final SettingsModel settings;
   
   // Default contour detection method
-  ContourDetectionMethod _preferredContourMethod = ContourDetectionMethod.interactive;
+  ContourDetectionMethod _preferredContourMethod = ContourDetectionMethod.automatic;
   
   ProcessingFlowManager({required this.settings});
   
@@ -192,10 +193,10 @@ class ProcessingFlowManager with ChangeNotifier {
   }
   
   /// Process slab contour detection using automatic method
-  Future<void> detectSlabContourAutomatic() async {
+  Future<bool> detectSlabContourAutomatic() async {
     if (_result.markerResult == null || _result.processedImage == null) {
       _setErrorState('Marker detection must be completed first');
-      return;
+      return false;
     }
     
     try {
@@ -211,8 +212,11 @@ class ProcessingFlowManager with ChangeNotifier {
         settings.markerYDistance
       );
       
+      // Initialize contour detection algorithms
+      ContourAlgorithmRegistry.initialize();
+      
       // Use Edge contour algorithm
-      final contourAlgorithm = EdgeContourAlgorithm(
+      final algorithm = EdgeContourAlgorithm(
         generateDebugImage: true,
         edgeThreshold: 50,
         useConvexHull: true,
@@ -224,7 +228,7 @@ class ProcessingFlowManager with ChangeNotifier {
       final seedY = _result.processedImage!.height ~/ 2;
       
       // Process image to detect slab contour
-      final contourResult = await contourAlgorithm.detectContour(
+      final contourResult = await algorithm.detectContour(
         _result.processedImage!,
         seedX,
         seedY,
@@ -246,6 +250,7 @@ class ProcessingFlowManager with ChangeNotifier {
       );
       
       notifyListeners();
+      return true;
     } catch (e, stackTrace) {
       ErrorUtils().logError(
         'Error during automatic slab contour detection',
@@ -254,50 +259,10 @@ class ProcessingFlowManager with ChangeNotifier {
         context: 'slab_detection_automatic',
       );
       _setErrorState('Automatic slab detection failed: ${e.toString()}');
+      return false;
     }
   }
 
-  void clearDebugImages() {
-    _result = _result.copyWith(
-      processedImage: null,
-    );
-    notifyListeners();
-  }
-  
-  /// Process slab contour detection
-  Future<void> detectSlabContour() async {
-  // Use the preferred method
-  switch (_preferredContourMethod) {
-    case ContourDetectionMethod.automatic:
-      await detectSlabContourAutomatic();
-      break;
-    case ContourDetectionMethod.interactive:
-      // Interactive method is handled by the UI via updateContourResult
-      _updateState(ProcessingState.slabDetection);
-      notifyListeners();
-      break;
-    case ContourDetectionMethod.manual:
-      // Manual method is handled by the UI via updateContourResult
-      _updateState(ProcessingState.slabDetection);
-      notifyListeners();
-      break;
-  }
-}
-  
-  /// Update contour result from external source (interactive or manual methods)
-  void updateContourResult(SlabContourResult contourResult, {ContourDetectionMethod? method}) {
-    final usedMethod = method ?? _preferredContourMethod;
-    
-    _result = _result.copyWith(
-      contourResult: contourResult,
-      processedImage: contourResult.debugImage ?? _result.processedImage,
-      state: ProcessingState.slabDetection,
-      contourMethod: usedMethod,
-    );
-    
-    notifyListeners();
-  }
-  
   /// Generate toolpath and G-code
   Future<void> generateGcode() async {
     if (_result.contourResult == null) {
@@ -358,32 +323,19 @@ class ProcessingFlowManager with ChangeNotifier {
     notifyListeners();
   }
   
-  /// Move to the next step in the processing flow
-  Future<void> proceedToNextStep() async {
-  if (!_result.canProceedToNextStep) {
-    return;
+  /// Update contour result from external source (interactive or manual methods)
+  void updateContourResult(SlabContourResult contourResult, {ContourDetectionMethod? method}) {
+    final usedMethod = method ?? _preferredContourMethod;
+    
+    _result = _result.copyWith(
+      contourResult: contourResult,
+      processedImage: contourResult.debugImage ?? _result.processedImage,
+      state: ProcessingState.slabDetection,
+      contourMethod: usedMethod,
+    );
+    
+    notifyListeners();
   }
-  
-  switch (_result.state) {
-    case ProcessingState.notStarted:
-      await detectMarkers();
-      break;
-    case ProcessingState.markerDetection:
-      // Skip ahead to interactive contour detection
-      _updateState(ProcessingState.slabDetection);
-      break;
-    case ProcessingState.slabDetection:
-      await generateGcode();
-      break;
-    case ProcessingState.gcodeGeneration:
-      _updateState(ProcessingState.completed);
-      break;
-    case ProcessingState.completed:
-    case ProcessingState.error:
-      // No next step
-      break;
-  }
-}
   
   /// Update the processing state
   void _updateState(ProcessingState newState) {

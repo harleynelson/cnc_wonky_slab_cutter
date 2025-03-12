@@ -9,15 +9,16 @@ import 'package:image_picker/image_picker.dart';
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
 import '../utils/general/permissions_utils.dart';
-import 'processing_screen.dart';
 import 'camera_screen_with_overlay.dart';
 
 class ImageSelectionScreen extends StatefulWidget {
   final SettingsModel settings;
+  final Function(File) onImageSelected;
 
   const ImageSelectionScreen({
     Key? key,
     required this.settings,
+    required this.onImageSelected,
   }) : super(key: key);
 
   @override
@@ -98,7 +99,7 @@ class _ImageSelectionScreenState extends State<ImageSelectionScreen> {
                 child: ElevatedButton.icon(
                   icon: Icon(Icons.arrow_forward),
                   label: Text('Continue'),
-                  onPressed: _continueToProcessing,
+                  onPressed: _continueToDetection,
                 ),
               ),
             ],
@@ -129,9 +130,9 @@ class _ImageSelectionScreenState extends State<ImageSelectionScreen> {
             SizedBox(height: 16),
             Text(
               'The image should contain your slab with three markers positioned at:\n'
-              '• Top left (Origin)\n'
-              '• Top right (X-axis)\n'
-              '• Bottom left (Scale)',
+              '• Bottom left (Origin)\n'
+              '• Bottom right (X-axis)\n'
+              '• Top left (Scale)',
               style: TextStyle(fontSize: 16),
               textAlign: TextAlign.center,
             ),
@@ -257,26 +258,14 @@ class _ImageSelectionScreenState extends State<ImageSelectionScreen> {
     });
   }
 
-  void _continueToProcessing() {
+  void _continueToDetection() {
     if (_selectedImage == null) {
       _showSnackBar('Please select an image first');
       return;
     }
 
-    // Create flow manager for processing
-    final processingProvider = Provider.of<ProcessingProvider>(context, listen: false);
-    processingProvider.createFlowManager(widget.settings);
-
-    // Navigate to processing screen
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => ProcessingScreen(
-          imageFile: _selectedImage!,
-          settings: widget.settings,
-        ),
-      ),
-    );
+    // Pass the selected image to the parent widget
+    widget.onImageSelected(_selectedImage!);
   }
 
   void _showSnackBar(String message) {
