@@ -1,5 +1,5 @@
 // lib/services/image_processing/contour_algorithms/edge_contour_algorithm.dart
-// Edge-based contour detection algorithm with improved consistency
+// Edge-based contour detection algorithm with improved consistency and visualization
 
 import 'dart:async';
 import 'dart:math' as math;
@@ -11,6 +11,7 @@ import '../../../utils/image_processing/filter_utils.dart';
 import '../../../utils/image_processing/drawing_utils.dart';
 import '../../../utils/image_processing/base_image_utils.dart';
 import '../../../utils/image_processing/geometry_utils.dart';
+import '../../../utils/image_processing/threshold_utils.dart';
 import '../slab_contour_result.dart';
 import 'contour_algorithm_interface.dart';
 
@@ -23,12 +24,20 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
   final double edgeThreshold;
   final bool useConvexHull;
   final double simplificationEpsilon;
+  final int smoothingWindowSize;
+  final bool enhanceContrast;
+  final int blurRadius;
+  final bool removeNoise;
 
   EdgeContourAlgorithm({
     this.generateDebugImage = true,
     this.edgeThreshold = 50,
     this.useConvexHull = true,
     this.simplificationEpsilon = 5.0,
+    this.smoothingWindowSize = 5,
+    this.enhanceContrast = true,
+    this.blurRadius = 3,
+    this.removeNoise = true,
   });
 
   @override
@@ -76,7 +85,8 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
       // 7. Simplify and smooth contour
       final smoothContour = ContourDetectionUtils.smoothAndSimplifyContour(
         processedContour, 
-        simplificationEpsilon
+        simplificationEpsilon,
+        windowSize: smoothingWindowSize
       );
       
       // 8. Convert to machine coordinates
@@ -106,6 +116,122 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
       print('Error in $name algorithm: $e');
       return _createFallbackResult(image, coordSystem, debugImage, seedX, seedY);
     }
+  }
+  
+  /// Enhanced contrast function that performs adaptive contrast enhancement
+  img.Image _enhanceContrastAdaptive(img.Image grayscale) {
+    final result = img.Image(width: grayscale.width, height: grayscale.height);
+    
+    // Find min and max pixel values
+    int min = 255;
+    int max = 0;
+    
+    for (int y = 0; y < grayscale.height; y++) {
+      for (int x = 0; x < grayscale.width; x++) {
+        final pixel = grayscale.getPixel(x, y);
+        final intensity = BaseImageUtils.calculateLuminance(
+          pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+        );
+        min = math.min(min, intensity);
+        max = math.max(max, intensity);
+      }
+    }
+    
+    // Calculate histogram to find optimal stretching parameters
+    final histogram = List<int>.filled(256, 0);
+    for (int y = 0; y < grayscale.height; y++) {
+      for (int x = 0; x < grayscale.width; x++) {
+        final pixel = grayscale.getPixel(x, y);
+        final intensity = BaseImageUtils.calculateLuminance(
+          pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+        );
+        histogram[intensity]++;
+      }
+    }
+    
+    // Find better min/max using histogram percentiles (5% and 95%)
+    int pixelCount = 0;
+    final totalPixels = grayscale.width * grayscale.height;
+    final lowPercentile = totalPixels * 0.05;
+    final highPercentile = totalPixels * 0.95;
+    
+    int minThreshold = min;
+    for (int i = min; i <= max; i++) {
+      pixelCount += histogram[i];
+      if (pixelCount > lowPercentile) {
+        minThreshold = i;
+        break;
+      }
+    }
+    
+    pixelCount = 0;
+    int maxThreshold = max;
+    for (int i = max; i >= min; i--) {
+      pixelCount += histogram[i];
+      if (pixelCount > lowPercentile) {
+        maxThreshold = i;
+        break;
+      }
+    }
+    
+    // Ensure we have a meaningful range
+    if (maxThreshold - minThreshold < 10) {
+      minThreshold = min;
+      maxThreshold = max;
+    }
+    
+    // Apply enhanced contrast
+    for (int y = 0; y < grayscale.height; y++) {
+      for (int x = 0; x < grayscale.width; x++) {
+        final pixel = grayscale.getPixel(x, y);
+        final intensity = BaseImageUtils.calculateLuminance(
+          pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+        );
+        
+        int newIntensity;
+        if (intensity < minThreshold) {
+          newIntensity = 0;
+        } else if (intensity > maxThreshold) {
+          newIntensity = 255;
+        } else {
+          newIntensity = ((intensity - minThreshold) * 255 / (maxThreshold - minThreshold)).round().clamp(0, 255);
+        }
+        
+        result.setPixel(x, y, img.ColorRgba8(newIntensity, newIntensity, newIntensity, 255));
+      }
+    }
+    
+    return result;
+  }
+  
+  /// Remove small noise blobs from edge image
+  img.Image _removeNoiseBlobs(img.Image edges, int minSize) {
+    final result = img.Image(width: edges.width, height: edges.height);
+    
+    // Initialize with white
+    for (int y = 0; y < edges.height; y++) {
+      for (int x = 0; x < edges.width; x++) {
+        result.setPixel(x, y, img.ColorRgba8(255, 255, 255, 255));
+      }
+    }
+    
+    // Find connected components
+    final blobs = ContourDetectionUtils.findConnectedComponents(edges, minSize: minSize, maxSize: 10000);
+    
+    // Draw only the significant blobs
+    for (final blob in blobs) {
+      for (int i = 0; i < blob.length; i += 2) {
+        if (i + 1 < blob.length) {
+          final x = blob[i] as int;
+          final y = blob[i + 1] as int;
+          if (x >= 0 && x < result.width && y >= 0 && y < result.height) {
+            result.setPixel(x, y, img.ColorRgba8(0, 0, 0, 255));
+          }
+        }
+      }
+    }
+    
+    return result;
   }
   
   /// Create a binary mask from edge detection result using flood fill from seed
@@ -212,27 +338,82 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
     int seedX,
     int seedY
   ) {
-    // Create a circular contour around the seed point
+    // Create a rectangular or circular contour around the seed point
     final List<Point> contour = [];
-    final radius = math.min(image.width, image.height) * 0.3;
     
-    // Generate circular contour
-    for (int i = 0; i <= 36; i++) {
-      final angle = i * math.pi / 18; // 10 degrees in radians
-      final x = seedX + radius * math.cos(angle);
-      final y = seedY + radius * math.sin(angle);
+    // Determine size based on image dimensions, centered around seed point
+    final width = image.width;
+    final height = image.height;
+    
+    final size = math.min(width, height) * 0.3;
+    final left = math.max(seedX - size / 2, 0.0);
+    final right = math.min(seedX + size / 2, width.toDouble());
+    final top = math.max(seedY - size / 2, 0.0);
+    final bottom = math.min(seedY + size / 2, height.toDouble());
+    
+    // Create a rounded rectangle as fallback shape
+    final cornerRadius = size / 5;
+    
+    // Top edge with rounded corners
+    for (double x = left + cornerRadius; x <= right - cornerRadius; x += 5) {
+      contour.add(Point(x, top));
+    }
+    
+    // Top-right corner
+    for (double angle = 270; angle <= 360; angle += 10) {
+      final rads = angle * math.pi / 180;
+      final x = right - cornerRadius + cornerRadius * math.cos(rads);
+      final y = top + cornerRadius + cornerRadius * math.sin(rads);
       contour.add(Point(x, y));
     }
+    
+    // Right edge
+    for (double y = top + cornerRadius; y <= bottom - cornerRadius; y += 5) {
+      contour.add(Point(right, y));
+    }
+    
+    // Bottom-right corner
+    for (double angle = 0; angle <= 90; angle += 10) {
+      final rads = angle * math.pi / 180;
+      final x = right - cornerRadius + cornerRadius * math.cos(rads);
+      final y = bottom - cornerRadius + cornerRadius * math.sin(rads);
+      contour.add(Point(x, y));
+    }
+    
+    // Bottom edge
+    for (double x = right - cornerRadius; x >= left + cornerRadius; x -= 5) {
+      contour.add(Point(x, bottom));
+    }
+    
+    // Bottom-left corner
+    for (double angle = 90; angle <= 180; angle += 10) {
+      final rads = angle * math.pi / 180;
+      final x = left + cornerRadius + cornerRadius * math.cos(rads);
+      final y = bottom - cornerRadius + cornerRadius * math.sin(rads);
+      contour.add(Point(x, y));
+    }
+    
+    // Left edge
+    for (double y = bottom - cornerRadius; y >= top + cornerRadius; y -= 5) {
+      contour.add(Point(left, y));
+    }
+    
+    // Top-left corner
+    for (double angle = 180; angle <= 270; angle += 10) {
+      final rads = angle * math.pi / 180;
+      final x = left + cornerRadius + cornerRadius * math.cos(rads);
+      final y = top + cornerRadius + cornerRadius * math.sin(rads);
+      contour.add(Point(x, y));
+    }
+    
+    // Close the contour
+    contour.add(contour.first);
     
     // Convert to machine coordinates
     final machineContour = coordSystem.convertPointListToMachineCoords(contour);
     
     // Draw on debug image if available
     if (debugImage != null) {
-      // Apply high contrast effect
-      final edges = FilterUtils.applyEdgeDetection(image, threshold: 30);
-      _createHighContrastDebugImage(debugImage, edges);
-      
       // Draw the fallback contour
       DrawingUtils.drawContour(debugImage, contour, img.ColorRgba8(255, 0, 0, 255), thickness: 3);
       
@@ -241,6 +422,7 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
       
       // Add fallback label
       DrawingUtils.drawText(debugImage, "FALLBACK: $name algorithm", 10, 10, img.ColorRgba8(255, 0, 0, 255));
+      DrawingUtils.drawText(debugImage, "No contour detected - using fallback shape", 10, 30, img.ColorRgba8(255, 0, 0, 255));
     }
     
     return SlabContourResult(

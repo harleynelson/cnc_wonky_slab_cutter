@@ -321,56 +321,56 @@ class ContourDetectionUtils {
 
   /// Smooth and simplify a contour
   static List<Point> smoothAndSimplifyContour(List<Point> contour, double epsilon, 
-      {int windowSize = 5, double sigma = 1.0}) {
-    if (contour.length <= 3) return contour;
-    
-    // 1. Apply Douglas-Peucker simplification
-    final simplified = GeometryUtils.simplifyPolygon(contour, epsilon);
-    
-    // 2. Apply Gaussian smoothing
-    return smoothContour(simplified, windowSize: windowSize);
-  }
+    {int windowSize = 5, double sigma = 1.0}) {
+  if (contour.length <= 3) return contour;
+  
+  // 1. Apply Douglas-Peucker simplification
+  final simplified = GeometryUtils.simplifyPolygon(contour, epsilon);
+  
+  // 2. Apply Gaussian smoothing
+  return smoothContour(simplified, windowSize: windowSize);
+}
 
-  /// Smooth contour using Gaussian smoothing
-  static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, double sigma = 1.0}) {
-    if (contour.length <= 3) return contour;
-    
-    final result = <Point>[];
-    final halfWindow = windowSize ~/ 2;
-    
-    // Generate Gaussian kernel
-    final kernel = <double>[];
-    double sum = 0.0;
-    
-    for (int i = -halfWindow; i <= halfWindow; i++) {
-      final weight = math.exp(-(i * i) / (2 * sigma * sigma));
-      kernel.add(weight);
-      sum += weight;
-    }
-    
-    // Normalize kernel
-    for (int i = 0; i < kernel.length; i++) {
-      kernel[i] /= sum;
-    }
-    
-    // Apply smoothing
-    for (int i = 0; i < contour.length; i++) {
-      double sumX = 0.0;
-      double sumY = 0.0;
-      
-      for (int j = -halfWindow; j <= halfWindow; j++) {
-        final idx = (i + j + contour.length) % contour.length;
-        final weight = kernel[j + halfWindow];
-        
-        sumX += contour[idx].x * weight;
-        sumY += contour[idx].y * weight;
-      }
-      
-      result.add(Point(sumX, sumY));
-    }
-    
-    return result;
+/// Smooth contour using Gaussian smoothing
+static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, double sigma = 1.0}) {
+  if (contour.length <= 3) return contour;
+  
+  final result = <Point>[];
+  final halfWindow = windowSize ~/ 2;
+  
+  // Generate Gaussian kernel
+  final kernel = <double>[];
+  double sum = 0.0;
+  
+  for (int i = -halfWindow; i <= halfWindow; i++) {
+    final weight = math.exp(-(i * i) / (2 * sigma * sigma));
+    kernel.add(weight);
+    sum += weight;
   }
+  
+  // Normalize kernel
+  for (int i = 0; i < kernel.length; i++) {
+    kernel[i] /= sum;
+  }
+  
+  // Apply smoothing
+  for (int i = 0; i < contour.length; i++) {
+    double sumX = 0.0;
+    double sumY = 0.0;
+    
+    for (int j = -halfWindow; j <= halfWindow; j++) {
+      final idx = (i + j + contour.length) % contour.length;
+      final weight = kernel[j + halfWindow];
+      
+      sumX += contour[idx].x * weight;
+      sumY += contour[idx].y * weight;
+    }
+    
+    result.add(Point(sumX, sumY));
+  }
+  
+  return result;
+}
 
   /// Create a fallback contour shape for cases where detection fails
   static List<Point> createFallbackContour(int width, int height) {

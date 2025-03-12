@@ -1,6 +1,5 @@
 // lib/screens/interactive_contour_screen.dart
-// Interactive contour detection screen with user guidance and algorithm selection
-// Fixed coordinate transformation for touch and markers
+// Interactive contour detection screen with enhanced visualization and user guidance
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -16,6 +15,8 @@ import '../services/processing/processing_flow_manager.dart';
 import '../services/image_processing/slab_contour_result.dart';
 import '../services/image_processing/marker_detector.dart';
 import '../services/image_processing/contour_algorithms/contour_algorithm_registry.dart';
+import '../utils/image_processing/drawing_utils.dart';
+import '../utils/image_processing/geometry_utils.dart';
 import 'parameter_tuning_screen.dart';
 
 class InteractiveContourScreen extends StatefulWidget {
@@ -47,6 +48,18 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
   String _statusMessage = 'Tap on the slab to begin contour detection';
   String _errorMessage = '';
   String _selectedAlgorithm = '';
+  double? _contourAreaMm2;
+  
+  // Display settings for contour visualization
+  final Map<String, dynamic> _visualSettings = {
+    'showOriginalContour': false,
+    'showSmoothedContour': true,
+    'showAreaMeasurement': true,
+    'showSeedPoint': true,
+    'contourStyle': 'glowing', // 'normal', 'highlighted', 'dashed', 'dots', 'glowing'
+    'contourThickness': 3,
+    'contourColor': const Color(0xFF00FF00), // Green
+  };
 
   // UI parameters
   final double _touchRadius = 15.0;
@@ -82,7 +95,13 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
     ContourAlgorithmRegistry.initialize();
     _availableAlgorithms = ContourAlgorithmRegistry.getAvailableAlgorithms();
     if (_availableAlgorithms.isNotEmpty) {
-      _selectedAlgorithm = _availableAlgorithms.first;
+      // Default to Edge algorithm if available, otherwise use the first available
+      final edgeAlgorithmIndex = _availableAlgorithms.indexWhere((algo) => algo == 'Edge');
+      if (edgeAlgorithmIndex >= 0) {
+        _selectedAlgorithm = _availableAlgorithms[edgeAlgorithmIndex];
+      } else {
+        _selectedAlgorithm = _availableAlgorithms.first;
+      }
     }
     
     _loadImage();
@@ -149,17 +168,33 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
       }
       
       // Draw a circle for each marker
-      for (int dy = -10; dy <= 10; dy++) {
-        for (int dx = -10; dx <= 10; dx++) {
-          if (dx * dx + dy * dy <= 100) { // radius = 10
-            final px = marker.x + dx;
-            final py = marker.y + dy;
-            if (px >= 0 && px < image.width && py >= 0 && py < image.height) {
-              image.setPixel(px, py, color);
-            }
-          }
-        }
+      DrawingUtils.drawCircle(image, marker.x, marker.y, 10, color);
+      
+      // Draw a small filled circle in the center
+      DrawingUtils.drawCircle(image, marker.x, marker.y, 3, color, fill: true);
+      
+      // Add label
+      String label = "";
+      switch (marker.role) {
+        case MarkerRole.origin:
+          label = "Origin";
+          break;
+        case MarkerRole.xAxis:
+          label = "X-Axis";
+          break;
+        case MarkerRole.scale:
+          label = "Scale";
+          break;
       }
+      
+      DrawingUtils.drawText(
+        image, 
+        label, 
+        marker.x + 12, 
+        marker.y - 10, 
+        color,
+        drawBackground: true
+      );
     }
   }
 
@@ -190,15 +225,6 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
     _displaySize = Size(displayWidth, displayHeight);
   }
 
-  // Get accurate position of the image container relative to the screen
-  Offset _getImageContainerOffset() {
-    if (_imageContainerKey.currentContext == null) {
-      return Offset.zero;
-    }
-    final RenderBox containerBox = _imageContainerKey.currentContext!.findRenderObject() as RenderBox;
-    return containerBox.localToGlobal(Offset.zero);
-  }
-
   // Convert screen coordinates to image coordinates
   Point screenToImageCoordinates(Offset screenPoint) {
     // First adjust for the position of the touch within the image
@@ -224,19 +250,11 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
     final RenderBox box = _imageContainerKey.currentContext!.findRenderObject() as RenderBox;
     final Offset localPosition = box.globalToLocal(details.globalPosition);
     
-    // Debug information
-    print('Container size: $containerSize');
-    print('Image display size: $_displaySize');
-    print('Image offset: $_imageOffset');
-    print('Tap global position: ${details.globalPosition}');
-    print('Tap local position: $localPosition');
-    
     // Check if tap is within the displayed image bounds
     if (localPosition.dx < _imageOffset.dx || 
         localPosition.dx > _imageOffset.dx + _displaySize.width ||
         localPosition.dy < _imageOffset.dy || 
         localPosition.dy > _imageOffset.dy + _displaySize.height) {
-      print('Tap outside image area');
       return;  // Tap outside image area
     }
     
@@ -248,11 +266,8 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
     // Ensure coordinates are within image bounds
     if (imageX < 0 || imageX >= _sourceImage!.width || 
         imageY < 0 || imageY >= _sourceImage!.height) {
-      print('Image coordinates out of bounds: ($imageX, $imageY)');
       return;
     }
-    
-    print('Converted to image coordinates: ($imageX, $imageY)');
     
     setState(() {
       // Store both screen and image coordinates
@@ -264,6 +279,7 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
       _contourPoints = null;
       _contourMachinePoints = null;
       _resultImageBytes = null;
+      _contourAreaMm2 = null;
       
       _statusMessage = 'Seed point selected. Tap "Detect Contour" to proceed.';
     });
@@ -310,47 +326,50 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
         _coordinateSystem
       );
       
-      // If we have a result, convert it for display
-      if (contourResult.debugImage != null) {
-        final resultBytes = Uint8List.fromList(img.encodePng(contourResult.debugImage!));
-        
-        setState(() {
-          _resultImageBytes = resultBytes;
-          _contourPoints = contourResult.pixelContour;
-          _contourMachinePoints = contourResult.machineContour;
-          _isProcessing = false;
-          _statusMessage = 'Contour detected with $_selectedAlgorithm algorithm! (${contourResult.pointCount} points)';
-        });
-      } else {
-        // If no debug image, create one with a basic visualization
-        final contourImage = img.copyResize(_sourceImage!, 
-            width: _sourceImage!.width, height: _sourceImage!.height);
-        
-        // Draw seed point
-        _drawCircle(contourImage, seedX, seedY, 8, img.ColorRgba8(255, 255, 0, 255));
-        
-        // Draw contour
-        for (int i = 0; i < contourResult.pixelContour.length - 1; i++) {
-          _drawLine(
-            contourImage, 
-            contourResult.pixelContour[i].x.round(), 
-            contourResult.pixelContour[i].y.round(),
-            contourResult.pixelContour[i + 1].x.round(), 
-            contourResult.pixelContour[i + 1].y.round(),
-            img.ColorRgba8(0, 255, 0, 255)
-          );
-        }
-        
-        final resultBytes = Uint8List.fromList(img.encodePng(contourImage));
-        
-        setState(() {
-          _resultImageBytes = resultBytes;
-          _contourPoints = contourResult.pixelContour;
-          _contourMachinePoints = contourResult.machineContour;
-          _isProcessing = false;
-          _statusMessage = 'Contour detected with $_selectedAlgorithm algorithm! (${contourResult.pointCount} points)';
-        });
+      // Calculate area if we have a valid contour
+      double? areaMm2;
+      if (contourResult.machineContour.length >= 3) {
+        areaMm2 = GeometryUtils.polygonArea(contourResult.machineContour);
       }
+      
+      // Create enhanced visualization
+      img.Image enhancedVisualization;
+      if (contourResult.debugImage != null) {
+        enhancedVisualization = _createEnhancedVisualization(
+          contourResult.debugImage!,
+          contourResult.pixelContour,
+          seedX,
+          seedY,
+          areaMm2
+        );
+      } else {
+        // If no debug image, create one from the source image
+        enhancedVisualization = img.copyResize(_sourceImage!, 
+            width: _sourceImage!.width, height: _sourceImage!.height);
+            
+        // Apply enhancements to the source image copy
+        _enhanceSourceImageVisualization(
+          enhancedVisualization,
+          contourResult.pixelContour,
+          seedX,
+          seedY,
+          areaMm2
+        );
+      }
+      
+      final resultBytes = Uint8List.fromList(img.encodePng(enhancedVisualization));
+      
+      setState(() {
+        _resultImageBytes = resultBytes;
+        _contourPoints = contourResult.pixelContour;
+        _contourMachinePoints = contourResult.machineContour;
+        _contourAreaMm2 = areaMm2;
+        _isProcessing = false;
+        
+        final pointCount = contourResult.pointCount;
+        final areaText = areaMm2 != null ? ' Area: ${areaMm2.toStringAsFixed(2)} mm²' : '';
+        _statusMessage = 'Contour detected with $_selectedAlgorithm algorithm! (${pointCount} points).$areaText';
+      });
     } catch (e) {
       setState(() {
         _errorMessage = 'Error detecting contour: $e';
@@ -360,50 +379,207 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
     }
   }
 
-  // Simple drawing utilities for fallback visualization
-  void _drawCircle(img.Image image, int x, int y, int radius, img.Color color) {
-    final rgbaColor = color;
+  // Create an enhanced visualization from the debug image
+  img.Image _createEnhancedVisualization(
+    img.Image debugImage,
+    List<Point> contour,
+    int seedX,
+    int seedY,
+    double? areaMm2
+  ) {
+    final result = img.copyResize(debugImage, width: debugImage.width, height: debugImage.height);
     
-    for (int dy = -radius; dy <= radius; dy++) {
-      for (int dx = -radius; dx <= radius; dx++) {
-        if (dx * dx + dy * dy <= radius * radius) {
-          final px = x + dx;
-          final py = y + dy;
-          if (px >= 0 && px < image.width && py >= 0 && py < image.height) {
-            image.setPixel(px, py, rgbaColor);
-          }
-        }
+    // Ensure we have the markers
+    _drawMarkers(result, widget.markerResult.markers);
+    
+    // Customize visualization based on settings
+    if (_visualSettings['showSeedPoint'] && _selectedImagePoint != null) {
+      DrawingUtils.drawCircle(result, seedX, seedY, 8, img.ColorRgba8(255, 255, 0, 255), fill: true);
+    }
+    
+    // Create Color from visualization settings
+    final contourColor = img.ColorRgba8(
+      _visualSettings['contourColor'].red,
+      _visualSettings['contourColor'].green,
+      _visualSettings['contourColor'].blue,
+      255
+    );
+    
+    // Draw contour based on selected style
+    if (contour.isNotEmpty) {
+      switch (_visualSettings['contourStyle']) {
+        case 'normal':
+          DrawingUtils.drawContour(
+            result, 
+            contour, 
+            contourColor, 
+            thickness: _visualSettings['contourThickness']
+          );
+          break;
+          
+        case 'highlighted':
+          DrawingUtils.drawHighlightedContour(
+            result,
+            contour,
+            contourColor,
+            img.ColorRgba8(0, 0, 0, 255), // Black outline
+            thickness: _visualSettings['contourThickness']
+          );
+          break;
+          
+        case 'dashed':
+          DrawingUtils.drawDashedContour(
+            result,
+            contour,
+            contourColor,
+            thickness: _visualSettings['contourThickness']
+          );
+          break;
+          
+        case 'dots':
+          DrawingUtils.drawContourWithDots(
+            result,
+            contour,
+            contourColor,
+            img.ColorRgba8(255, 255, 0, 255), // Yellow dots
+            thickness: _visualSettings['contourThickness']
+          );
+          break;
+          
+        case 'glowing':
+        default:
+          DrawingUtils.drawGlowingContour(
+            result,
+            contour,
+            img.ColorRgba8(255, 255, 0, 150), // Yellow glow
+            contourColor,
+            glowSize: 5,
+            lineThickness: _visualSettings['contourThickness']
+          );
+          break;
       }
     }
+    
+    // Add area measurement if enabled
+    if (_visualSettings['showAreaMeasurement'] && areaMm2 != null && contour.isNotEmpty) {
+      DrawingUtils.drawAreaMeasurement(
+        result,
+        contour,
+        areaMm2,
+        _coordinateSystem,
+        color: contourColor
+      );
+    }
+    
+    // Add algorithm name and settings
+    DrawingUtils.drawText(
+      result, 
+      "Algorithm: $_selectedAlgorithm", 
+      10, 
+      10, 
+      img.ColorRgba8(255, 255, 255, 255),
+      drawBackground: true
+    );
+    
+    return result;
   }
   
-  void _drawLine(img.Image image, int x1, int y1, int x2, int y2, img.Color color) {
-    final rgbaColor = color;
+  // Enhance the source image for visualization when no debug image is available
+  void _enhanceSourceImageVisualization(
+    img.Image image,
+    List<Point> contour,
+    int seedX,
+    int seedY,
+    double? areaMm2
+  ) {
+    // Draw seed point
+    if (_visualSettings['showSeedPoint']) {
+      DrawingUtils.drawCircle(image, seedX, seedY, 8, img.ColorRgba8(255, 255, 0, 255), fill: true);
+    }
     
-    // Basic Bresenham line algorithm
-    int dx = (x2 - x1).abs();
-    int dy = (y2 - y1).abs();
-    int sx = x1 < x2 ? 1 : -1;
-    int sy = y1 < y2 ? 1 : -1;
-    int err = dx - dy;
+    // Draw the contour
+    final contourColor = img.ColorRgba8(
+      _visualSettings['contourColor'].red,
+      _visualSettings['contourColor'].green,
+      _visualSettings['contourColor'].blue,
+      255
+    );
     
-    while (true) {
-      if (x1 >= 0 && x1 < image.width && y1 >= 0 && y1 < image.height) {
-        image.setPixel(x1, y1, rgbaColor);
-      }
-      
-      if (x1 == x2 && y1 == y2) break;
-      
-      int e2 = 2 * err;
-      if (e2 > -dy) {
-        err -= dy;
-        x1 += sx;
-      }
-      if (e2 < dx) {
-        err += dx;
-        y1 += sy;
+    // Apply the selected contour drawing style
+    if (contour.isNotEmpty) {
+      switch (_visualSettings['contourStyle']) {
+        case 'normal':
+          DrawingUtils.drawContour(
+            image, 
+            contour, 
+            contourColor, 
+            thickness: _visualSettings['contourThickness']
+          );
+          break;
+          
+        case 'highlighted':
+          DrawingUtils.drawHighlightedContour(
+            image,
+            contour,
+            contourColor,
+            img.ColorRgba8(0, 0, 0, 255), // Black outline
+            thickness: _visualSettings['contourThickness']
+          );
+          break;
+          
+        case 'dashed':
+          DrawingUtils.drawDashedContour(
+            image,
+            contour,
+            contourColor,
+            thickness: _visualSettings['contourThickness']
+          );
+          break;
+          
+        case 'dots':
+          DrawingUtils.drawContourWithDots(
+            image,
+            contour,
+            contourColor,
+            img.ColorRgba8(255, 255, 0, 255), // Yellow dots
+            thickness: _visualSettings['contourThickness']
+          );
+          break;
+          
+        case 'glowing':
+        default:
+          DrawingUtils.drawGlowingContour(
+            image,
+            contour,
+            img.ColorRgba8(255, 255, 0, 150), // Yellow glow
+            contourColor,
+            glowSize: 5,
+            lineThickness: _visualSettings['contourThickness']
+          );
+          break;
       }
     }
+    
+    // Add area measurement
+    if (_visualSettings['showAreaMeasurement'] && areaMm2 != null && contour.isNotEmpty) {
+      DrawingUtils.drawAreaMeasurement(
+        image,
+        contour,
+        areaMm2,
+        _coordinateSystem,
+        color: contourColor
+      );
+    }
+    
+    // Add algorithm info
+    DrawingUtils.drawText(
+      image, 
+      "Algorithm: $_selectedAlgorithm", 
+      10, 
+      10, 
+      img.ColorRgba8(255, 255, 255, 255),
+      drawBackground: true
+    );
   }
 
   // Accept the current contour
@@ -415,12 +591,15 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
       return;
     }
 
-    // Create a SlabContourResult
+    // Create a SlabContourResult with area information
     final contourResult = SlabContourResult(
       pixelContour: _contourPoints!,
       machineContour: _contourMachinePoints!,
       debugImage: _resultImageBytes != null ? 
         img.decodeImage(_resultImageBytes!) : null,
+      pixelArea: _contourPoints!.length >= 3 ? 
+        GeometryUtils.polygonArea(_contourPoints!) : 0,
+      machineArea: _contourAreaMm2 ?? 0,
     );
     
     // Update the flow manager with the new contour
@@ -431,9 +610,15 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
         method: ContourDetectionMethod.interactive
       );
       
-      // Show success message
+      // Show success message with area information
+      final areaText = _contourAreaMm2 != null ? 
+        ' (Area: ${_contourAreaMm2!.toStringAsFixed(2)} mm²)' : '';
+        
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Contour successfully updated')),
+        SnackBar(
+          content: Text('Contour successfully updated$areaText'),
+          duration: Duration(seconds: 2),
+        ),
       );
       
       // Navigate back
@@ -443,20 +628,6 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
         _errorMessage = 'Processing flow not initialized';
       });
     }
-  }
-
-  // Reset the contour detection
-  void _resetContour() {
-    setState(() {
-      _selectedPoint = null;
-      _selectedImagePoint = null;
-      _hasSelectedPoint = false;
-      _contourPoints = null;
-      _contourMachinePoints = null;
-      _resultImageBytes = null;
-      _statusMessage = 'Tap on the slab to select a seed point, then tap "Detect Contour"';
-      _errorMessage = '';
-    });
   }
 
   @override
@@ -471,6 +642,11 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
               tooltip: 'Accept Contour',
               onPressed: _acceptContour,
             ),
+          IconButton(
+            icon: Icon(Icons.settings),
+            tooltip: 'Visualization Settings',
+            onPressed: _showVisualizationSettings,
+          ),
         ],
       ),
       body: Column(
@@ -503,6 +679,14 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
                     if (newValue != null) {
                       setState(() {
                         _selectedAlgorithm = newValue;
+                        
+                        // If we already have a contour detected, clear it when changing algorithm
+                        if (_contourPoints != null) {
+                          _contourPoints = null;
+                          _contourMachinePoints = null;
+                          _resultImageBytes = null;
+                          _contourAreaMm2 = null;
+                        }
                       });
                     }
                   },
@@ -523,6 +707,20 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
             child: _buildImageDisplay(),
           ),
           
+          // Area display if available
+          if (_contourAreaMm2 != null)
+            Container(
+              padding: EdgeInsets.symmetric(vertical: 8),
+              child: Text(
+                'Calculated Area: ${_contourAreaMm2!.toStringAsFixed(2)} mm²',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.green.shade800,
+                ),
+              ),
+            ),
+          
           // Instructions
           if (!_hasSelectedPoint && !_isProcessing)
             Padding(
@@ -539,7 +737,251 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
       ),
     );
   }
-
+  
+  // Show dialog to customize visualization settings
+  void _showVisualizationSettings() {
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: Text('Visualization Settings'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Contour style selection
+                  ListTile(
+                    title: Text('Contour Style'),
+                    trailing: DropdownButton<String>(
+                      value: _visualSettings['contourStyle'],
+                      onChanged: (String? newValue) {
+                        if (newValue != null) {
+                          setStateDialog(() {
+                            _visualSettings['contourStyle'] = newValue;
+                          });
+                          
+                          // Also update in the main state
+                          setState(() {});
+                          
+                          // Refresh visualization if we have a contour
+                          if (_contourPoints != null && _sourceImage != null && _selectedImagePoint != null) {
+                            _updateVisualization();
+                          }
+                        }
+                      },
+                      items: [
+                        'normal', 'highlighted', 'dashed', 'dots', 'glowing'
+                      ].map<DropdownMenuItem<String>>((String style) {
+                        return DropdownMenuItem<String>(
+                          value: style,
+                          child: Text(style.substring(0, 1).toUpperCase() + style.substring(1)),
+                        );
+                      }).toList(),
+                    ),
+                  ),
+                  
+                  // Line thickness slider
+                  ListTile(
+                    title: Text('Line Thickness: ${_visualSettings['contourThickness']}'),
+                    subtitle: Slider(
+                      value: _visualSettings['contourThickness'].toDouble(),
+                      min: 1,
+                      max: 10,
+                      divisions: 9,
+                      onChanged: (value) {
+                        setStateDialog(() {
+                          _visualSettings['contourThickness'] = value.toInt();
+                        });
+                        
+                        // Also update in the main state
+                        setState(() {});
+                        
+                        // Refresh visualization if we have a contour
+                        if (_contourPoints != null && _sourceImage != null && _selectedImagePoint != null) {
+                          _updateVisualization();
+                        }
+                      },
+                    ),
+                  ),
+                  
+                  // Contour color selection
+                  ListTile(
+                    title: Text('Contour Color'),
+                    trailing: Container(
+                      width: 30,
+                      height: 30,
+                      decoration: BoxDecoration(
+                        color: _visualSettings['contourColor'],
+                        border: Border.all(color: Colors.black),
+                        borderRadius: BorderRadius.circular(5),
+                      ),
+                    ),
+                    onTap: () {
+                      // Show a simple color picker
+                      showDialog(
+                        context: context,
+                        builder: (context) => AlertDialog(
+                          title: Text('Select Color'),
+                          content: SingleChildScrollView(
+                            child: Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                _colorButton(Colors.green, setStateDialog),
+                                _colorButton(Colors.red, setStateDialog),
+                                _colorButton(Colors.blue, setStateDialog),
+                                _colorButton(Colors.yellow, setStateDialog),
+                                _colorButton(Colors.orange, setStateDialog),
+                                _colorButton(Colors.purple, setStateDialog),
+                                _colorButton(Colors.cyan, setStateDialog),
+                                _colorButton(Colors.pink, setStateDialog),
+                                _colorButton(Colors.teal, setStateDialog),
+                                _colorButton(Colors.white, setStateDialog),
+                              ],
+                            ),
+                          ),
+                          actions: [
+                            TextButton(
+                              child: Text('Close'),
+                              onPressed: () {
+                                Navigator.of(context).pop();
+                              },
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  ),
+                  
+                  // Show original contour toggle
+                  SwitchListTile(
+                    title: Text('Show Original Contour'),
+                    value: _visualSettings['showOriginalContour'],
+                    onChanged: (value) {
+                      setStateDialog(() {
+                        _visualSettings['showOriginalContour'] = value;
+                      });
+                      
+                      // Also update in the main state
+                      setState(() {});
+                      
+                      // Refresh visualization if we have a contour
+                      if (_contourPoints != null && _sourceImage != null && _selectedImagePoint != null) {
+                        _updateVisualization();
+                      }
+                    },
+                  ),
+                  
+                  // Show seed point toggle
+                  SwitchListTile(
+                    title: Text('Show Seed Point'),
+                    value: _visualSettings['showSeedPoint'],
+                    onChanged: (value) {
+                      setStateDialog(() {
+                        _visualSettings['showSeedPoint'] = value;
+                      });
+                      
+                      // Also update in the main state
+                      setState(() {});
+                      
+                      // Refresh visualization if we have a contour
+                      if (_contourPoints != null && _sourceImage != null && _selectedImagePoint != null) {
+                        _updateVisualization();
+                      }
+                    },
+                  ),
+                  
+                  // Show area measurement toggle
+                  SwitchListTile(
+                    title: Text('Show Area Measurement'),
+                    value: _visualSettings['showAreaMeasurement'],
+                    onChanged: (value) {
+                      setStateDialog(() {
+                        _visualSettings['showAreaMeasurement'] = value;
+                      });
+                      
+                      // Also update in the main state
+                      setState(() {});
+                      
+                      // Refresh visualization if we have a contour
+                      if (_contourPoints != null && _sourceImage != null && _selectedImagePoint != null) {
+                        _updateVisualization();
+                      }
+                    },
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                child: Text('Close'),
+                onPressed: () {
+                  Navigator.of(context).pop();
+                },
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+  
+  // Helper to create color selection button
+  Widget _colorButton(Color color, Function(void Function()) setStateDialog) {
+    return GestureDetector(
+      onTap: () {
+        setStateDialog(() {
+          _visualSettings['contourColor'] = color;
+        });
+        
+        // Also update in the main state
+        setState(() {});
+        
+        // Refresh visualization if we have a contour
+        if (_contourPoints != null && _sourceImage != null && _selectedImagePoint != null) {
+          _updateVisualization();
+        }
+        
+        Navigator.of(context).pop();
+      },
+      child: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: color,
+          border: Border.all(color: Colors.black),
+          borderRadius: BorderRadius.circular(5),
+        ),
+      ),
+    );
+  }
+  
+  // Update visualization when settings change
+  void _updateVisualization() {
+    if (_sourceImage == null || _selectedImagePoint == null || _contourPoints == null) return;
+    
+    // Recreate visualization with current settings
+    img.Image enhancedVisualization = img.copyResize(_sourceImage!, 
+      width: _sourceImage!.width, height: _sourceImage!.height);
+      
+    // Apply enhancements with updated settings
+    _enhanceSourceImageVisualization(
+      enhancedVisualization,
+      _contourPoints!,
+      _selectedImagePoint!.x.round(),
+      _selectedImagePoint!.y.round(),
+      _contourAreaMm2
+    );
+    
+    final resultBytes = Uint8List.fromList(img.encodePng(enhancedVisualization));
+    
+    setState(() {
+      _resultImageBytes = resultBytes;
+    });
+  }
+  
   Widget _buildImageDisplay() {
     if (_isProcessing) {
       return Center(
@@ -558,7 +1000,7 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
       return InteractiveViewer(
         constrained: true,
         minScale: 0.5,
-        maxScale: 3.0,
+        maxScale: 5.0,
         child: Image.memory(
           _resultImageBytes!,
           fit: BoxFit.contain,
@@ -606,6 +1048,23 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
                         ),
                       ),
                     ),
+                    
+                  // Show helper guides for placing seed point
+                  if (!_hasSelectedPoint)
+                    Positioned(
+                      top: 10,
+                      left: 0,
+                      right: 0,
+                      child: Container(
+                        padding: EdgeInsets.all(8),
+                        color: Colors.black54,
+                        child: Text(
+                          'Tap inside the slab to set a seed point',
+                          style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          textAlign: TextAlign.center,
+                        ),
+                      ),
+                    ),
                 ],
               ),
             ),
@@ -617,12 +1076,23 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
     // Loading or error state
     return Center(
       child: _errorMessage.isNotEmpty
-          ? Text('Error: $_errorMessage')
+          ? Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                Icon(Icons.error_outline, color: Colors.red, size: 48),
+                SizedBox(height: 16),
+                Text(
+                  'Error: $_errorMessage',
+                  style: TextStyle(color: Colors.red),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            )
           : CircularProgressIndicator(),
     );
   }
-
-    Widget _buildControlButtons() {
+  
+  Widget _buildControlButtons() {
     return Container(
       padding: EdgeInsets.all(16),
       child: Column(
@@ -670,25 +1140,65 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
                   onPressed: _contourPoints != null ? _acceptContour : null,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.green,
+                    disabledBackgroundColor: Colors.green.withOpacity(0.3),
                   ),
                 ),
               ),
             ],
           ),
           
-          // Add parameter tuning button (NEW)
           SizedBox(height: 8),
-          ElevatedButton.icon(
-            icon: Icon(Icons.tune),
-            label: Text('Fine-tune Parameters'),
-            onPressed: _contourPoints != null ? null : _openParameterTuning,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.orange,
-            ),
+          
+          // Bottom row with additional buttons
+          Row(
+            children: [
+              // Parameter tuning button
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: Icon(Icons.tune),
+                  label: Text('Algorithm Parameters'),
+                  onPressed: _contourPoints != null ? null : _openParameterTuning,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.orange,
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+              
+              SizedBox(width: 8),
+              
+              // Help button
+              Expanded(
+                child: ElevatedButton.icon(
+                  icon: Icon(Icons.help_outline),
+                  label: Text('Usage Guide'),
+                  onPressed: _showHelpDialog,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blueGrey,
+                    padding: EdgeInsets.symmetric(vertical: 12),
+                  ),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
+  }
+
+  // Reset the contour detection
+  void _resetContour() {
+    setState(() {
+      _selectedPoint = null;
+      _selectedImagePoint = null;
+      _hasSelectedPoint = false;
+      _contourPoints = null;
+      _contourMachinePoints = null;
+      _resultImageBytes = null;
+      _contourAreaMm2 = null;
+      _statusMessage = 'Tap on the slab to select a seed point, then tap "Detect Contour"';
+      _errorMessage = '';
+    });
   }
 
   void _openParameterTuning() async {
@@ -736,5 +1246,95 @@ class _InteractiveContourScreenState extends State<InteractiveContourScreen> {
       // Refresh the UI and use the updated contour
       setState(() {});
     }
+  }
+  
+  // Show help dialog with usage guidance
+  void _showHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Slab Contour Detection Guide'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'How to detect the slab contour:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              _buildHelpStep(1, 'Tap on the image to select a seed point inside the slab.'),
+              _buildHelpStep(2, 'Tap "Detect Contour" to run the selected algorithm.'),
+              _buildHelpStep(3, 'Adjust visualization settings using the gear icon.'),
+              _buildHelpStep(4, 'If needed, reset and try a different seed point or algorithm.'),
+              _buildHelpStep(5, 'When satisfied, tap "Accept Contour" to use this contour.'),
+              
+              SizedBox(height: 16),
+              Text(
+                'Algorithm Tips:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text('• "Edge" algorithm works best with clear contrast between slab and background.'),
+              Text('• Place the seed point well inside the slab boundaries.'),
+              Text('• Use "Algorithm Parameters" for fine-tuning detection.'),
+              Text('• Different visualization styles can help see the contour clearly.'),
+              
+              SizedBox(height: 16),
+              Text(
+                'Troubleshooting:',
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+              SizedBox(height: 8),
+              Text('• If detection fails, try a different algorithm or seed point.'),
+              Text('• Ensure the slab has clear contrast with the background.'),
+              Text('• Check that markers are correctly positioned.'),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            child: Text('Close'),
+            onPressed: () {
+              Navigator.of(context).pop();
+            },
+          ),
+        ],
+      ),
+    );
+  }
+  
+  // Helper to build numbered step in help dialog
+  Widget _buildHelpStep(int number, String text) {
+    return Padding(
+      padding: EdgeInsets.only(bottom: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 24,
+            height: 24,
+            decoration: BoxDecoration(
+              color: Colors.blue,
+              shape: BoxShape.circle,
+            ),
+            child: Center(
+              child: Text(
+                '$number',
+                style: TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          ),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(text),
+          ),
+        ],
+      ),
+    );
   }
 }

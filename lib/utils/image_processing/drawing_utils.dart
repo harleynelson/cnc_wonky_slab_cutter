@@ -634,6 +634,77 @@ class DrawingUtils {
       _drawChar(image, charCode, x + i * 6 * scale, y, color, scale);
     }
   }
+
+  /// Draw an area measurement on the image
+   static void drawAreaMeasurement(
+    img.Image image,
+    List<Point> contour,
+    double areaMm2,
+    MachineCoordinateSystem coordSystem,
+    {img.Color? color}
+  ) {
+    if (contour.isEmpty) return;
+    
+    // Use default color if none provided
+    final textColor = color ?? img.ColorRgba8(0, 255, 0, 255);
+    
+    // Calculate centroid for label placement
+    double sumX = 0, sumY = 0;
+    for (final point in contour) {
+      sumX += point.x;
+      sumY += point.y;
+    }
+    
+    final centerX = (sumX / contour.length).round();
+    final centerY = (sumY / contour.length).round();
+    
+    // Format area measurement
+    final String areaText;
+    if (areaMm2 >= 1000000) {
+      areaText = "Area: ${(areaMm2 / 1000000).toStringAsFixed(2)} m²";
+    } else if (areaMm2 >= 10000) {
+      areaText = "Area: ${(areaMm2 / 10000).toStringAsFixed(2)} dm²";
+    } else {
+      areaText = "Area: ${areaMm2.toStringAsFixed(2)} mm²";
+    }
+    
+    // Draw background box for better readability
+    final textWidth = areaText.length * 6;
+    final textHeight = 10;
+    drawRectangle(
+      image,
+      centerX - textWidth~/2 - 4,
+      centerY - textHeight - 4,
+      centerX + textWidth~/2 + 4,
+      centerY + 4,
+      img.ColorRgba8(0, 0, 0, 180),
+      fill: true
+    );
+    
+    // Draw measurement text
+    drawText(
+      image,
+      areaText,
+      centerX - textWidth~/2,
+      centerY - textHeight,
+      color!
+    );
+    
+    // Draw a small crosshair at the center
+    drawLine(
+      image,
+      centerX - 5, centerY,
+      centerX + 5, centerY,
+      color!
+    );
+    
+    drawLine(
+      image,
+      centerX, centerY - 5,
+      centerX, centerY + 5,
+      color!
+    );
+  }
   
   /// Draw a character using a simple bitmap font
   static void _drawChar(
@@ -780,25 +851,44 @@ class DrawingUtils {
   ) {
     if (contour.length < 2) return;
     
+    // Draw each segment of the contour
     for (int i = 0; i < contour.length - 1; i++) {
-      drawThickLine(
-        image,
-        contour[i].x.round(), contour[i].y.round(),
-        contour[i + 1].x.round(), contour[i + 1].y.round(),
-        color,
-        thickness
-      );
+      if (thickness > 1) {
+        drawThickLine(
+          image,
+          contour[i].x.round(), contour[i].y.round(),
+          contour[i + 1].x.round(), contour[i + 1].y.round(),
+          color,
+          thickness
+        );
+      } else {
+        drawLine(
+          image,
+          contour[i].x.round(), contour[i].y.round(),
+          contour[i + 1].x.round(), contour[i + 1].y.round(),
+          color
+        );
+      }
     }
     
     // Close the contour if not already closed
     if (contour.first.x != contour.last.x || contour.first.y != contour.last.y) {
-      drawThickLine(
-        image,
-        contour.last.x.round(), contour.last.y.round(),
-        contour.first.x.round(), contour.first.y.round(),
-        color,
-        thickness
-      );
+      if (thickness > 1) {
+        drawThickLine(
+          image,
+          contour.last.x.round(), contour.last.y.round(),
+          contour.first.x.round(), contour.first.y.round(),
+          color,
+          thickness
+        );
+      } else {
+        drawLine(
+          image,
+          contour.last.x.round(), contour.last.y.round(),
+          contour.first.x.round(), contour.first.y.round(),
+          color
+        );
+      }
     }
   }
   
@@ -812,6 +902,136 @@ class DrawingUtils {
     for (final contour in contours) {
       drawContour(image, contour, color, thickness: thickness);
     }
+  }
+
+  /// Draw a contour with a highlighted effect for better visibility
+  static void drawHighlightedContour(
+    img.Image image,
+    List<Point> contour,
+    img.Color primaryColor,
+    img.Color outlineColor,
+    {int thickness = 3}
+  ) {
+    // First draw a thicker outline in the secondary color
+    drawContour(image, contour, outlineColor, thickness: thickness + 2);
+    
+    // Then draw the primary color on top
+    drawContour(image, contour, primaryColor, thickness: thickness);
+  }
+  
+  /// Draw a dashed contour
+  static void drawDashedContour(
+    img.Image image,
+    List<Point> contour,
+    img.Color color,
+    {int dashLength = 10, int gapLength = 5, int thickness = 1}
+  ) {
+    if (contour.length < 2) return;
+    
+    // Track drawing state
+    bool drawing = true;
+    int currentLength = 0;
+    
+    // Draw each segment of the contour with dashes
+    for (int i = 0; i < contour.length - 1; i++) {
+      final p1 = contour[i];
+      final p2 = contour[i + 1];
+      
+      // Calculate segment length
+      final dx = p2.x - p1.x;
+      final dy = p2.y - p1.y;
+      final segmentLength = math.sqrt(dx * dx + dy * dy).round();
+      
+      // Calculate step size for points along the line
+      final steps = math.max(segmentLength, 1);
+      final stepX = dx / steps;
+      final stepY = dy / steps;
+      
+      // Draw dashed line along this segment
+      double currentX = p1.x;
+      double currentY = p1.y;
+      
+      for (int step = 0; step < steps; step++) {
+        if (drawing) {
+          // Draw a point/small segment
+          if (thickness > 1) {
+            drawCircle(
+              image,
+              currentX.round(),
+              currentY.round(),
+              thickness ~/ 2,
+              color,
+              fill: true
+            );
+          } else {
+            _setPixelSafe(image, currentX.round(), currentY.round(), color);
+          }
+        }
+        
+        // Move to next point
+        currentX += stepX;
+        currentY += stepY;
+        
+        // Update dash/gap tracking
+        currentLength++;
+        if (drawing && currentLength >= dashLength) {
+          drawing = false;
+          currentLength = 0;
+        } else if (!drawing && currentLength >= gapLength) {
+          drawing = true;
+          currentLength = 0;
+        }
+      }
+    }
+  }
+  
+  /// Draw a contour with corner dots for enhanced visibility
+  static void drawContourWithDots(
+    img.Image image,
+    List<Point> contour,
+    img.Color lineColor,
+    img.Color dotColor,
+    {int thickness = 1, int dotRadius = 3}
+  ) {
+    // Draw the contour line first
+    drawContour(image, contour, lineColor, thickness: thickness);
+    
+    // Then draw dots at each point
+    for (final point in contour) {
+      drawCircle(
+        image,
+        point.x.round(),
+        point.y.round(),
+        dotRadius,
+        dotColor,
+        fill: true
+      );
+    }
+  }
+  
+  /// Draw a glow effect around a contour for high visibility
+  static void drawGlowingContour(
+    img.Image image,
+    List<Point> contour,
+    img.Color glowColor,
+    img.Color lineColor,
+    {int glowSize = 5, int lineThickness = 2}
+  ) {
+    // Draw outer glow with decreasing opacity
+    for (int size = glowSize; size > 0; size--) {
+      final alpha = (255 * size / glowSize).round();
+      final currentGlowColor = img.ColorRgba8(
+        glowColor.r.toInt(),
+        glowColor.g.toInt(), 
+        glowColor.b.toInt(),
+        alpha
+      );
+      
+      drawContour(image, contour, currentGlowColor, thickness: size + lineThickness);
+    }
+    
+    // Draw the main contour line
+    drawContour(image, contour, lineColor, thickness: lineThickness);
   }
   
   /// Draw a grid on an image
