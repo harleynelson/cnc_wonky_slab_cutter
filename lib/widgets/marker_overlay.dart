@@ -16,12 +16,15 @@ class MarkerOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
+        // Calculate image display properties
+        final canvasSize = Size(constraints.maxWidth, constraints.maxHeight);
+        
         return CustomPaint(
-          size: Size(constraints.maxWidth, constraints.maxHeight),
+          size: canvasSize,
           painter: MarkerPainter(
             markers: markers,
             imageSize: imageSize,
-            canvasSize: Size(constraints.maxWidth, constraints.maxHeight),
+            canvasSize: canvasSize,
           ),
         );
       },
@@ -65,6 +68,43 @@ class MarkerPainter extends CustomPainter {
     final scaleX = displayWidth / imageSize.width;
     final scaleY = displayHeight / imageSize.height;
     
+    // Draw connections between markers
+    final connectionPaint = Paint()
+      ..color = Colors.white.withOpacity(0.5)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.5;
+    
+    final originIndex = markers.indexWhere((marker) => marker.role == MarkerRole.origin);
+    final xAxisIndex = markers.indexWhere((marker) => marker.role == MarkerRole.xAxis);
+    final scaleIndex = markers.indexWhere((marker) => marker.role == MarkerRole.scale);
+    
+    if (originIndex >= 0 && xAxisIndex >= 0) {
+      final originPos = Offset(
+        markers[originIndex].x * scaleX + offsetX,
+        markers[originIndex].y * scaleY + offsetY,
+      );
+      final xAxisPos = Offset(
+        markers[xAxisIndex].x * scaleX + offsetX,
+        markers[xAxisIndex].y * scaleY + offsetY,
+      );
+      
+      canvas.drawLine(originPos, xAxisPos, connectionPaint);
+    }
+    
+    if (originIndex >= 0 && scaleIndex >= 0) {
+      final originPos = Offset(
+        markers[originIndex].x * scaleX + offsetX,
+        markers[originIndex].y * scaleY + offsetY,
+      );
+      final scalePos = Offset(
+        markers[scaleIndex].x * scaleX + offsetX,
+        markers[scaleIndex].y * scaleY + offsetY,
+      );
+      
+      canvas.drawLine(originPos, scalePos, connectionPaint);
+    }
+    
+    // Draw each marker
     for (final marker in markers) {
       // Calculate position with proper scaling
       final position = Offset(
@@ -83,11 +123,11 @@ class MarkerPainter extends CustomPainter {
           break;
         case MarkerRole.xAxis:
           color = Colors.green;
-          label = "X";
+          label = "X-Axis";
           break;
         case MarkerRole.scale:
           color = Colors.blue;
-          label = "Y";
+          label = "Y-Axis";
           break;
       }
       
@@ -97,29 +137,46 @@ class MarkerPainter extends CustomPainter {
         ..style = PaintingStyle.stroke
         ..strokeWidth = 2.0;
       
-      canvas.drawCircle(position, 15.0, outerCirclePaint);
+      canvas.drawCircle(position, 20.0, outerCirclePaint);
       
       // Draw inner circle
       final innerCirclePaint = Paint()
-        ..color = color
+        ..color = color.withOpacity(0.5)
         ..style = PaintingStyle.fill;
       
-      canvas.drawCircle(position, 5.0, innerCirclePaint);
+      canvas.drawCircle(position, 8.0, innerCirclePaint);
       
-      // Draw label
+      // Draw center dot
+      final centerDotPaint = Paint()
+        ..color = color
+        ..style = PaintingStyle.fill;
+        
+      canvas.drawCircle(position, 2.5, centerDotPaint);
+      
+      // Draw crosshair
+      final crosshairPaint = Paint()
+        ..color = color
+        ..strokeWidth = 1.0;
+        
+      canvas.drawLine(
+        Offset(position.dx - 10, position.dy),
+        Offset(position.dx + 10, position.dy),
+        crosshairPaint,
+      );
+      
+      canvas.drawLine(
+        Offset(position.dx, position.dy - 10),
+        Offset(position.dx, position.dy + 10),
+        crosshairPaint,
+      );
+      
+      // Draw label with background for better readability
       final textSpan = TextSpan(
         text: label,
         style: TextStyle(
-          color: color,
+          color: Colors.white,
           fontSize: 14,
           fontWeight: FontWeight.bold,
-          shadows: [
-            Shadow(
-              blurRadius: 3.0,
-              color: Colors.black,
-              offset: Offset(1.0, 1.0),
-            ),
-          ],
         ),
       );
       
@@ -129,9 +186,31 @@ class MarkerPainter extends CustomPainter {
       );
       
       textPainter.layout();
+      
+      // Draw text background
+      final textBgRect = Rect.fromLTWH(
+        position.dx + 12,
+        position.dy - 8,
+        textPainter.width + 6,
+        textPainter.height + 4,
+      );
+      
+      final rrect = RRect.fromRectAndRadius(
+        textBgRect,
+        Radius.circular(4),
+      );
+      
+      canvas.drawRRect(
+        rrect,
+        Paint()
+          ..color = color.withOpacity(0.7)
+          ..style = PaintingStyle.fill,
+      );
+      
+      // Draw text
       textPainter.paint(
         canvas,
-        Offset(position.dx + 10, position.dy - 10),
+        Offset(position.dx + 15, position.dy - 6),
       );
     }
   }
