@@ -230,7 +230,16 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
       return Point(0, 0);
     }
     
-    final containerSize = MediaQuery.of(context).size;
+    // Consider only the area of the screen that actually contains the image
+    final imageContainer = context.findRenderObject() as RenderBox;
+    final containerSize = Size(
+      imageContainer.size.width,
+      imageContainer.size.height - 100, // Account for status bar and buttons
+    );
+    
+    print('Image size: ${_imageSize!.width}x${_imageSize!.height}');
+    print('Container size: ${containerSize.width}x${containerSize.height}');
+    print('Tap position: ${tapPosition.dx}x${tapPosition.dy}');
     
     // Calculate how the image is displayed (accounting for aspect ratio)
     final imageAspect = _imageSize!.width / _imageSize!.height;
@@ -243,76 +252,72 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
       displayWidth = containerSize.width;
       displayHeight = containerSize.width / imageAspect;
       offsetY = (containerSize.height - displayHeight) / 2;
+      print('Letterboxed - offsetY: $offsetY');
     } else {
       // Image is taller than container (pillarboxed)
       displayHeight = containerSize.height;
       displayWidth = containerSize.height * imageAspect;
       offsetX = (containerSize.width - displayWidth) / 2;
+      print('Pillarboxed - offsetX: $offsetX');
     }
     
     // Scale factors
     final scaleX = _imageSize!.width / displayWidth;
     final scaleY = _imageSize!.height / displayHeight;
     
+    print('Display dimensions: ${displayWidth}x${displayHeight}');
+    print('Scale factors: $scaleX x $scaleY');
+    
     // Convert tap position to image coordinates
     final imageX = (tapPosition.dx - offsetX) * scaleX;
     final imageY = (tapPosition.dy - offsetY) * scaleY;
     
+    print('Calculated image point: ${imageX}x${imageY}');
     return Point(imageX, imageY);
   }
   
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('Slab Detection'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.refresh),
-            onPressed: _isLoading ? null : _resetDetection,
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          // Status bar
-          Container(
-            padding: EdgeInsets.all(8),
-            color: _errorMessage.isEmpty ? Colors.blue.shade50 : Colors.red.shade50,
-            width: double.infinity,
-            child: Text(
-              _errorMessage.isEmpty ? _statusMessage : _errorMessage,
-              style: TextStyle(
-                color: _errorMessage.isEmpty ? Colors.blue.shade900 : Colors.red.shade900,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-          
-          // Main content
-          Expanded(
-            child: GestureDetector(
-              onTapDown: _markersDetected && !_contourDetected ? _handleImageTap : null,
-              child: Stack(
-                children: [
-                  // Image display
-                  _buildImageDisplay(),
-                  
-                  // Marker overlay
-                  if (_markersDetected && _flowManager.result.markerResult != null && _imageSize != null)
-                    MarkerOverlay(
+  return Scaffold(
+    appBar: AppBar(
+      title: Text('Slab Detection'),
+      actions: [
+        IconButton(
+          icon: Icon(Icons.refresh),
+          onPressed: _isLoading ? null : _resetDetection,
+        ),
+      ],
+    ),
+    body: Column(
+      children: [
+        // Main content area
+        Expanded(
+          child: GestureDetector(
+            onTapDown: _markersDetected && !_contourDetected ? _handleImageTap : null,
+            child: Stack(
+              fit: StackFit.expand,  // Add this line
+              children: [
+                // Image display
+                _buildImageDisplay(),
+                
+                // Marker overlay - ensure markers are shown at the correct positions
+                if (_markersDetected && _flowManager.result.markerResult != null && _imageSize != null)
+                  Positioned.fill(  // Add Positioned.fill
+                    child: MarkerOverlay(
                       markers: _flowManager.result.markerResult!.markers,
                       imageSize: _imageSize!,
                     ),
-                  
-                  // Contour overlay
-                  if (_contourDetected && _flowManager.result.contourResult != null && _imageSize != null)
-                    ContourOverlay(
+                  ),
+                
+                // Contour overlay
+                if (_contourDetected && _flowManager.result.contourResult != null && _imageSize != null)
+                  Positioned.fill(  // Add Positioned.fill
+                    child: ContourOverlay(
                       contourPoints: _flowManager.result.contourResult!.pixelContour,
                       imageSize: _imageSize!,
                       color: Colors.green,
                     ),
+                  ),
                   
                   // Seed point indicator
                   if (_selectedPoint != null && !_contourDetected)
@@ -353,6 +358,21 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
             ),
           ),
           
+          // Status bar - MOVED TO BOTTOM
+          Container(
+            padding: EdgeInsets.all(8),
+            color: _errorMessage.isEmpty ? Colors.blue.shade50 : Colors.red.shade50,
+            width: double.infinity,
+            child: Text(
+              _errorMessage.isEmpty ? _statusMessage : _errorMessage,
+              style: TextStyle(
+                color: _errorMessage.isEmpty ? Colors.blue.shade900 : Colors.red.shade900,
+                fontWeight: FontWeight.bold,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+          
           // Action buttons
           _buildControlButtons(),
         ],
@@ -362,11 +382,11 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   
   Widget _buildImageDisplay() {
     if (_flowManager.result.originalImage != null) {
-      return Image.file(
-        _flowManager.result.originalImage!,
-        fit: BoxFit.contain,
-        width: double.infinity,
-        height: double.infinity,
+      return Center(
+        child: Image.file(
+          _flowManager.result.originalImage!,
+          fit: BoxFit.contain,
+        ),
       );
     } else {
       return Center(child: Text('Image not available'));

@@ -148,13 +148,13 @@ List<MarkerPoint> _findCornerMarkers(img.Image image, img.Image? debugImage) {
   
   // Define corner regions to search (relative to image size)
   final searchRegions = [
-    // Bottom left (origin)
-    [0.05, 0.75, 0.30, 0.95],
-    // Bottom right (x-axis)
-    [0.70, 0.75, 0.95, 0.95],
-    // Top left (scale/y-axis)
-    [0.05, 0.05, 0.30, 0.25],
-  ];
+  // Bottom left (origin)
+  [0.05, 0.75, 0.30, 0.95],
+  // Bottom right (x-axis)
+  [0.70, 0.75, 0.95, 0.95],
+  // Top left (scale/y-axis)
+  [0.05, 0.05, 0.30, 0.25],
+];
   
   for (int regionIndex = 0; regionIndex < searchRegions.length; regionIndex++) {
     final region = searchRegions[regionIndex];
@@ -215,11 +215,11 @@ MarkerPoint? _findMarkerInRegion(img.Image image, int x1, int y1, int x2, int y2
     // Determine if we should look for dark markers on light background or vice versa
     final lookForDark = avgBrightness > 0.5;
     
-    // Slide a detection window through the region
-    final windowSize = math.min(regionWidth, regionHeight) ~/ 4;
+    // Slide a smaller window through the region to find the distinctive marker
+    final windowSize = math.max(5, math.min(regionWidth, regionHeight) ~/ 6);
     
-    for (int y = y1; y < y2 - windowSize; y += windowSize ~/ 2) {
-      for (int x = x1; x < x2 - windowSize; x += windowSize ~/ 2) {
+    for (int y = y1; y < y2 - windowSize; y += windowSize ~/ 3) {
+      for (int x = x1; x < x2 - windowSize; x += windowSize ~/ 3) {
         int windowPixels = 0;
         double windowSum = 0;
         
@@ -262,8 +262,8 @@ MarkerPoint? _findMarkerInRegion(img.Image image, int x1, int y1, int x2, int y2
       }
     }
     
-    // Require a minimum contrast difference
-    if (bestDifference < 0.2 || bestX < 0 || bestY < 0) {
+    // Require a higher minimum contrast difference to prevent false positives
+    if (bestDifference < 0.25 || bestX < 0 || bestY < 0) {
       return null;
     }
     
@@ -726,85 +726,77 @@ Map<String, double> _calculateBlobProperties(List<int> blob) {
     _floodFill(binaryImage, x, y + 1, visited, blob, depth: depth + 1, maxDepth: maxDepth);
     _floodFill(binaryImage, x, y - 1, visited, blob, depth: depth + 1, maxDepth: maxDepth);
   }
+
+  
   
   /// Identify marker roles based on their relative positions
   List<MarkerPoint> _identifyMarkerRoles(List<MarkerPoint> candidates, int imageWidth, int imageHeight) {
-  if (candidates.length < 3) {
-    return _fallbackMarkerDetection(imageWidth, imageHeight);
-  }
-  
-  try {
-    // Set up positions based on expected layout
-    // Origin: Bottom left
-    // X-Axis: Bottom right
-    // Scale: Top left
+    if (candidates.length < 3) {
+      return _fallbackMarkerDetection(imageWidth, imageHeight);
+    }
     
-    // First, try to identify candidates by their geometric positions
-    if (candidates.length == 3) {
-      // Sort candidates by y coordinate (vertical position)
+    try {
+      // Sort candidates by y coordinate (vertical position) first
       candidates.sort((a, b) => a.y.compareTo(b.y));
       
-      // The top point is likely the scale (Y-axis) marker
-      final scaleMarker = candidates[0];
+      // Find the lowest (highest y) markers - these should be origin and x-axis
+      final bottom = candidates.reversed.take(2).toList();
+      bottom.sort((a, b) => a.x.compareTo(b.x));
       
-      // The bottom two points are origin and X-axis
-      // Sort them by x coordinate
-      final bottomPoints = [candidates[1], candidates[2]];
-      bottomPoints.sort((a, b) => a.x.compareTo(b.x));
+      // Use the leftmost as origin and rightmost as x-axis
+      final originMarker = bottom.first;  // Leftmost of the bottom markers
+      final xAxisMarker = bottom.last;    // Rightmost of the bottom markers
       
-      // Left bottom is origin, right bottom is X-axis
-      final originMarker = bottomPoints[0];
-      final xAxisMarker = bottomPoints[1];
+      // Find the marker that's furthest from both (this should be scale/y-axis)
+      double maxDist = 0;
+      MarkerPoint? scaleMarker;
+      
+      for (final candidate in candidates) {
+        if (candidate == originMarker || candidate == xAxisMarker) continue;
+        
+        final distFromOrigin = math.sqrt(
+          math.pow(candidate.x - originMarker.x, 2) + 
+          math.pow(candidate.y - originMarker.y, 2)
+        );
+        
+        final distFromXAxis = math.sqrt(
+          math.pow(candidate.x - xAxisMarker.x, 2) + 
+          math.pow(candidate.y - xAxisMarker.y, 2)
+        );
+        
+        final combinedDist = distFromOrigin + distFromXAxis;
+        if (combinedDist > maxDist) {
+          maxDist = combinedDist;
+          scaleMarker = candidate;
+        }
+      }
+      
+      if (scaleMarker == null) {
+        // If we couldn't find a scale marker, use the highest remaining marker
+        scaleMarker = candidates.firstWhere(
+          (m) => m != originMarker && m != xAxisMarker,
+          orElse: () => candidates.first  // Fallback if there are only 2 candidates
+        );
+      }
       
       return [
         MarkerPoint(originMarker.x, originMarker.y, MarkerRole.origin, confidence: 0.9),
         MarkerPoint(xAxisMarker.x, xAxisMarker.y, MarkerRole.xAxis, confidence: 0.9),
         MarkerPoint(scaleMarker.x, scaleMarker.y, MarkerRole.scale, confidence: 0.9),
       ];
+    } catch (e) {
+      print('Error identifying marker roles: $e');
     }
     
-    // If we have more than 3 candidates, use a more sophisticated approach
-    
-    // First, sort by y-coordinate (vertical position)
-    candidates.sort((a, b) => a.y.compareTo(b.y));
-    
-    // Take the top third as potential scale markers
-    int topThirdCount = (candidates.length / 3).ceil();
-    final topThird = candidates.sublist(0, math.min(topThirdCount, candidates.length));
-    
-    // Sort the top candidates by x-coordinate
-    topThird.sort((a, b) => a.x.compareTo(b.x));
-    
-    // Take leftmost of the top candidates as scale marker
-    final scaleMarker = topThird.first;
-    
-    // Now take the bottom third as potential origin/x-axis markers
-    final bottomThird = candidates.sublist(candidates.length - topThirdCount);
-    
-    // Sort by x-coordinate
-    bottomThird.sort((a, b) => a.x.compareTo(b.x));
-    
-    // Take leftmost as origin, rightmost as x-axis
-    final originMarker = bottomThird.first;
-    final xAxisMarker = bottomThird.last;
-    
-    return [
-      MarkerPoint(originMarker.x, originMarker.y, MarkerRole.origin, confidence: 0.8),
-      MarkerPoint(xAxisMarker.x, xAxisMarker.y, MarkerRole.xAxis, confidence: 0.8),
-      MarkerPoint(scaleMarker.x, scaleMarker.y, MarkerRole.scale, confidence: 0.8),
-    ];
-  } catch (e) {
-    print('Error identifying marker roles: $e');
+    // Fallback if role assignment fails
+    return _fallbackMarkerDetection(imageWidth, imageHeight);
   }
-  
-  // Fallback if geometric analysis fails
-  return _fallbackMarkerDetection(imageWidth, imageHeight);
-}
 
 /// Fallback detection to ensure we always get some markers
 List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
   print('Using fallback marker detection');
   return [
+    // Use wider spread for reliable placement
     MarkerPoint((width * 0.2).round(), (height * 0.8).round(), MarkerRole.origin, confidence: 0.5),   // Bottom left
     MarkerPoint((width * 0.8).round(), (height * 0.8).round(), MarkerRole.xAxis, confidence: 0.5),    // Bottom right
     MarkerPoint((width * 0.2).round(), (height * 0.2).round(), MarkerRole.scale, confidence: 0.5),    // Top left
@@ -910,9 +902,51 @@ List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
   /// Draw a marker with role label
   void _drawMarker(img.Image image, MarkerPoint marker, img.Color color, String label) {
     try {
-      ImageUtils.drawCross(image, marker.x, marker.y, color, 10);
+      // Draw a larger, more visible circle
       ImageUtils.drawCircle(image, marker.x, marker.y, 15, color, fill: false);
-      ImageUtils.drawText(image, label, marker.x + 20, marker.y, color);
+      
+      // Draw a filled inner circle
+      ImageUtils.drawCircle(image, marker.x, marker.y, 8, color, fill: true);
+      
+      // Add a glow effect with a lighter color
+      final glowColor = img.ColorRgba8(
+        math.min(255, color.r.toInt() + 50),
+        math.min(255, color.g.toInt() + 50),
+        math.min(255, color.b.toInt() + 50),
+        120
+      );
+      ImageUtils.drawCircle(image, marker.x, marker.y, 20, glowColor, fill: false);
+      
+      // Draw crosshair
+      const crosshairSize = 12;
+      ImageUtils.drawLine(
+        image,
+        marker.x - crosshairSize, marker.y,
+        marker.x + crosshairSize, marker.y,
+        color
+      );
+      
+      ImageUtils.drawLine(
+        image,
+        marker.x, marker.y - crosshairSize,
+        marker.x, marker.y + crosshairSize,
+        color
+      );
+      
+      // Draw label with better visibility
+      final labelBg = img.ColorRgba8(0, 0, 0, 180);
+      
+      // Add a background rectangle for the text
+      ImageUtils.drawRectangle(
+        image,
+        marker.x + 5, marker.y - 15,
+        marker.x + 5 + label.length * 8, marker.y + 5,
+        labelBg,
+        fill: true
+      );
+      
+      // Draw the label text with a brighter color for contrast
+      ImageUtils.drawText(image, label, marker.x + 10, marker.y - 10, color);
     } catch (e) {
       print('Error drawing marker: $e');
     }

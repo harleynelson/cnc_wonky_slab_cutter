@@ -22,13 +22,11 @@ class ContourOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        final canvasSize = Size(constraints.maxWidth, constraints.maxHeight);
         return CustomPaint(
-          size: canvasSize,
+          size: Size(constraints.maxWidth, constraints.maxHeight),
           painter: ContourPainter(
             contourPoints: contourPoints,
             imageSize: imageSize,
-            canvasSize: canvasSize,
             color: color,
             strokeWidth: strokeWidth,
             showPoints: showPoints,
@@ -42,7 +40,6 @@ class ContourOverlay extends StatelessWidget {
 class ContourPainter extends CustomPainter {
   final List<Point> contourPoints;
   final Size imageSize;
-  final Size canvasSize;
   final Color color;
   final double strokeWidth;
   final bool showPoints;
@@ -50,7 +47,6 @@ class ContourPainter extends CustomPainter {
   ContourPainter({
     required this.contourPoints,
     required this.imageSize,
-    required this.canvasSize,
     required this.color,
     required this.strokeWidth,
     required this.showPoints,
@@ -60,139 +56,110 @@ class ContourPainter extends CustomPainter {
   void paint(Canvas canvas, Size size) {
     if (contourPoints.isEmpty) return;
 
-    // Calculate how the image is displayed within the canvas
-    final imageAspectRatio = imageSize.width / imageSize.height;
-    final canvasAspectRatio = canvasSize.width / canvasSize.height;
-    
-    double displayWidth, displayHeight;
-    double offsetX = 0, offsetY = 0;
-    
-    if (imageAspectRatio > canvasAspectRatio) {
-      // Image is wider than canvas (letterboxed)
-      displayWidth = canvasSize.width;
-      displayHeight = canvasSize.width / imageAspectRatio;
-      offsetY = (canvasSize.height - displayHeight) / 2;
-    } else {
-      // Image is taller than canvas (pillarboxed)
-      displayHeight = canvasSize.height;
-      displayWidth = canvasSize.height * imageAspectRatio;
-      offsetX = (canvasSize.width - displayWidth) / 2;
-    }
-    
-    // Calculate scale factors
-    final scaleX = displayWidth / imageSize.width;
-    final scaleY = displayHeight / imageSize.height;
-
-    // Create main contour paint
-    final paint = Paint()
+    // Create paints
+    final pathPaint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth
-      ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round;
-
-    // Create glow effect paint
+      ..strokeJoin = StrokeJoin.round;
+    
     final glowPaint = Paint()
       ..color = color.withOpacity(0.3)
       ..style = PaintingStyle.stroke
       ..strokeWidth = strokeWidth + 4
       ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round
-      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 4);
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3);
 
-    // Create the path for the contour
+    // Create path
     final path = Path();
+    bool isFirst = true;
     
-    if (contourPoints.isNotEmpty) {
-      // Scale the first point to canvas coordinates
-      final firstPoint = Offset(
-        contourPoints.first.x * scaleX + offsetX,
-        contourPoints.first.y * scaleY + offsetY,
-      );
+    for (final point in contourPoints) {
+      // Normalize the point to 0-1 range
+      final normalizedX = point.x / imageSize.width;
+      final normalizedY = point.y / imageSize.height;
       
-      path.moveTo(firstPoint.dx, firstPoint.dy);
+      // Convert to canvas coordinates
+      final x = normalizedX * size.width;
+      final y = normalizedY * size.height;
       
-      // Add the rest of the points
-      for (int i = 1; i < contourPoints.length; i++) {
-        final point = Offset(
-          contourPoints[i].x * scaleX + offsetX,
-          contourPoints[i].y * scaleY + offsetY,
-        );
-        path.lineTo(point.dx, point.dy);
-      }
-      
-      // Close the path if needed
-      if (contourPoints.first.x != contourPoints.last.x || 
-          contourPoints.first.y != contourPoints.last.y) {
-        path.close();
+      if (isFirst) {
+        path.moveTo(x, y);
+        isFirst = false;
+      } else {
+        path.lineTo(x, y);
       }
     }
-
-    // Draw the glow effect first
-    canvas.drawPath(path, glowPaint);
     
-    // Then draw the actual contour
-    canvas.drawPath(path, paint);
-
-    // Draw points at each vertex if requested
+    // Close the contour if needed
+    if (contourPoints.length > 2 && 
+        (contourPoints.first.x != contourPoints.last.x || 
+         contourPoints.first.y != contourPoints.last.y)) {
+      path.close();
+    }
+    
+    // Draw the contour with glow effect
+    canvas.drawPath(path, glowPaint);
+    canvas.drawPath(path, pathPaint);
+    
+    // Draw points if requested
     if (showPoints) {
       final pointPaint = Paint()
         ..color = Colors.white
         ..style = PaintingStyle.fill;
       
-      final pointOutlinePaint = Paint()
+      final outlinePaint = Paint()
         ..color = color
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.0;
       
       for (final point in contourPoints) {
-        final canvasPoint = Offset(
-          point.x * scaleX + offsetX,
-          point.y * scaleY + offsetY,
-        );
+        // Normalize and convert coordinates
+        final normalizedX = point.x / imageSize.width;
+        final normalizedY = point.y / imageSize.height;
+        final x = normalizedX * size.width;
+        final y = normalizedY * size.height;
         
-        // Draw white dot with colored outline
-        canvas.drawCircle(canvasPoint, 3.0, pointPaint);
-        canvas.drawCircle(canvasPoint, 3.0, pointOutlinePaint);
+        // Draw point
+        canvas.drawCircle(Offset(x, y), 3, pointPaint);
+        canvas.drawCircle(Offset(x, y), 3, outlinePaint);
       }
     }
     
-    // Calculate and show contour area if it's a closed shape
+    // Calculate and show area
     if (contourPoints.length > 2) {
-      double area = 0.0;
-      for (int i = 0; i < contourPoints.length - 1; i++) {
-        area += contourPoints[i].x * contourPoints[i + 1].y;
-        area -= contourPoints[i + 1].x * contourPoints[i].y;
+      // Calculate center point of contour for label placement
+      double sumX = 0, sumY = 0;
+      
+      for (final point in contourPoints) {
+        sumX += point.x;
+        sumY += point.y;
       }
-      // Close the polygon
-      area += contourPoints.last.x * contourPoints.first.y;
-      area -= contourPoints.first.x * contourPoints.last.y;
+      
+      // Get center in normalized coordinates
+      final centerX = (sumX / contourPoints.length) / imageSize.width * size.width;
+      final centerY = (sumY / contourPoints.length) / imageSize.height * size.height;
+      
+      // Calculate area (in sq mm if converting from image to world coordinates)
+      double area = 0;
+      
+      for (int i = 0; i < contourPoints.length; i++) {
+        final j = (i + 1) % contourPoints.length;
+        area += contourPoints[i].x * contourPoints[j].y;
+        area -= contourPoints[j].x * contourPoints[i].y;
+      }
+      
       area = area.abs() / 2;
       
-      // Calculate center of contour for text placement
-      double centerX = 0, centerY = 0;
-      for (final point in contourPoints) {
-        centerX += point.x;
-        centerY += point.y;
-      }
-      centerX /= contourPoints.length;
-      centerY /= contourPoints.length;
-      
-      // Convert to canvas coordinates
-      final centerPoint = Offset(
-        centerX * scaleX + offsetX,
-        centerY * scaleY + offsetY,
-      );
-      
-      // Format area text based on size
+      // Format area text
       String areaText;
       if (area < 10000) {
-        areaText = "${area.toStringAsFixed(1)} px²";
+        areaText = "${area.toStringAsFixed(1)} sq units";
       } else {
-        areaText = "${(area / 1000).toStringAsFixed(1)}k px²";
+        areaText = "${(area / 1000).toStringAsFixed(1)}k sq units";
       }
       
-      // Draw area text with background for better visibility
+      // Draw area label
       final textSpan = TextSpan(
         text: areaText,
         style: TextStyle(
@@ -210,41 +177,33 @@ class ContourPainter extends CustomPainter {
       
       textPainter.layout();
       
-      // Draw text background
-      final textBgRect = Rect.fromCenter(
-        center: centerPoint,
+      // Draw background
+      final bgRect = Rect.fromCenter(
+        center: Offset(centerX, centerY),
         width: textPainter.width + 16,
         height: textPainter.height + 8,
       );
       
-      final rrect = RRect.fromRectAndRadius(
-        textBgRect,
-        Radius.circular(4),
-      );
-      
-      canvas.drawRRect(
-        rrect,
-        Paint()
-          ..color = color.withOpacity(0.7)
-          ..style = PaintingStyle.fill,
+      canvas.drawRect(
+        bgRect, 
+        Paint()..color = color.withOpacity(0.7)
       );
       
       // Draw text
       textPainter.paint(
         canvas,
         Offset(
-          centerPoint.dx - textPainter.width / 2,
-          centerPoint.dy - textPainter.height / 2,
+          centerX - textPainter.width / 2,
+          centerY - textPainter.height / 2,
         ),
       );
     }
   }
 
   @override
-  bool shouldRepaint(covariant ContourPainter oldDelegate) {
+  bool shouldRepaint(ContourPainter oldDelegate) {
     return contourPoints != oldDelegate.contourPoints ||
            imageSize != oldDelegate.imageSize ||
-           canvasSize != oldDelegate.canvasSize ||
            color != oldDelegate.color ||
            strokeWidth != oldDelegate.strokeWidth ||
            showPoints != oldDelegate.showPoints;
