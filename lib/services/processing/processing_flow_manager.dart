@@ -171,12 +171,12 @@ class ProcessingFlowManager with ChangeNotifier {
         generateDebugImage: true,
       );
       
-      // Process image to detect markers
+      // Process image to detect markers - this should not modify the original image
       final markerResult = await markerDetector.detectMarkers(image);
       
-      // Update result
+      // Update result but keep original image intact
       _result = _result.copyWith(
-        processedImage: image,
+        processedImage: image, // Keep original image without markers drawn on it
         markerResult: markerResult,
       );
       
@@ -261,6 +261,13 @@ class ProcessingFlowManager with ChangeNotifier {
     _setErrorState('Automatic slab detection failed: ${e.toString()}');
   }
 }
+
+  void clearDebugImages() {
+    _result = _result.copyWith(
+      processedImage: null,
+    );
+    notifyListeners();
+  }
   
   /// Process slab contour detection
   Future<void> detectSlabContour() async {
@@ -358,29 +365,30 @@ class ProcessingFlowManager with ChangeNotifier {
   
   /// Move to the next step in the processing flow
   Future<void> proceedToNextStep() async {
-    if (!_result.canProceedToNextStep) {
-      return;
-    }
-    
-    switch (_result.state) {
-      case ProcessingState.notStarted:
-        await detectMarkers();
-        break;
-      case ProcessingState.markerDetection:
-        await detectSlabContour();
-        break;
-      case ProcessingState.slabDetection:
-        await generateGcode();
-        break;
-      case ProcessingState.gcodeGeneration:
-        _updateState(ProcessingState.completed);
-        break;
-      case ProcessingState.completed:
-      case ProcessingState.error:
-        // No next step
-        break;
-    }
+  if (!_result.canProceedToNextStep) {
+    return;
   }
+  
+  switch (_result.state) {
+    case ProcessingState.notStarted:
+      await detectMarkers();
+      break;
+    case ProcessingState.markerDetection:
+      // Skip ahead to interactive contour detection
+      _updateState(ProcessingState.slabDetection);
+      break;
+    case ProcessingState.slabDetection:
+      await generateGcode();
+      break;
+    case ProcessingState.gcodeGeneration:
+      _updateState(ProcessingState.completed);
+      break;
+    case ProcessingState.completed:
+    case ProcessingState.error:
+      // No next step
+      break;
+  }
+}
   
   /// Update the processing state
   void _updateState(ProcessingState newState) {

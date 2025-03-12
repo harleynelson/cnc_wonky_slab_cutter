@@ -11,6 +11,7 @@ import '../services/processing/processing_flow_manager.dart';
 import '../models/settings_model.dart';
 import '../utils/general/constants.dart';
 import '../utils/general/file_utils.dart';
+import '../widgets/marker_overlay.dart';
 import 'interactive_contour_screen.dart';
 
 class ProcessingScreen extends StatefulWidget {
@@ -283,40 +284,67 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
   }
 
   Widget _buildMarkerDetectionView(ProcessingFlowManager flowManager) {
-    final markerResult = flowManager.result.markerResult;
-    
-    return Center(
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Expanded(
-              child: markerResult?.debugImage != null
-                  ? _buildImageFromImgImage(markerResult!.debugImage!)
-                  : (flowManager.result.originalImage != null
-                      ? Image.file(
-                          flowManager.result.originalImage!,
-                          fit: BoxFit.contain,
-                        )
-                      : Placeholder()),
+  final markerResult = flowManager.result.markerResult;
+  
+  return Center(
+    child: Padding(
+      padding: const EdgeInsets.all(16.0),
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          Expanded(
+            child: flowManager.result.originalImage != null
+                ? Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      // Original image
+                      Image.file(
+                        flowManager.result.originalImage!,
+                        fit: BoxFit.contain,
+                      ),
+                      
+                      // Marker overlay
+                      if (markerResult != null && markerResult.markers.isNotEmpty)
+                        FutureBuilder<Size>(
+                          future: _getImageDimensions(flowManager.result.originalImage!),
+                          builder: (context, snapshot) {
+                            if (!snapshot.hasData) {
+                              return SizedBox.shrink();
+                            }
+                            
+                            return MarkerOverlay(
+                              markers: markerResult.markers,
+                              imageSize: snapshot.data!,
+                            );
+                          },
+                        ),
+                    ],
+                  )
+                : Placeholder(),
+          ),
+          SizedBox(height: 10),
+          if (markerResult != null)
+            Text(
+              'Marker detection complete',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
+            )
+          else
+            Text(
+              'Detecting markers...',
+              style: TextStyle(fontSize: 16),
             ),
-            SizedBox(height: 10),
-            if (markerResult != null)
-              Text(
-                'Marker detection complete',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.green),
-              )
-            else
-              Text(
-                'Detecting markers...',
-                style: TextStyle(fontSize: 16),
-              ),
-          ],
-        ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
+
+// Helper method to get image dimensions
+Future<Size> _getImageDimensions(File imageFile) async {
+  final bytes = await imageFile.readAsBytes();
+  final image = await decodeImageFromList(bytes);
+  return Size(image.width.toDouble(), image.height.toDouble());
+}
 
   Widget _buildSlabDetectionView(ProcessingFlowManager flowManager) {
     final contourResult = flowManager.result.contourResult;
@@ -539,16 +567,23 @@ class _ProcessingScreenState extends State<ProcessingScreen> {
   }
 
   Future<void> _proceedToNextStep(ProcessingFlowManager flowManager) async {
-    setState(() {
-      _isLoading = true;
-    });
+  setState(() {
+    _isLoading = true;
+  });
 
+  if (flowManager.state == ProcessingState.markerDetection && 
+      flowManager.result.markerResult != null) {
+    // Go directly to interactive contour detection
+    await _openSlabDetectionScreen(flowManager);
+  } else {
+    // Normal flow for other steps
     await flowManager.proceedToNextStep();
-
-    setState(() {
-      _isLoading = false;
-    });
   }
+
+  setState(() {
+    _isLoading = false;
+  });
+}
 
   Future<void> _saveGcode(ProcessingFlowManager flowManager) async {
     if (flowManager.result.gcodeFile == null) {
