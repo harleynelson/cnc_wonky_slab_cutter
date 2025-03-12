@@ -312,7 +312,7 @@ class DefaultContourAlgorithm implements ContourDetectionAlgorithm {
     
     return resultMask;
   }
-  
+
   /// Visualize advanced processing steps for debugging
   void _visualizeAdvancedProcessingSteps(
     img.Image debugImage,
