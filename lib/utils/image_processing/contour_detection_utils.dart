@@ -17,21 +17,22 @@ class ContourDetectionUtils {
   
   print('DEBUG: Finding contour for mask of size ${width}x${height}');
 
-  // SIMPLE APPROACH: Trace the boundary
-  // Find a starting point on the boundary
-  Point? start;
+  // Define parameters for gap handling
+  final maxGapToFill = 15; // Maximum gap size to attempt to fill
   
-  // Step 1: Scan for a boundary pixel (a true pixel next to a false pixel)
+  // First find the boundary points - points where true meets false
+  final boundaryPoints = <Point>[];
+  
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < width; x++) {
       if (mask[y][x]) {
         // Check if this is a boundary pixel (has at least one false neighbor)
         bool isBoundary = false;
         
-        // Check 4-connected neighbors
+        // Check 8-connected neighbors
         for (int dy = -1; dy <= 1; dy++) {
           for (int dx = -1; dx <= 1; dx++) {
-            if (dx.abs() + dy.abs() != 1) continue; // Skip diagonal and center
+            if (dx == 0 && dy == 0) continue; // Skip self
             
             final nx = x + dx;
             final ny = y + dy;
@@ -45,110 +46,96 @@ class ContourDetectionUtils {
         }
         
         if (isBoundary) {
-          start = Point(x.toDouble(), y.toDouble());
-          break;
+          boundaryPoints.add(Point(x.toDouble(), y.toDouble()));
         }
       }
     }
-    if (start != null) break;
   }
   
-  // If no boundary found, use a simple box
-  if (start == null) {
-    print('DEBUG: No boundary found, using box');
+  if (boundaryPoints.isEmpty) {
+    print('DEBUG: No boundary points found, using fallback');
+    return _createFallbackContour(width, height);
+  }
+  
+  // Find the center of the shape
+  double sumX = 0, sumY = 0;
+  for (final point in boundaryPoints) {
+    sumX += point.x;
+    sumY += point.y;
+  }
+  final centerX = sumX / boundaryPoints.length;
+  final centerY = sumY / boundaryPoints.length;
+  final center = Point(centerX, centerY);
+  
+  // Sort boundary points by angle from center
+  boundaryPoints.sort((a, b) {
+    final angleA = math.atan2(a.y - centerY, a.x - centerX);
+    final angleB = math.atan2(b.y - centerY, b.x - centerX);
+    return angleA.compareTo(angleB);
+  });
+  
+  // Process boundary points, filling gaps
+  contourPoints.add(boundaryPoints.first);
+  for (int i = 1; i < boundaryPoints.length; i++) {
+    final prev = contourPoints.last;
+    final current = boundaryPoints[i];
     
-    // Find the bounding box of the mask
-    int minX = width, minY = height, maxX = 0, maxY = 0;
-    for (int y = 0; y < height; y++) {
-      for (int x = 0; x < width; x++) {
-        if (mask[y][x]) {
-          minX = math.min(minX, x);
-          minY = math.min(minY, y);
-          maxX = math.max(maxX, x);
-          maxY = math.max(maxY, y);
-        }
+    // Check if there's a gap
+    final distance = _distance(prev, current);
+    
+    if (distance > maxGapToFill) {
+      // Large gap - skip this point
+      continue;
+    } else if (distance > 2.0) {
+      // Small gap - add intermediate points
+      final steps = distance.ceil();
+      for (int j = 1; j < steps; j++) {
+        final t = j / steps;
+        final interpX = prev.x + (current.x - prev.x) * t;
+        final interpY = prev.y + (current.y - prev.y) * t;
+        contourPoints.add(Point(interpX, interpY));
       }
     }
     
-    // Create a box contour
-    final boundarySize = 20;
-    for (int x = minX - boundarySize; x <= maxX + boundarySize; x += 5) {
-      contourPoints.add(Point(x.toDouble(), (minY - boundarySize).toDouble()));
-    }
-    for (int y = minY - boundarySize; y <= maxY + boundarySize; y += 5) {
-      contourPoints.add(Point((maxX + boundarySize).toDouble(), y.toDouble()));
-    }
-    for (int x = maxX + boundarySize; x >= minX - boundarySize; x -= 5) {
-      contourPoints.add(Point(x.toDouble(), (maxY + boundarySize).toDouble()));
-    }
-    for (int y = maxY + boundarySize; y >= minY - boundarySize; y -= 5) {
-      contourPoints.add(Point((minX - boundarySize).toDouble(), y.toDouble()));
-    }
-    // Close the contour
-    contourPoints.add(contourPoints.first);
-    
-    print('DEBUG: Created box contour with ${contourPoints.length} points');
-    return contourPoints;
-  }
-  
-  print('DEBUG: Starting boundary tracing from (${start.x}, ${start.y})');
-  
-  // Trace the boundary using Moore's algorithm
-  final visited = Set<String>();
-  Point current = start;
-  
-  // Direction vectors for 8-connected neighbors
-  final dx = [1, 1, 0, -1, -1, -1, 0, 1];
-  final dy = [0, 1, 1, 1, 0, -1, -1, -1];
-  
-  int dir = 7; // Start direction (NE)
-  
-  do {
     contourPoints.add(current);
-    final key = "${current.x},${current.y}";
-    visited.add(key);
-    
-    bool found = false;
-    for (int i = 0; i < 8; i++) {
-      final nextDir = (dir + i) % 8;
-      final nx = current.x + dx[nextDir];
-      final ny = current.y + dy[nextDir];
-      
-      if (nx >= 0 && nx < width && ny >= 0 && ny < height && mask[ny.round()][nx.round()]) {
-        current = Point(nx, ny);
-        // Backtrack direction
-        dir = (nextDir + 5) % 8;
-        found = true;
-        break;
-      }
-    }
-    
-    if (!found || contourPoints.length > width * height) {
-      // Safety check to prevent infinite loop
-      break;
-    }
-    
-    // Stop when we return to start point and have at least 3 points
-  } while ((current.x != start.x || current.y != start.y || contourPoints.length < 3) && 
-           contourPoints.length < 5000); // Limit to 5000 points
+  }
   
-  // Sample points if we have too many
-  if (contourPoints.length > 500) {
-    final sampledPoints = <Point>[];
-    final step = contourPoints.length ~/ 500;
-    for (int i = 0; i < contourPoints.length; i += step) {
-      sampledPoints.add(contourPoints[i]);
+  // Close the contour
+  if (contourPoints.length > 2) {
+    final first = contourPoints.first;
+    final last = contourPoints.last;
+    
+    if (first.x != last.x || first.y != last.y) {
+      contourPoints.add(first);
     }
-    contourPoints = sampledPoints;
   }
   
   print('DEBUG: Found ${contourPoints.length} contour points');
-  if (contourPoints.isNotEmpty) {
-    print('DEBUG: First point: (${contourPoints[0].x}, ${contourPoints[0].y})');
-    print('DEBUG: Last point: (${contourPoints[contourPoints.length-1].x}, ${contourPoints[contourPoints.length-1].y})');
+  return contourPoints;
+}
+
+// Helper to calculate distance between points
+static double _distance(Point a, Point b) {
+  final dx = a.x - b.x;
+  final dy = a.y - b.y;
+  return math.sqrt(dx * dx + dy * dy);
+}
+
+// Create fallback contour
+static List<Point> _createFallbackContour(int width, int height) {
+  final contour = <Point>[];
+  final centerX = width / 2;
+  final centerY = height / 2;
+  final radius = math.min(width, height) * 0.3;
+  
+  for (int i = 0; i <= 36; i++) {
+    final angle = i * math.pi / 18; // 10 degrees in radians
+    final x = centerX + radius * math.cos(angle);
+    final y = centerY + radius * math.sin(angle);
+    contour.add(Point(x, y));
   }
   
-  return contourPoints;
+  return contour;
 }
 
   /// Apply morphological closing (dilation followed by erosion)
@@ -168,6 +155,121 @@ class ContourDetectionUtils {
     // Then apply dilation
     return applyDilation(eroded, kernelSize);
   }
+
+  /// Find contour using ray casting from a seed point
+static List<Point> findContourByRayCasting(
+  img.Image binaryImage, 
+  int seedX, 
+  int seedY,
+  {int minSlabSize = 1000, int gapAllowedMin = 5, int gapAllowedMax = 20}
+) {
+  final width = binaryImage.width;
+  final height = binaryImage.height;
+  final contourPoints = <Point>[];
+  final visited = Set<String>();
+  
+  // Cast rays in all directions (every 5 degrees)
+  for (int angle = 0; angle < 360; angle += 5) {
+    final radians = angle * math.pi / 180;
+    final dirX = math.cos(radians);
+    final dirY = math.sin(radians);
+    
+    // Start from seed point
+    double x = seedX.toDouble();
+    double y = seedY.toDouble();
+    
+    // Tracks if we're in a gap
+    int gapSize = 0;
+    bool foundEdge = false;
+    Point? lastEdgePoint;
+    
+    // Cast ray until we hit the image boundary
+    while (x >= 0 && x < width && y >= 0 && y < height) {
+      final px = x.round();
+      final py = y.round();
+      final key = "$px,$py";
+      
+      // Skip if we've already visited this pixel
+      if (!visited.contains(key)) {
+        visited.add(key);
+        
+        // Check if this is an edge pixel (white/bright in binary image)
+        final pixel = binaryImage.getPixel(px, py);
+        final luminance = BaseImageUtils.calculateLuminance(
+          pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+        );
+        final isEdge = luminance > 128;
+        
+        if (isEdge) {
+          // We found an edge pixel
+          lastEdgePoint = Point(x, y);
+          gapSize = 0;
+          foundEdge = true;
+          
+          // Add the edge point to our contour
+          if (!contourPoints.contains(lastEdgePoint)) {
+            contourPoints.add(lastEdgePoint);
+          }
+        } else if (foundEdge) {
+          // We're in a gap after finding an edge
+          gapSize++;
+          
+          // If gap is too large, we've reached the end of this contour
+          if (gapSize > gapAllowedMax) {
+            break;
+          }
+        }
+      }
+      
+      // Move along the ray
+      x += dirX;
+      y += dirY;
+    }
+  }
+  
+  // Post-process contour points
+  if (contourPoints.length < 10) {
+    return createFallbackContour(width, height, seedX, seedY);
+  }
+  
+  // Sort contour points by their angle from the center for a consistent order
+  sortPointsByAngle(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
+  
+  return contourPoints;
+}
+
+/// Create a fallback contour around a seed point
+static List<Point> createFallbackContour(
+  int width, 
+  int height, 
+  [int? seedX, int? seedY]  // Optional parameters with default values
+) {
+  // Use center of image if no seed point provided
+  final centerX = seedX ?? (width / 2).round();
+  final centerY = seedY ?? (height / 2).round();
+  
+  final contour = <Point>[];
+  final radius = math.min(width, height) * 0.3;
+  
+  // Create a circular contour around the seed point
+  for (int angle = 0; angle < 360; angle += 10) {
+    final radians = angle * math.pi / 180;
+    final x = centerX + radius * math.cos(radians);
+    final y = centerY + radius * math.sin(radians);
+    contour.add(Point(x, y));
+  }
+  
+  return contour;
+}
+
+/// Sort points by angle around center
+static void sortPointsByAngle(List<Point> points, Point center) {
+  points.sort((a, b) {
+    final angleA = math.atan2(a.y - center.y, a.x - center.x);
+    final angleB = math.atan2(b.y - center.y, b.x - center.x);
+    return angleA.compareTo(angleB);
+  });
+}
 
   /// Apply morphological dilation to a binary mask
   static List<List<bool>> applyDilation(List<List<bool>> mask, int kernelSize) {
@@ -411,30 +513,6 @@ static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, doubl
   
   return result;
 }
-
-  /// Create a fallback contour shape for cases where detection fails
-  static List<Point> createFallbackContour(int width, int height) {
-    final centerX = width * 0.5;
-    final centerY = height * 0.5;
-    final radius = math.min(width, height) * 0.3;
-    
-    final numPoints = 20;
-    final contour = <Point>[];
-    
-    for (int i = 0; i < numPoints; i++) {
-      final angle = i * 2 * math.pi / numPoints;
-      // Add some randomness to make it look like a natural slab
-      final r = radius * (0.8 + 0.2 * math.sin(i * 3));
-      final x = centerX + r * math.cos(angle);
-      final y = centerY + r * math.sin(angle);
-      contour.add(Point(x, y));
-    }
-    
-    // Close the contour
-    contour.add(contour.first);
-    
-    return contour;
-  }
   
   /// Find connected components in a binary image
   static List<List<Point>> findConnectedComponents(img.Image binaryImage, {

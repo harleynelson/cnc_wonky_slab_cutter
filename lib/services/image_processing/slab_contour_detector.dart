@@ -247,24 +247,39 @@ class SlabContourDetector {
   
   /// Create a fallback result when detection fails
   SlabContourResult _createFallbackResult(
-    img.Image image, 
-    MachineCoordinateSystem coordSystem,
-    img.Image? debugImage
-  ) {
-    final pixelContour = ContourDetectionUtils.createFallbackContour(image.width, image.height);
-    final machineContour = coordSystem.convertPointListToMachineCoords(pixelContour);
-    
-    // Draw fallback contour on debug image
-    if (debugImage != null) {
-      _visualizeContourOnDebug(debugImage, pixelContour, img.ColorRgba8(255, 0, 0, 255), "FALLBACK");
-    }
-    
-    return SlabContourResult(
-      pixelContour: pixelContour,
-      machineContour: machineContour,
-      debugImage: debugImage,
+  img.Image image,
+  MachineCoordinateSystem coordSystem,
+  img.Image? debugImage
+) {
+  // Use the center of the image as the seed point
+  final seedX = image.width ~/ 2;
+  final seedY = image.height ~/ 2;
+  
+  final pixelContour = ContourDetectionUtils.createFallbackContour(
+    image.width, 
+    image.height,
+    seedX,
+    seedY
+  );
+  final machineContour = coordSystem.convertPointListToMachineCoords(pixelContour);
+ 
+  // Draw fallback contour on debug image
+  if (debugImage != null) {
+    DrawingUtils.visualizeContourWithInfo(
+      debugImage, 
+      pixelContour, 
+      seedX, 
+      seedY,
+      "FALLBACK"
     );
   }
+ 
+  return SlabContourResult(
+    pixelContour: pixelContour,
+    machineContour: machineContour,
+    debugImage: debugImage,
+  );
+}
   
   /// Visualize contour on debug image
   void _visualizeContourOnDebug(img.Image debugImage, List<Point> contour, img.Color color, String label) {

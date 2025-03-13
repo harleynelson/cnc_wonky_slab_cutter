@@ -437,6 +437,41 @@ class DrawingUtils {
       _drawCornerArc(image, left + radius, bottom - radius, radius, 90, 180, color); // Bottom-left
     }
   }
+
+  /// Visualize contour with seed point and algorithm info on debug image
+static void visualizeContourWithInfo(
+  img.Image debugImage, 
+  List<Point> contour, 
+  int seedX, 
+  int seedY,
+  String algorithmName
+) {
+  // Draw the detected contour
+  drawContour(
+    debugImage, 
+    contour, 
+    img.ColorRgba8(0, 255, 0, 255), 
+    thickness: 3
+  );
+  
+  // Draw seed point
+  drawCircle(
+    debugImage, 
+    seedX, 
+    seedY, 
+    8, 
+    img.ColorRgba8(255, 255, 0, 255)
+  );
+  
+  // Add algorithm name and info
+  drawText(
+    debugImage, 
+    "Algorithm: $algorithmName", 
+    10, 
+    10, 
+    img.ColorRgba8(255, 255, 255, 255)
+  );
+}
   
   /// Helper to draw a corner arc
   static void _drawCornerArc(
