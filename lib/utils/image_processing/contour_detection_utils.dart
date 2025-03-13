@@ -157,6 +157,7 @@ static List<Point> _createFallbackContour(int width, int height) {
   }
 
   /// Find contour using ray casting from a seed point
+
 static List<Point> findContourByRayCasting(
   img.Image binaryImage, 
   int seedX, 
@@ -193,6 +194,9 @@ static List<Point> findContourByRayCasting(
     double lastEdgeDistance = 0;
     double currentDistance = 0;
     
+    // Track all edge points found along this ray
+    List<Point> edgePointsOnRay = [];
+    
     // Cast ray until we hit the image boundary
     while (x >= 0 && x < width && y >= 0 && y < height) {
       final px = x.round();
@@ -219,22 +223,20 @@ static List<Point> findContourByRayCasting(
           // We found an edge pixel
           lastEdgePoint = Point(x, y);
           lastEdgeDistance = currentDistance;
+          edgePointsOnRay.add(lastEdgePoint);
           gapSize = 0;
           foundEdge = true;
-          
-          // Keep track of the farthest edge point at this angle
-          if (!farthestEdgePoints.containsKey(angle) || 
-              lastEdgeDistance > _distanceFromSeed(farthestEdgePoints[angle]!, seedX, seedY)) {
-            farthestEdgePoints[angle] = lastEdgePoint;
-          }
         } else if (foundEdge) {
           // We're in a gap after finding an edge
           gapSize++;
           
-          // If gap is too large, we've reached the end of this contour
-          if (gapSize > gapAllowedMax && 
-              currentDistance > lastEdgeDistance + continueSearchDistance) {
-            break;
+          // If gap is too large, check if we should continue searching
+          if (gapSize > gapAllowedMax) {
+            // Don't immediately stop - continue for continueSearchDistance 
+            // to see if there are more edges further out
+            if (currentDistance > lastEdgeDistance + continueSearchDistance) {
+              break;
+            }
           }
         }
       }
@@ -243,13 +245,40 @@ static List<Point> findContourByRayCasting(
       x += dirX;
       y += dirY;
     }
+    
+    // Process the edge points found on this ray
+    if (edgePointsOnRay.isNotEmpty) {
+      // Find the farthest valid edge point
+      Point farthestPoint = edgePointsOnRay.first;
+      double maxDistance = _distanceFromSeed(farthestPoint, seedX, seedY);
+      
+      for (int i = 1; i < edgePointsOnRay.length; i++) {
+        final point = edgePointsOnRay[i];
+        final distance = _distanceFromSeed(point, seedX, seedY);
+        
+        // Check if this point is within a valid distance from the previous farthest
+        final prevDistance = _distanceFromSeed(farthestPoint, seedX, seedY);
+        
+        // If this point is significantly farther (more than continueSearchDistance), 
+        // it might be an outer edge we want to consider
+        if (distance > prevDistance && 
+            (distance - prevDistance < continueSearchDistance * 2 || // Normal progression
+             i == edgePointsOnRay.length - 1)) { // Or last point on ray
+          farthestPoint = point;
+          maxDistance = distance;
+        }
+      }
+      
+      // Store the farthest edge point for this angle
+      farthestEdgePoints[angle] = farthestPoint;
+    }
   }
   
   // Use the farthest edge points to form the contour
   contourPoints = farthestEdgePoints.values.toList();
   
   // Post-process contour points
-  if (contourPoints.length < 10 || _calculateArea(contourPoints) < minSlabSize) {
+  if (contourPoints.length < 40 || _calculateArea(contourPoints) < minSlabSize) {
     return createFallbackContour(width, height, seedX, seedY);
   }
   

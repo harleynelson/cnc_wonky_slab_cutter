@@ -1,5 +1,20 @@
-Fix x,y, origin dots displayed wrong on interactive screen
-update algorithm for detection
-clean up flow with slab detection
+
 generate gcode
 crashes when minimized
+
+Appears to recognize an inner edge sometimes and conclude our search for edges that might be just a little further outward.  
+    Should we build in some mechanism that when the algorithm thinks it's done...
+        essentially samples a little further out from a random position along the edge
+        checks if it's an edge and not a random piece of artifact?  
+        And then samples a little further out from a random point along the edge.  
+        Until it no longer finds edges to combine to our original slab outline?  
+        We can repurpose our 'continueSearchDistance' variable so we don't have to make another.
+
+Our post processing of contour points should probably be a parameter we should save/edit:
+    contour_detection_utils.dart:
+        // Post-process contour points
+        // Higher the number, more circle'ee... ie 10 = blocky, 100 = smooth as a baby's bottom
+            if (contourPoints.length < 40 || _calculateArea(contourPoints) < minSlabSize) {
+                return createFallbackContour(width, height, seedX, seedY);
+            }
+    
