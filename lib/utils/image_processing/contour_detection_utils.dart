@@ -11,105 +11,145 @@ import 'base_image_utils.dart';
 class ContourDetectionUtils {
   /// Find the outer contour of a binary mask using boundary tracing
   static List<Point> findOuterContour(List<List<bool>> mask) {
-    final contourPoints = <Point>[];
-    final height = mask.length;
-    final width = mask[0].length;
-    
-    // Find a starting point (first true pixel)
-    int startX = -1, startY = -1;
-    
-    // Start search from the center and spiral outward
-    final centerX = width ~/ 2;
-    final centerY = height ~/ 2;
-    
-    // First try to find a starting point near the center
-    for (int radius = 0; radius < math.max(width, height) / 2; radius++) {
-      // Check in spiral pattern
-      for (int y = centerY - radius; y <= centerY + radius; y++) {
-        for (int x = centerX - radius; x <= centerX + radius; x++) {
-          // Only check perimeter of spiral
-          if ((y == centerY - radius || y == centerY + radius) ||
-              (x == centerX - radius || x == centerX + radius)) {
-            if (x >= 0 && x < width && y >= 0 && y < height && mask[y][x]) {
-              startX = x;
-              startY = y;
+  var contourPoints = <Point>[];
+  final height = mask.length;
+  final width = mask[0].length;
+  
+  print('DEBUG: Finding contour for mask of size ${width}x${height}');
+
+  // SIMPLE APPROACH: Trace the boundary
+  // Find a starting point on the boundary
+  Point? start;
+  
+  // Step 1: Scan for a boundary pixel (a true pixel next to a false pixel)
+  for (int y = 0; y < height; y++) {
+    for (int x = 0; x < width; x++) {
+      if (mask[y][x]) {
+        // Check if this is a boundary pixel (has at least one false neighbor)
+        bool isBoundary = false;
+        
+        // Check 4-connected neighbors
+        for (int dy = -1; dy <= 1; dy++) {
+          for (int dx = -1; dx <= 1; dx++) {
+            if (dx.abs() + dy.abs() != 1) continue; // Skip diagonal and center
+            
+            final nx = x + dx;
+            final ny = y + dy;
+            
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height || !mask[ny][nx]) {
+              isBoundary = true;
               break;
             }
           }
+          if (isBoundary) break;
         }
-        if (startX != -1) break;
-      }
-      if (startX != -1) break;
-    }
-    
-    // If no starting point was found, try scanning entire image
-    if (startX == -1) {
-      for (int y = 0; y < height; y++) {
-        for (int x = 0; x < width; x++) {
-          if (mask[y][x]) {
-            startX = x;
-            startY = y;
-            break;
-          }
-        }
-        if (startX != -1) break;
-      }
-    }
-    
-    // No contour found
-    if (startX == -1 || startY == -1) {
-      return contourPoints;
-    }
-    
-    // Moore boundary tracing algorithm
-    // Direction codes: 0=E, 1=SE, 2=S, 3=SW, 4=W, 5=NW, 6=N, 7=NE
-    final dx = [1, 1, 0, -1, -1, -1, 0, 1];
-    final dy = [0, 1, 1, 1, 0, -1, -1, -1];
-    
-    int x = startX;
-    int y = startY;
-    int dir = 7;  // Start looking in the NE direction
-    
-    final visited = <String>{};
-    const maxSteps = 10000;  // Safety limit
-    int steps = 0;
-    
-    do {
-      // Add current point to contour
-      contourPoints.add(Point(x.toDouble(), y.toDouble()));
-      
-      // Mark as visited
-      final key = "$x,$y";
-      visited.add(key);
-      
-      // Look for next boundary pixel
-      bool found = false;
-      for (int i = 0; i < 8 && !found; i++) {
-        // Check in a counter-clockwise direction starting from dir
-        int checkDir = (dir + i) % 8;
-        int nx = x + dx[checkDir];
-        int ny = y + dy[checkDir];
         
-        if (nx < 0 || nx >= width || ny < 0 || ny >= height) continue;
-        
-        // If this is an object pixel (true in mask)
-        if (mask[ny][nx]) {
-          x = nx;
-          y = ny;
-          dir = (checkDir + 5) % 8;  // Backtrack direction
-          found = true;
+        if (isBoundary) {
+          start = Point(x.toDouble(), y.toDouble());
+          break;
         }
       }
-      
-      if (!found) break;
-      
-      steps++;
-      if (steps >= maxSteps) break;  // Safety check
-      
-    } while (!(x == startX && y == startY) || contourPoints.length <= 1);
+    }
+    if (start != null) break;
+  }
+  
+  // If no boundary found, use a simple box
+  if (start == null) {
+    print('DEBUG: No boundary found, using box');
     
+    // Find the bounding box of the mask
+    int minX = width, minY = height, maxX = 0, maxY = 0;
+    for (int y = 0; y < height; y++) {
+      for (int x = 0; x < width; x++) {
+        if (mask[y][x]) {
+          minX = math.min(minX, x);
+          minY = math.min(minY, y);
+          maxX = math.max(maxX, x);
+          maxY = math.max(maxY, y);
+        }
+      }
+    }
+    
+    // Create a box contour
+    final boundarySize = 20;
+    for (int x = minX - boundarySize; x <= maxX + boundarySize; x += 5) {
+      contourPoints.add(Point(x.toDouble(), (minY - boundarySize).toDouble()));
+    }
+    for (int y = minY - boundarySize; y <= maxY + boundarySize; y += 5) {
+      contourPoints.add(Point((maxX + boundarySize).toDouble(), y.toDouble()));
+    }
+    for (int x = maxX + boundarySize; x >= minX - boundarySize; x -= 5) {
+      contourPoints.add(Point(x.toDouble(), (maxY + boundarySize).toDouble()));
+    }
+    for (int y = maxY + boundarySize; y >= minY - boundarySize; y -= 5) {
+      contourPoints.add(Point((minX - boundarySize).toDouble(), y.toDouble()));
+    }
+    // Close the contour
+    contourPoints.add(contourPoints.first);
+    
+    print('DEBUG: Created box contour with ${contourPoints.length} points');
     return contourPoints;
   }
+  
+  print('DEBUG: Starting boundary tracing from (${start.x}, ${start.y})');
+  
+  // Trace the boundary using Moore's algorithm
+  final visited = Set<String>();
+  Point current = start;
+  
+  // Direction vectors for 8-connected neighbors
+  final dx = [1, 1, 0, -1, -1, -1, 0, 1];
+  final dy = [0, 1, 1, 1, 0, -1, -1, -1];
+  
+  int dir = 7; // Start direction (NE)
+  
+  do {
+    contourPoints.add(current);
+    final key = "${current.x},${current.y}";
+    visited.add(key);
+    
+    bool found = false;
+    for (int i = 0; i < 8; i++) {
+      final nextDir = (dir + i) % 8;
+      final nx = current.x + dx[nextDir];
+      final ny = current.y + dy[nextDir];
+      
+      if (nx >= 0 && nx < width && ny >= 0 && ny < height && mask[ny.round()][nx.round()]) {
+        current = Point(nx, ny);
+        // Backtrack direction
+        dir = (nextDir + 5) % 8;
+        found = true;
+        break;
+      }
+    }
+    
+    if (!found || contourPoints.length > width * height) {
+      // Safety check to prevent infinite loop
+      break;
+    }
+    
+    // Stop when we return to start point and have at least 3 points
+  } while ((current.x != start.x || current.y != start.y || contourPoints.length < 3) && 
+           contourPoints.length < 5000); // Limit to 5000 points
+  
+  // Sample points if we have too many
+  if (contourPoints.length > 500) {
+    final sampledPoints = <Point>[];
+    final step = contourPoints.length ~/ 500;
+    for (int i = 0; i < contourPoints.length; i += step) {
+      sampledPoints.add(contourPoints[i]);
+    }
+    contourPoints = sampledPoints;
+  }
+  
+  print('DEBUG: Found ${contourPoints.length} contour points');
+  if (contourPoints.isNotEmpty) {
+    print('DEBUG: First point: (${contourPoints[0].x}, ${contourPoints[0].y})');
+    print('DEBUG: Last point: (${contourPoints[contourPoints.length-1].x}, ${contourPoints[contourPoints.length-1].y})');
+  }
+  
+  return contourPoints;
+}
 
   /// Apply morphological closing (dilation followed by erosion)
   static List<List<bool>> applyMorphologicalClosing(List<List<bool>> mask, int kernelSize) {

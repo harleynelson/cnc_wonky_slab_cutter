@@ -2,7 +2,6 @@
 // Combined screen that handles both marker detection and slab contour detection
 
 import 'dart:io';
-import 'dart:math';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -10,12 +9,12 @@ import 'package:image/image.dart' as img;
 
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
+import '../services/image_processing/contour_algorithms/contour_algorithm_registry.dart';
+import '../services/image_processing/contour_algorithms/edge_contour_algorithm.dart';
 import '../utils/general/machine_coordinates.dart';
-import '../services/image_processing/marker_detector.dart';
 import '../services/processing/processing_flow_manager.dart';
 import '../widgets/marker_overlay.dart';
 import '../widgets/contour_overlay.dart';
-import '../utils/image_processing/image_utils.dart';
 import '../utils/general/error_utils.dart';
 import 'gcode_generator_screen.dart';
 
@@ -118,67 +117,67 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   }
   
   Future<void> _detectContour() async {
-    if (_selectedPoint == null) {
-      setState(() {
-        _errorMessage = 'Please tap on the slab to select a seed point first';
-      });
-      return;
-    }
-
+  if (_selectedPoint == null) {
     setState(() {
-      _isLoading = true;
-      _statusMessage = 'Detecting contour...';
-      _errorMessage = '';
+      _errorMessage = 'Please tap on the slab to select a seed point first';
     });
-
-    try {
-      // If the image size is not available, we can't reliably calculate the seed point
-      if (_imageSize == null) {
-        throw Exception('Image dimensions not available');
-      }
-      
-      // Calculate the actual seed point in the image
-      final imagePoint = _calculateImagePoint(_selectedPoint!);
-      
-      // Detect contour using interactive method
-      final markerResult = _flowManager.result.markerResult;
-      if (markerResult == null) {
-        throw Exception('Marker detection result not available');
-      }
-      
-      // Load image
-      final imageBytes = await widget.imageFile.readAsBytes();
-      final decodedImage = img.decodeImage(imageBytes);
-      
-      if (decodedImage == null) {
-        throw Exception('Failed to decode image');
-      }
-      
-      // Create coordinate system from marker detection result
-      final coordinateSystem = _flowManager.result.markerResult!;
-      
-      // Use edge contour algorithm
-      final contourAlgorithmRegistry = await _flowManager.detectSlabContourAutomatic();
-      
-      setState(() {
-        _contourDetected = true;
-        _isLoading = false;
-        _statusMessage = 'Contour detected! Tap "Continue" to generate G-code.';
-      });
-    } catch (e, stackTrace) {
-      ErrorUtils().logError(
-        'Error during contour detection',
-        e,
-        stackTrace: stackTrace,
-        context: 'contour_detection',
-      );
-      
-      setState(() {
-        _errorMessage = 'Contour detection failed: ${e.toString()}';
-        _isLoading = false;
-      });
-    }
+    return;
   }
+
+  setState(() {
+    _isLoading = true;
+    _statusMessage = 'Detecting contour...';
+    _errorMessage = '';
+  });
+
+  try {
+    // If the image size is not available, we can't reliably calculate the seed point
+    if (_imageSize == null) {
+      throw Exception('Image dimensions not available');
+    }
+    
+    // Calculate the actual seed point in the image
+    final imagePoint = _calculateImagePoint(_selectedPoint!);
+    
+    // Detect contour using interactive method
+    final markerResult = _flowManager.result.markerResult;
+    if (markerResult == null) {
+      throw Exception('Marker detection result not available');
+    }
+    
+    // Load image
+    final imageBytes = await widget.imageFile.readAsBytes();
+    final decodedImage = img.decodeImage(imageBytes);
+    
+    if (decodedImage == null) {
+      throw Exception('Failed to decode image');
+    }
+    
+    // Create coordinate system from marker detection result
+    final coordinateSystem = _flowManager.result.markerResult!;
+    
+    // Use edge contour algorithm
+    final contourAlgorithmRegistry = await _flowManager.detectSlabContourAutomatic();
+    
+    setState(() {
+      _contourDetected = true;
+      _isLoading = false;
+      _statusMessage = 'Contour detected! Tap "Continue" to generate G-code.';
+    });
+  } catch (e, stackTrace) {
+    ErrorUtils().logError(
+      'Error during contour detection',
+      e,
+      stackTrace: stackTrace,
+      context: 'contour_detection',
+    );
+    
+    setState(() {
+      _errorMessage = 'Contour detection failed: ${e.toString()}';
+      _isLoading = false;
+    });
+  }
+}
   
   Future<void> _generateGcode() async {
   Navigator.push(
@@ -364,17 +363,28 @@ Widget build(BuildContext context) {
 }
   
   Widget _buildImageDisplay() {
-    if (_flowManager.result.originalImage != null) {
+  if (_flowManager.result.originalImage != null) {
+    if (_contourDetected && _flowManager.result.contourResult?.debugImage != null) {
+      // Use Image.memory to display the debug image if contour was detected
+      return Center(
+        child: Image.memory(
+          Uint8List.fromList(img.encodePng(_flowManager.result.contourResult!.debugImage!)),
+          fit: BoxFit.contain,
+        ),
+      );
+    } else {
+      // Show the original image if no contour detected yet
       return Center(
         child: Image.file(
           _flowManager.result.originalImage!,
           fit: BoxFit.contain,
         ),
       );
-    } else {
-      return Center(child: Text('Image not available'));
     }
+  } else {
+    return Center(child: Text('Image not available'));
   }
+}
   
   Widget _buildControlButtons() {
   return Container(
@@ -460,6 +470,10 @@ void _showParametersDialog() {
   double simplificationEpsilon = widget.settings.simplificationEpsilon;
   bool useConvexHull = widget.settings.useConvexHull;
   
+  // New parameters to add
+  int blurRadius = 3; // Default value
+  int smoothingWindow = 5; // Default value
+  
   showDialog(
     context: context,
     builder: (BuildContext context) {
@@ -499,10 +513,52 @@ void _showParametersDialog() {
                   
                   SizedBox(height: 12),
                   
+                  // Blur Radius Slider - NEW
+                  Text('Blur Radius: $blurRadius'),
+                  Text(
+                    'Controls noise reduction. Higher values smooth more.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Slider(
+                    value: blurRadius.toDouble(),
+                    min: 1,
+                    max: 7,
+                    divisions: 6,
+                    label: blurRadius.toString(),
+                    onChanged: (value) {
+                      setState(() {
+                        blurRadius = value.round();
+                      });
+                    },
+                  ),
+                  
+                  SizedBox(height: 12),
+                  
+                  // Smoothing Window Slider - NEW
+                  Text('Smoothing Window: $smoothingWindow'),
+                  Text(
+                    'Controls contour smoothness. Higher values create smoother contours.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Slider(
+                    value: smoothingWindow.toDouble(),
+                    min: 3,
+                    max: 11,
+                    divisions: 4,
+                    label: smoothingWindow.toString(),
+                    onChanged: (value) {
+                      setState(() {
+                        smoothingWindow = value.round();
+                      });
+                    },
+                  ),
+                  
+                  SizedBox(height: 12),
+                  
                   // Simplification Epsilon Slider
                   Text('Simplification: ${simplificationEpsilon.toStringAsFixed(1)}'),
                   Text(
-                    'Controls contour smoothness. Higher values create simpler contours.',
+                    'Controls contour detail. Higher values create simpler contours.',
                     style: TextStyle(fontSize: 12, color: Colors.grey),
                   ),
                   Slider(
@@ -563,8 +619,20 @@ void _showParametersDialog() {
                   // Save the updated settings
                   updatedSettings.save();
 
-                  // Update the settings in the flow manager
-                  _flowManager.updateSettings(updatedSettings);
+                  // Update the flow manager's EdgeContourAlgorithm with these values
+                  {
+                    final edgeAlgorithm = EdgeContourAlgorithm(
+                    generateDebugImage: true,
+                    edgeThreshold: edgeThreshold,
+                    useConvexHull: useConvexHull,
+                    simplificationEpsilon: simplificationEpsilon,
+                    blurRadius: blurRadius,
+                    smoothingWindowSize: smoothingWindow
+                  );
+                    
+                    // Register the updated algorithm
+                    ContourAlgorithmRegistry.registerAlgorithm(edgeAlgorithm);
+                  }
                   
                   // Notify the parent widget
                   if (widget.onSettingsChanged != null) {

@@ -5,8 +5,8 @@ import '../utils/general/constants.dart';
 class SettingsModel {
   double cncWidth;
   double cncHeight;
-  double markerXDistance;  // Distance between origin and X-axis marker in mm
-  double markerYDistance;  // Distance between origin and Y-axis/scale marker in mm
+  double markerXDistance;
+  double markerYDistance;
   double toolDiameter;
   double stepover;
   double safetyHeight;
@@ -16,62 +16,70 @@ class SettingsModel {
   double edgeThreshold;
   double simplificationEpsilon;
   bool useConvexHull;
+  int blurRadius;           // New parameter
+  int smoothingWindowSize;  // New parameter
 
   SettingsModel({
-  required this.cncWidth,
-  required this.cncHeight,
-  required this.markerXDistance,
-  required this.markerYDistance,
-  required this.toolDiameter,
-  required this.stepover,
-  required this.safetyHeight,
-  required this.feedRate,
-  required this.plungeRate,
-  required this.cuttingDepth,
-  this.edgeThreshold = 50.0,
-  this.simplificationEpsilon = 5.0,
-  this.useConvexHull = true,
-});
+    required this.cncWidth,
+    required this.cncHeight,
+    required this.markerXDistance,
+    required this.markerYDistance,
+    required this.toolDiameter,
+    required this.stepover,
+    required this.safetyHeight,
+    required this.feedRate,
+    required this.plungeRate,
+    required this.cuttingDepth,
+    this.edgeThreshold = 65.0,
+    this.simplificationEpsilon = 5.0,
+    this.useConvexHull = true,
+    this.blurRadius = 6,          
+    this.smoothingWindowSize = 7,  
+  });
   
-  // Create a copy of the settings
+  // Update copy method
   SettingsModel copy() {
-  return SettingsModel(
-    cncWidth: cncWidth,
-    cncHeight: cncHeight,
-    markerXDistance: markerXDistance,
-    markerYDistance: markerYDistance,
-    toolDiameter: toolDiameter,
-    stepover: stepover,
-    safetyHeight: safetyHeight,
-    feedRate: feedRate,
-    plungeRate: plungeRate,
-    cuttingDepth: cuttingDepth,
-    edgeThreshold: edgeThreshold,
-    simplificationEpsilon: simplificationEpsilon,
-    useConvexHull: useConvexHull,
-  );
-}
+    return SettingsModel(
+      cncWidth: cncWidth,
+      cncHeight: cncHeight,
+      markerXDistance: markerXDistance,
+      markerYDistance: markerYDistance,
+      toolDiameter: toolDiameter,
+      stepover: stepover,
+      safetyHeight: safetyHeight,
+      feedRate: feedRate,
+      plungeRate: plungeRate,
+      cuttingDepth: cuttingDepth,
+      edgeThreshold: edgeThreshold,
+      simplificationEpsilon: simplificationEpsilon,
+      useConvexHull: useConvexHull,
+      blurRadius: blurRadius,
+      smoothingWindowSize: smoothingWindowSize,
+    );
+  }
 
-  // Get default settings
+  // Update defaults method
   static SettingsModel defaults() {
-  return SettingsModel(
-    cncWidth: defaultCncWidth,
-    cncHeight: defaultCncHeight,
-    markerXDistance: defaultMarkerXDistance,
-    markerYDistance: defaultMarkerYDistance,
-    toolDiameter: defaultToolDiameter,
-    stepover: defaultStepover,
-    safetyHeight: defaultSafetyHeight,
-    feedRate: defaultFeedRate,
-    plungeRate: defaultPlungeRate,
-    cuttingDepth: defaultCuttingDepth,
-    edgeThreshold: 50.0,
-    simplificationEpsilon: 5.0,
-    useConvexHull: true,
-  );
-}
+    return SettingsModel(
+      cncWidth: defaultCncWidth,
+      cncHeight: defaultCncHeight,
+      markerXDistance: defaultMarkerXDistance,
+      markerYDistance: defaultMarkerYDistance,
+      toolDiameter: defaultToolDiameter,
+      stepover: defaultStepover,
+      safetyHeight: defaultSafetyHeight,
+      feedRate: defaultFeedRate,
+      plungeRate: defaultPlungeRate,
+      cuttingDepth: defaultCuttingDepth,
+      edgeThreshold: 65.0,
+      simplificationEpsilon: 5.0,
+      useConvexHull: true,
+      blurRadius: 6,
+      smoothingWindowSize: 7,
+    );
+  }
 
-  // Convert settings to JSON
+  // Update toJson method
   Map<String, dynamic> toJson() {
     return {
       'cncWidth': cncWidth,
@@ -85,12 +93,14 @@ class SettingsModel {
       'plungeRate': plungeRate,
       'cuttingDepth': cuttingDepth,
       'edgeThreshold': edgeThreshold,
-    'simplificationEpsilon': simplificationEpsilon,
-    'useConvexHull': useConvexHull,
+      'simplificationEpsilon': simplificationEpsilon,
+      'useConvexHull': useConvexHull,
+      'blurRadius': blurRadius,
+      'smoothingWindowSize': smoothingWindowSize,
     };
   }
 
-  // Create settings from JSON
+  // Update fromJson method
   factory SettingsModel.fromJson(Map<String, dynamic> json) {
     return SettingsModel(
       cncWidth: json['cncWidth'] ?? defaultCncWidth,
@@ -104,8 +114,10 @@ class SettingsModel {
       plungeRate: json['plungeRate'] ?? defaultPlungeRate,
       cuttingDepth: json['cuttingDepth'] ?? defaultCuttingDepth,
       edgeThreshold: json['edgeThreshold'] ?? 50.0,
-    simplificationEpsilon: json['simplificationEpsilon'] ?? 5.0,
-    useConvexHull: json['useConvexHull'] ?? true,
+      simplificationEpsilon: json['simplificationEpsilon'] ?? 5.0,
+      useConvexHull: json['useConvexHull'] ?? true,
+      blurRadius: json['blurRadius'] ?? 3,
+      smoothingWindowSize: json['smoothingWindowSize'] ?? 5,
     );
   }
 
