@@ -44,28 +44,6 @@ void paint(Canvas canvas, Size size) {
   print('DEBUG OVERLAY: Canvas size: ${size.width}x${size.height}');
   print('DEBUG OVERLAY: Image size: ${imageSize.width}x${imageSize.height}');
   
-  final imageAspect = imageSize.width / imageSize.height;
-  final canvasAspect = size.width / size.height;
-  
-  double displayWidth, displayHeight, offsetX = 0, offsetY = 0;
-  
-  if (imageAspect > canvasAspect) {
-    // Image is wider than canvas (letterboxed)
-    displayWidth = size.width;
-    displayHeight = size.width / imageAspect;
-    offsetY = (size.height - displayHeight) / 2;
-  } else {
-    // Image is taller than canvas (pillarboxed)
-    displayHeight = size.height;
-    displayWidth = size.height * imageAspect;
-    offsetX = (size.width - displayWidth) / 2;
-  }
-  
-  print('DEBUG OVERLAY: Letterboxed offsetY: $offsetY');
-  print('DEBUG OVERLAY: Display area: ${displayWidth}x${displayHeight}');
-  print('DEBUG OVERLAY: Scale factors: ${imageSize.width/displayWidth} x ${imageSize.height/displayHeight}');
-  
-  
   final paint = Paint()
     ..style = PaintingStyle.stroke
     ..strokeWidth = 3.0;
@@ -167,29 +145,29 @@ void paint(Canvas canvas, Size size) {
         orElse: () => markers[2]
       );
       
-      // Origin to X-axis line
-      final originX = (originMarker.x / imageSize.width) * size.width;
-      final originY = (originMarker.y / imageSize.height) * size.height;
+      // Create points from markers
+      final originPoint = Point(originMarker.x.toDouble(), originMarker.y.toDouble());
+      final xAxisPoint = Point(xAxisMarker.x.toDouble(), xAxisMarker.y.toDouble());
+      final scalePoint = Point(scaleMarker.x.toDouble(), scaleMarker.y.toDouble());
       
-      final xAxisX = (xAxisMarker.x / imageSize.width) * size.width;
-      final xAxisY = (xAxisMarker.y / imageSize.height) * size.height;
-      
-      final scaleX = (scaleMarker.x / imageSize.width) * size.width;
-      final scaleY = (scaleMarker.y / imageSize.height) * size.height;
+      // Convert to display coordinates using the same transformation as the markers
+      final originDisplay = MachineCoordinateSystem.imageToDisplayCoordinates(originPoint, imageSize, size);
+      final xAxisDisplay = MachineCoordinateSystem.imageToDisplayCoordinates(xAxisPoint, imageSize, size);
+      final scaleDisplay = MachineCoordinateSystem.imageToDisplayCoordinates(scalePoint, imageSize, size);
       
       final linePaint = Paint()
         ..color = Colors.white.withOpacity(0.7)
         ..strokeWidth = 2.0;
       
       canvas.drawLine(
-        Offset(originX, originY), 
-        Offset(xAxisX, xAxisY), 
+        Offset(originDisplay.x, originDisplay.y), 
+        Offset(xAxisDisplay.x, xAxisDisplay.y), 
         linePaint
       );
       
       canvas.drawLine(
-        Offset(originX, originY), 
-        Offset(scaleX, scaleY), 
+        Offset(originDisplay.x, originDisplay.y), 
+        Offset(scaleDisplay.x, scaleDisplay.y), 
         linePaint
       );
     }

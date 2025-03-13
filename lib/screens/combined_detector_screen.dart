@@ -3,6 +3,7 @@
 
 import 'dart:io';
 import 'dart:math';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image/image.dart' as img;
@@ -401,76 +402,128 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   }
   
   Widget _buildControlButtons() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 4,
-            offset: Offset(0, -2),
+  return Container(
+    padding: EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black12,
+          blurRadius: 4,
+          offset: Offset(0, -2),
+        ),
+      ],
+    ),
+    child: Column(
+      children: [
+        if (!_markersDetected)
+          ElevatedButton.icon(
+            icon: Icon(Icons.search),
+            label: Text('Detect Markers'),
+            onPressed: _isLoading ? null : _detectMarkers,
+            style: ElevatedButton.styleFrom(
+              minimumSize: Size(double.infinity, 48),
+            ),
           ),
-        ],
-      ),
+        
+        if (_markersDetected && !_contourDetected)
+          ElevatedButton.icon(
+            icon: Icon(Icons.content_cut),
+            label: Text('Detect Contour'),
+            onPressed: _isLoading || _selectedPoint == null ? null : _detectContour,
+            style: ElevatedButton.styleFrom(
+              minimumSize: Size(double.infinity, 48),
+            ),
+          ),
+        
+        if (_contourDetected)
+          ElevatedButton.icon(
+            icon: Icon(Icons.code),
+            label: Text('Generate G-code'),
+            onPressed: _isLoading ? null : _generateGcode,
+            style: ElevatedButton.styleFrom(
+              minimumSize: Size(double.infinity, 48),
+              backgroundColor: Colors.green,
+            ),
+          ),
+        
+        // Add Debug Button
+        if (_markersDetected && _flowManager.result.markerResult?.debugImage != null)
+          ElevatedButton.icon(
+            icon: Icon(Icons.bug_report),
+            label: Text('Show Debug Image'),
+            onPressed: _showDebugImage,
+            style: ElevatedButton.styleFrom(
+              minimumSize: Size(double.infinity, 48),
+              backgroundColor: Colors.purple,
+            ),
+          ),
+        
+        SizedBox(height: 8),
+        
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                icon: Icon(Icons.arrow_back),
+                label: Text('Back'),
+                onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
+              ),
+            ),
+            SizedBox(width: 16),
+            Expanded(
+              child: OutlinedButton.icon(
+                icon: Icon(Icons.refresh),
+                label: Text('Reset'),
+                onPressed: _isLoading ? null : _resetDetection,
+              ),
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+// Add this method to display the debug image
+void _showDebugImage() {
+  if (_flowManager.result.markerResult?.debugImage == null) return;
+  
+  showDialog(
+    context: context,
+    builder: (context) => Dialog(
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
-          if (!_markersDetected)
-            ElevatedButton.icon(
-              icon: Icon(Icons.search),
-              label: Text('Detect Markers'),
-              onPressed: _isLoading ? null : _detectMarkers,
-              style: ElevatedButton.styleFrom(
-                minimumSize: Size(double.infinity, 48),
-              ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(
+              'Marker Detection Debug Image',
+              style: TextStyle(fontWeight: FontWeight.bold),
             ),
-          
-          if (_markersDetected && !_contourDetected)
-            ElevatedButton.icon(
-              icon: Icon(Icons.content_cut),
-              label: Text('Detect Contour'),
-              onPressed: _isLoading || _selectedPoint == null ? null : _detectContour,
-              style: ElevatedButton.styleFrom(
-                minimumSize: Size(double.infinity, 48),
-              ),
+          ),
+          Image.memory(
+            Uint8List.fromList(
+              img.encodePng(_flowManager.result.markerResult!.debugImage!)
             ),
-          
-          if (_contourDetected)
-            ElevatedButton.icon(
-              icon: Icon(Icons.code),
-              label: Text('Generate G-code'),
-              onPressed: _isLoading ? null : _generateGcode,
-              style: ElevatedButton.styleFrom(
-                minimumSize: Size(double.infinity, 48),
-                backgroundColor: Colors.green,
-              ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(
+              'Image dimensions: ${_flowManager.result.markerResult!.debugImage!.width}x'
+              '${_flowManager.result.markerResult!.debugImage!.height}',
+              style: TextStyle(fontSize: 12),
             ),
-          
-          SizedBox(height: 8),
-          
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: Icon(Icons.arrow_back),
-                  label: Text('Back'),
-                  onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-                ),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: Icon(Icons.refresh),
-                  label: Text('Reset'),
-                  onPressed: _isLoading ? null : _resetDetection,
-                ),
-              ),
-            ],
+          ),
+          TextButton(
+            child: Text('Close'),
+            onPressed: () => Navigator.of(context).pop(),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
   
   void _resetDetection() {
     setState(() {

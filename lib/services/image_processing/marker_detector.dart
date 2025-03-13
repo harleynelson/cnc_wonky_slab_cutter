@@ -53,92 +53,154 @@ class MarkerDetector {
   
   /// Detect markers in an image and calculate calibration parameters
   Future<MarkerDetectionResult> detectMarkers(img.Image image) async {
-    // Add timeout to detection process
-    return await Future.delayed(Duration.zero, () {
-      return Future.value(_detectMarkersInternal(image))
-        .timeout(
-          Duration(milliseconds: processingTimeout),
-          onTimeout: () => throw TimeoutException('Marker detection timed out')
-        );
-    });
-  }
+  // Add timeout to detection process
+  return await Future.delayed(Duration.zero, () {
+    return Future.value(_detectMarkersInternal(image))
+      .timeout(
+        Duration(milliseconds: processingTimeout),
+        onTimeout: () => throw TimeoutException('Marker detection timed out')
+      );
+  });
+}
 
   MarkerDetectionResult _detectMarkersInternal(img.Image image) {
-    // Log input image dimensions
-    print('Marker detection - input image dimensions: ${image.width}x${image.height}');
-    
-    // Downsample large images to conserve memory
-    img.Image processImage = image;
-    if (image.width > maxImageSize || image.height > maxImageSize) {
-      final scaleFactor = maxImageSize / math.max(image.width, image.height);
-      try {
-        processImage = img.copyResize(
-          image,
-          width: (image.width * scaleFactor).round(),
-          height: (image.height * scaleFactor).round(),
-          interpolation: img.Interpolation.average
-        );
-        print('Marker detection - resized to: ${processImage.width}x${processImage.height}');
-      } catch (e) {
-        print('Warning: Failed to resize image: $e');
-      }
-    }
-    
-    // Create a copy for visualization if needed
-    img.Image? debugImage;
-    if (generateDebugImage) {
-      try {
-        debugImage = img.copyResize(processImage, width: processImage.width, height: processImage.height);
-      } catch (e) {
-        print('Warning: Failed to create debug image: $e');
-      }
-    }
-    
+  // Log input image dimensions
+  print('Marker detection - input image dimensions: ${image.width}x${image.height}');
+  
+  // IMPORTANT: Store original image dimensions before any resizing
+  final origWidth = image.width;
+  final origHeight = image.height;
+  
+  // Downsample large images to conserve memory
+  img.Image processImage = image;
+  double scaleFactor = 1.0;
+  
+  if (image.width > maxImageSize || image.height > maxImageSize) {
+    scaleFactor = maxImageSize / math.max(image.width, image.height);
     try {
-      // STRATEGY 1: Try corner detection
-      print('Attempting corner marker detection...');
-      var markers = _findCornerMarkers(processImage, debugImage);
-      if (markers.length >= 3) {
-        print('Found ${markers.length} corner markers');
-        final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
-        final calibrationResult = _calculateCalibration(identifiedMarkers, debugImage);
-        return calibrationResult;
-      }
-      
-      // STRATEGY 2: Try high contrast blob detection
-      print('Attempting high contrast blob detection...');
-      markers = _findHighContrastBlobs(processImage, debugImage);
-      if (markers.length >= 3) {
-        print('Found ${markers.length} high contrast markers');
-        final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
-        final calibrationResult = _calculateCalibration(identifiedMarkers, debugImage);
-        return calibrationResult;
-      }
-      
-      // STRATEGY 3: Try the original method
-      print('Attempting original marker detection...');
-      // Convert to grayscale for processing
-      final grayscale = ImageUtils.convertToGrayscale(processImage);
-      
-      // Preprocess the image to make markers stand out
-      final preprocessed = _preprocessImage(grayscale);
-      
-      // Find potential marker regions
-      markers = _findMarkerCandidates(preprocessed, debugImage);
-      
-      // Identify which marker is which based on their relative positions
-      final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
-      
-      // Calculate calibration parameters with validation
-      final calibrationResult = _calculateCalibration(identifiedMarkers, debugImage);
-      
-      return calibrationResult;
+      processImage = img.copyResize(
+        image,
+        width: (image.width * scaleFactor).round(),
+        height: (image.height * scaleFactor).round(),
+        interpolation: img.Interpolation.average
+      );
+      print('Marker detection - resized to: ${processImage.width}x${processImage.height}');
+      print('Marker detection - scale factor: $scaleFactor');
     } catch (e) {
-      print('Error in marker detection: $e');
-      // Fall back to predefined markers if detection fails
-      return _createFallbackResult(processImage, debugImage);
+      print('Warning: Failed to resize image: $e');
+      scaleFactor = 1.0; // Reset scale factor if resize fails
     }
   }
+  
+  // Create a copy for visualization if needed
+  img.Image? debugImage;
+  if (generateDebugImage) {
+    try {
+      debugImage = img.copyResize(processImage, width: processImage.width, height: processImage.height);
+    } catch (e) {
+      print('Warning: Failed to create debug image: $e');
+    }
+  }
+  
+  try {
+    // STRATEGY 1: Try corner detection
+    print('Attempting corner marker detection...');
+    var markers = _findCornerMarkers(processImage, debugImage);
+    if (markers.length >= 3) {
+      print('Found ${markers.length} corner markers');
+      final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
+      
+      // Rescale marker coordinates to original image dimensions if needed
+      final scaledMarkers = _rescaleMarkers(identifiedMarkers, scaleFactor);
+      
+      final calibrationResult = _calculateCalibration(scaledMarkers, debugImage);
+      
+      // Log the detected marker positions in original image coordinates
+      for (final marker in scaledMarkers) {
+        print('Detected ${marker.role} marker at: (${marker.x}, ${marker.y}) in original image coordinates');
+      }
+      
+      return calibrationResult;
+    }
+    
+    // STRATEGY 2: Try high contrast blob detection
+    print('Attempting high contrast blob detection...');
+    markers = _findHighContrastBlobs(processImage, debugImage);
+    if (markers.length >= 3) {
+      print('Found ${markers.length} high contrast markers');
+      final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
+      
+      // Rescale marker coordinates to original image dimensions if needed
+      final scaledMarkers = _rescaleMarkers(identifiedMarkers, scaleFactor);
+      
+      final calibrationResult = _calculateCalibration(scaledMarkers, debugImage);
+      
+      // Log the detected marker positions in original image coordinates
+      for (final marker in scaledMarkers) {
+        print('Detected ${marker.role} marker at: (${marker.x}, ${marker.y}) in original image coordinates');
+      }
+      
+      return calibrationResult;
+    }
+    
+    // STRATEGY 3: Try the original method
+    print('Attempting original marker detection...');
+    // Convert to grayscale for processing
+    final grayscale = ImageUtils.convertToGrayscale(processImage);
+    
+    // Preprocess the image to make markers stand out
+    final preprocessed = _preprocessImage(grayscale);
+    
+    // Find potential marker regions
+    markers = _findMarkerCandidates(preprocessed, debugImage);
+    
+    // Identify which marker is which based on their relative positions
+    final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
+    
+    // Rescale marker coordinates to original image dimensions if needed
+    final scaledMarkers = _rescaleMarkers(identifiedMarkers, scaleFactor);
+    
+    // Calculate calibration parameters with validation
+    final calibrationResult = _calculateCalibration(scaledMarkers, debugImage);
+    
+    // Log the detected marker positions in original image coordinates
+    for (final marker in scaledMarkers) {
+      print('Detected ${marker.role} marker at: (${marker.x}, ${marker.y}) in original image coordinates');
+    }
+    
+    return calibrationResult;
+  } catch (e) {
+    print('Error in marker detection: $e');
+    // Fall back to predefined markers if detection fails
+    var fallbackMarkers = _fallbackMarkerDetection(processImage.width, processImage.height);
+    
+    // Rescale fallback markers to original image dimensions if needed
+    if (scaleFactor != 1.0) {
+      fallbackMarkers = _rescaleMarkers(fallbackMarkers, scaleFactor);
+    }
+    
+    return _createFallbackResult(processImage, debugImage);
+  }
+}
+
+/// Helper method to rescale marker coordinates from processed image to original image
+List<MarkerPoint> _rescaleMarkers(List<MarkerPoint> markers, double scaleFactor) {
+  // If no scaling was applied, return original markers
+  if (scaleFactor == 1.0) return markers;
+  
+  return markers.map((marker) {
+    // Convert back to original image coordinates
+    final originalX = (marker.x / scaleFactor).round();
+    final originalY = (marker.y / scaleFactor).round();
+    
+    return MarkerPoint(
+      originalX, 
+      originalY, 
+      marker.role, 
+      confidence: marker.confidence
+    );
+  }).toList();
+}
 
   /// Find markers in corner regions of the image
 List<MarkerPoint> _findCornerMarkers(img.Image image, img.Image? debugImage) {

@@ -74,6 +74,10 @@ static Point displayToImageCoordinates(Point displayPoint, Size imageSize, Size 
     displayWidth = displaySize.width;
     displayHeight = displaySize.width / imageAspect;
     offsetY = (displaySize.height - displayHeight) / 2;
+    
+    // Apply the same correction as in combined_detector_screen.dart and imageToDisplayCoordinates
+    final offsetCorrection = 85.5; // 92.5 - a7.0
+    offsetY = offsetY - offsetCorrection;
   } else {
     // Image is taller than display (pillarboxed)
     displayHeight = displaySize.height;
