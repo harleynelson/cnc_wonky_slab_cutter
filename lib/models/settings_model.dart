@@ -13,51 +13,63 @@ class SettingsModel {
   double feedRate;
   double plungeRate;
   double cuttingDepth;
+  double edgeThreshold;
+  double simplificationEpsilon;
+  bool useConvexHull;
 
   SettingsModel({
-    required this.cncWidth,
-    required this.cncHeight,
-    required this.markerXDistance,
-    required this.markerYDistance,
-    required this.toolDiameter,
-    required this.stepover,
-    required this.safetyHeight,
-    required this.feedRate,
-    required this.plungeRate,
-    required this.cuttingDepth,
-  });
+  required this.cncWidth,
+  required this.cncHeight,
+  required this.markerXDistance,
+  required this.markerYDistance,
+  required this.toolDiameter,
+  required this.stepover,
+  required this.safetyHeight,
+  required this.feedRate,
+  required this.plungeRate,
+  required this.cuttingDepth,
+  this.edgeThreshold = 50.0,
+  this.simplificationEpsilon = 5.0,
+  this.useConvexHull = true,
+});
   
   // Create a copy of the settings
   SettingsModel copy() {
-    return SettingsModel(
-      cncWidth: cncWidth,
-      cncHeight: cncHeight,
-      markerXDistance: markerXDistance,
-      markerYDistance: markerYDistance,
-      toolDiameter: toolDiameter,
-      stepover: stepover,
-      safetyHeight: safetyHeight,
-      feedRate: feedRate,
-      plungeRate: plungeRate,
-      cuttingDepth: cuttingDepth,
-    );
-  }
+  return SettingsModel(
+    cncWidth: cncWidth,
+    cncHeight: cncHeight,
+    markerXDistance: markerXDistance,
+    markerYDistance: markerYDistance,
+    toolDiameter: toolDiameter,
+    stepover: stepover,
+    safetyHeight: safetyHeight,
+    feedRate: feedRate,
+    plungeRate: plungeRate,
+    cuttingDepth: cuttingDepth,
+    edgeThreshold: edgeThreshold,
+    simplificationEpsilon: simplificationEpsilon,
+    useConvexHull: useConvexHull,
+  );
+}
 
   // Get default settings
   static SettingsModel defaults() {
-    return SettingsModel(
-      cncWidth: defaultCncWidth,
-      cncHeight: defaultCncHeight,
-      markerXDistance: defaultMarkerXDistance,
-      markerYDistance: defaultMarkerYDistance,
-      toolDiameter: defaultToolDiameter,
-      stepover: defaultStepover,
-      safetyHeight: defaultSafetyHeight,
-      feedRate: defaultFeedRate,
-      plungeRate: defaultPlungeRate,
-      cuttingDepth: defaultCuttingDepth,
-    );
-  }
+  return SettingsModel(
+    cncWidth: defaultCncWidth,
+    cncHeight: defaultCncHeight,
+    markerXDistance: defaultMarkerXDistance,
+    markerYDistance: defaultMarkerYDistance,
+    toolDiameter: defaultToolDiameter,
+    stepover: defaultStepover,
+    safetyHeight: defaultSafetyHeight,
+    feedRate: defaultFeedRate,
+    plungeRate: defaultPlungeRate,
+    cuttingDepth: defaultCuttingDepth,
+    edgeThreshold: 50.0,
+    simplificationEpsilon: 5.0,
+    useConvexHull: true,
+  );
+}
 
   // Convert settings to JSON
   Map<String, dynamic> toJson() {
@@ -72,6 +84,9 @@ class SettingsModel {
       'feedRate': feedRate,
       'plungeRate': plungeRate,
       'cuttingDepth': cuttingDepth,
+      'edgeThreshold': edgeThreshold,
+    'simplificationEpsilon': simplificationEpsilon,
+    'useConvexHull': useConvexHull,
     };
   }
 
@@ -88,6 +103,9 @@ class SettingsModel {
       feedRate: json['feedRate'] ?? defaultFeedRate,
       plungeRate: json['plungeRate'] ?? defaultPlungeRate,
       cuttingDepth: json['cuttingDepth'] ?? defaultCuttingDepth,
+      edgeThreshold: json['edgeThreshold'] ?? 50.0,
+    simplificationEpsilon: json['simplificationEpsilon'] ?? 5.0,
+    useConvexHull: json['useConvexHull'] ?? true,
     );
   }
 

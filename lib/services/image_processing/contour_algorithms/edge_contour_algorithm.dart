@@ -31,7 +31,7 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
 
   EdgeContourAlgorithm({
     this.generateDebugImage = true,
-    this.edgeThreshold = 50,
+    this.edgeThreshold = 50.0,
     this.useConvexHull = true,
     this.simplificationEpsilon = 5.0,
     this.smoothingWindowSize = 5,

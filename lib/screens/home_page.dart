@@ -72,6 +72,7 @@ class _HomePageState extends State<HomePage> {
         builder: (context) => CombinedDetectorScreen(
           imageFile: imageFile,
           settings: _settings,
+          onSettingsChanged: _handleSettingsChanged,
         ),
       ),
     );

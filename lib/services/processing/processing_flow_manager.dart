@@ -115,7 +115,7 @@ class ProcessingResult {
 /// Manager class for handling the processing flow
 class ProcessingFlowManager with ChangeNotifier {
   ProcessingResult _result = ProcessingResult();
-  final SettingsModel settings;
+  SettingsModel settings;
   
   // Default contour detection method
   ContourDetectionMethod _preferredContourMethod = ContourDetectionMethod.automatic;
@@ -215,12 +215,12 @@ class ProcessingFlowManager with ChangeNotifier {
       // Initialize contour detection algorithms
       ContourAlgorithmRegistry.initialize();
       
-      // Use Edge contour algorithm
+      // Use Edge contour algorithm with settings from the SettingsModel
       final algorithm = EdgeContourAlgorithm(
         generateDebugImage: true,
-        edgeThreshold: 50,
-        useConvexHull: true,
-        simplificationEpsilon: 5.0,
+        edgeThreshold: settings.edgeThreshold,
+        useConvexHull: settings.useConvexHull,
+        simplificationEpsilon: settings.simplificationEpsilon,
       );
       
       // Estimate a seed point in the center of the image
@@ -316,6 +316,11 @@ class ProcessingFlowManager with ChangeNotifier {
       _setErrorState('G-code generation failed: ${e.toString()}');
     }
   }
+
+  void updateSettings(SettingsModel newSettings) {
+  settings = newSettings;
+  notifyListeners();
+}
   
   /// Reset the processing flow
   void reset() {

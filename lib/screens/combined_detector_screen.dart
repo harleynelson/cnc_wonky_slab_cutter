@@ -17,15 +17,18 @@ import '../widgets/marker_overlay.dart';
 import '../widgets/contour_overlay.dart';
 import '../utils/image_processing/image_utils.dart';
 import '../utils/general/error_utils.dart';
+import 'gcode_generator_screen.dart';
 
 class CombinedDetectorScreen extends StatefulWidget {
   final File imageFile;
   final SettingsModel settings;
+  final Function(SettingsModel)? onSettingsChanged;
 
   const CombinedDetectorScreen({
     Key? key,
     required this.imageFile,
     required this.settings,
+    this.onSettingsChanged,
   }) : super(key: key);
 
   @override
@@ -178,44 +181,15 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   }
   
   Future<void> _generateGcode() async {
-    setState(() {
-      _isLoading = true;
-      _statusMessage = 'Generating G-code...';
-      _errorMessage = '';
-    });
-
-    try {
-      await _flowManager.generateGcode();
-      
-      setState(() {
-        _isLoading = false;
-        _statusMessage = 'G-code generation complete!';
-      });
-      
-      // Navigate back to home
-      Navigator.of(context).popUntil((route) => route.isFirst);
-      
-      // Show success message
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('G-code generated successfully!'),
-          duration: Duration(seconds: 3),
-        ),
-      );
-    } catch (e, stackTrace) {
-      ErrorUtils().logError(
-        'Error during G-code generation',
-        e,
-        stackTrace: stackTrace,
-        context: 'gcode_generation',
-      );
-      
-      setState(() {
-        _errorMessage = 'G-code generation failed: ${e.toString()}';
-        _isLoading = false;
-      });
-    }
-  }
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => GcodeGeneratorScreen(
+        settings: widget.settings,
+      ),
+    ),
+  );
+}
   
   void _handleImageTap(TapDownDetails details) {
     if (_isLoading || !_markersDetected) return;
@@ -285,15 +259,16 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
 }
   
   @override
-  Widget build(BuildContext context) {
+Widget build(BuildContext context) {
   return Scaffold(
     appBar: AppBar(
       title: Text('Slab Detection'),
       actions: [
-        IconButton(
-          icon: Icon(Icons.refresh),
-          onPressed: _isLoading ? null : _resetDetection,
-        ),
+        if (_markersDetected && _flowManager.result.markerResult?.debugImage != null)
+          IconButton(
+            icon: Icon(Icons.info_outline),
+            onPressed: _showDebugImage,
+          ),
       ],
     ),
     body: Column(
@@ -303,14 +278,14 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
           child: GestureDetector(
             onTapDown: _markersDetected && !_contourDetected ? _handleImageTap : null,
             child: Stack(
-              fit: StackFit.expand,  // Add this line
+              fit: StackFit.expand,
               children: [
                 // Image display
                 _buildImageDisplay(),
                 
                 // Marker overlay - ensure markers are shown at the correct positions
                 if (_markersDetected && _flowManager.result.markerResult != null && _imageSize != null)
-                  Positioned.fill(  // Add Positioned.fill
+                  Positioned.fill(
                     child: MarkerOverlay(
                       markers: _flowManager.result.markerResult!.markers,
                       imageSize: _imageSize!,
@@ -319,7 +294,7 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
                 
                 // Contour overlay
                 if (_contourDetected && _flowManager.result.contourResult != null && _imageSize != null)
-                  Positioned.fill(  // Add Positioned.fill
+                  Positioned.fill(
                     child: ContourOverlay(
                       contourPoints: _flowManager.result.contourResult!.pixelContour,
                       imageSize: _imageSize!,
@@ -327,66 +302,66 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
                     ),
                   ),
                   
-                  // Seed point indicator
-                  if (_selectedPoint != null && !_contourDetected)
-                    Positioned(
-                      left: _selectedPoint!.dx - 10,
-                      top: _selectedPoint!.dy - 10,
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: BoxDecoration(
-                          color: Colors.yellow.withOpacity(0.7),
-                          shape: BoxShape.circle,
-                          border: Border.all(color: Colors.orange, width: 2),
-                        ),
+                // Seed point indicator
+                if (_selectedPoint != null && !_contourDetected)
+                  Positioned(
+                    left: _selectedPoint!.dx - 10,
+                    top: _selectedPoint!.dy - 10,
+                    child: Container(
+                      width: 20,
+                      height: 20,
+                      decoration: BoxDecoration(
+                        color: Colors.yellow.withOpacity(0.7),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.orange, width: 2),
                       ),
                     ),
+                  ),
                   
-                  // Loading indicator
-                  if (_isLoading)
-                    Container(
-                      color: Colors.black.withOpacity(0.5),
-                      child: Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            CircularProgressIndicator(),
-                            SizedBox(height: 16),
-                            Text(
-                              _statusMessage,
-                              style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
-                            ),
-                          ],
-                        ),
+                // Loading indicator
+                if (_isLoading)
+                  Container(
+                    color: Colors.black.withOpacity(0.5),
+                    child: Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          CircularProgressIndicator(),
+                          SizedBox(height: 16),
+                          Text(
+                            _statusMessage,
+                            style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                          ),
+                        ],
                       ),
                     ),
-                ],
-              ),
+                  ),
+              ],
             ),
           ),
+        ),
           
-          // Status bar - MOVED TO BOTTOM
-          Container(
-            padding: EdgeInsets.all(8),
-            color: _errorMessage.isEmpty ? Colors.blue.shade50 : Colors.red.shade50,
-            width: double.infinity,
-            child: Text(
-              _errorMessage.isEmpty ? _statusMessage : _errorMessage,
-              style: TextStyle(
-                color: _errorMessage.isEmpty ? Colors.blue.shade900 : Colors.red.shade900,
-                fontWeight: FontWeight.bold,
-              ),
-              textAlign: TextAlign.center,
+        // Status bar - MOVED TO BOTTOM
+        Container(
+          padding: EdgeInsets.all(8),
+          color: _errorMessage.isEmpty ? Colors.blue.shade50 : Colors.red.shade50,
+          width: double.infinity,
+          child: Text(
+            _errorMessage.isEmpty ? _statusMessage : _errorMessage,
+            style: TextStyle(
+              color: _errorMessage.isEmpty ? Colors.blue.shade900 : Colors.red.shade900,
+              fontWeight: FontWeight.bold,
             ),
+            textAlign: TextAlign.center,
           ),
+        ),
           
-          // Action buttons
-          _buildControlButtons(),
-        ],
-      ),
-    );
-  }
+        // Action buttons
+        _buildControlButtons(),
+      ],
+    ),
+  );
+}
   
   Widget _buildImageDisplay() {
     if (_flowManager.result.originalImage != null) {
@@ -416,51 +391,42 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
     ),
     child: Column(
       children: [
-        if (!_markersDetected)
-          ElevatedButton.icon(
-            icon: Icon(Icons.search),
-            label: Text('Detect Markers'),
-            onPressed: _isLoading ? null : _detectMarkers,
-            style: ElevatedButton.styleFrom(
-              minimumSize: Size(double.infinity, 48),
-            ),
+        // Detect Contour Button (always visible)
+        ElevatedButton.icon(
+          icon: Icon(Icons.content_cut),
+          label: Text('Detect Contour'),
+          onPressed: _isLoading || !_markersDetected || _selectedPoint == null ? null : _detectContour,
+          style: ElevatedButton.styleFrom(
+            minimumSize: Size(double.infinity, 48),
           ),
-        
-        if (_markersDetected && !_contourDetected)
-          ElevatedButton.icon(
-            icon: Icon(Icons.content_cut),
-            label: Text('Detect Contour'),
-            onPressed: _isLoading || _selectedPoint == null ? null : _detectContour,
-            style: ElevatedButton.styleFrom(
-              minimumSize: Size(double.infinity, 48),
-            ),
-          ),
-        
-        if (_contourDetected)
-          ElevatedButton.icon(
-            icon: Icon(Icons.code),
-            label: Text('Generate G-code'),
-            onPressed: _isLoading ? null : _generateGcode,
-            style: ElevatedButton.styleFrom(
-              minimumSize: Size(double.infinity, 48),
-              backgroundColor: Colors.green,
-            ),
-          ),
-        
-        // Add Debug Button
-        if (_markersDetected && _flowManager.result.markerResult?.debugImage != null)
-          ElevatedButton.icon(
-            icon: Icon(Icons.bug_report),
-            label: Text('Show Debug Image'),
-            onPressed: _showDebugImage,
-            style: ElevatedButton.styleFrom(
-              minimumSize: Size(double.infinity, 48),
-              backgroundColor: Colors.purple,
-            ),
-          ),
+        ),
         
         SizedBox(height: 8),
         
+        // Reset and Parameters buttons row
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                icon: Icon(Icons.refresh),
+                label: Text('Reset'),
+                onPressed: _isLoading ? null : _resetDetection,
+              ),
+            ),
+            SizedBox(width: 16),
+            Expanded(
+              child: ElevatedButton.icon(
+                icon: Icon(Icons.settings),
+                label: Text('Parameters'),
+                onPressed: _isLoading ? null : _showParametersDialog,
+              ),
+            ),
+          ],
+        ),
+        
+        SizedBox(height: 8),
+        
+        // Back and Continue buttons row
         Row(
           children: [
             Expanded(
@@ -472,10 +438,13 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
             ),
             SizedBox(width: 16),
             Expanded(
-              child: OutlinedButton.icon(
-                icon: Icon(Icons.refresh),
-                label: Text('Reset'),
-                onPressed: _isLoading ? null : _resetDetection,
+              child: ElevatedButton.icon(
+                icon: Icon(Icons.arrow_forward),
+                label: Text('Continue'),
+                onPressed: _isLoading || !_contourDetected ? null : _generateGcode,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _contourDetected ? Colors.green : Colors.grey,
+                ),
               ),
             ),
           ],
@@ -483,6 +452,152 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
       ],
     ),
   );
+}
+
+void _showParametersDialog() {
+  // Get values from settings
+  double edgeThreshold = widget.settings.edgeThreshold;
+  double simplificationEpsilon = widget.settings.simplificationEpsilon;
+  bool useConvexHull = widget.settings.useConvexHull;
+  
+  showDialog(
+    context: context,
+    builder: (BuildContext context) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          return AlertDialog(
+            title: Text('Detection Parameters'),
+            content: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Adjust parameters for contour detection:',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 16),
+                  
+                  // Edge Threshold Slider
+                  Text('Edge Threshold: ${edgeThreshold.round()}'),
+                  Text(
+                    'Controls edge sensitivity. Lower values detect more edges.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Slider(
+                    value: edgeThreshold,
+                    min: 10,
+                    max: 100,
+                    divisions: 18,
+                    label: edgeThreshold.round().toString(),
+                    onChanged: (value) {
+                      setState(() {
+                        edgeThreshold = value;
+                      });
+                    },
+                  ),
+                  
+                  SizedBox(height: 12),
+                  
+                  // Simplification Epsilon Slider
+                  Text('Simplification: ${simplificationEpsilon.toStringAsFixed(1)}'),
+                  Text(
+                    'Controls contour smoothness. Higher values create simpler contours.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Slider(
+                    value: simplificationEpsilon,
+                    min: 1.0,
+                    max: 10.0,
+                    divisions: 18,
+                    label: simplificationEpsilon.toStringAsFixed(1),
+                    onChanged: (value) {
+                      setState(() {
+                        simplificationEpsilon = value;
+                      });
+                    },
+                  ),
+                  
+                  SizedBox(height: 12),
+                  
+                  // Convex Hull Switch
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Use Convex Hull'),
+                          Text(
+                            'Makes contour more convex',
+                            style: TextStyle(fontSize: 12, color: Colors.grey),
+                          ),
+                        ],
+                      ),
+                      Switch(
+                        value: useConvexHull,
+                        onChanged: (value) {
+                          setState(() {
+                            useConvexHull = value;
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  // Create a copy of the settings with the updated values
+                  final updatedSettings = widget.settings.copy()
+                    ..edgeThreshold = edgeThreshold
+                    ..simplificationEpsilon = simplificationEpsilon
+                    ..useConvexHull = useConvexHull;
+                  
+                  // Save the updated settings
+                  updatedSettings.save();
+
+                  // Update the settings in the flow manager
+                  _flowManager.updateSettings(updatedSettings);
+                  
+                  // Notify the parent widget
+                  if (widget.onSettingsChanged != null) {
+                    widget.onSettingsChanged!(updatedSettings);
+                  }
+                  
+                  // Update the local settings
+                  _updateLocalSettings(updatedSettings);
+                  
+                  Navigator.of(context).pop();
+                },
+                child: Text('Apply'),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+void _updateLocalSettings(SettingsModel updatedSettings) {
+  setState(() {
+    // Update the settings in the widget
+    widget.settings.edgeThreshold = updatedSettings.edgeThreshold;
+    widget.settings.simplificationEpsilon = updatedSettings.simplificationEpsilon;
+    widget.settings.useConvexHull = updatedSettings.useConvexHull;
+    
+    // Update the settings in the flow manager
+    if (_flowManager != null) {
+      _flowManager.updateSettings(updatedSettings);
+    }
+  });
 }
 
 // Add this method to display the debug image
