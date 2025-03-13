@@ -161,12 +161,20 @@ static List<Point> findContourByRayCasting(
   img.Image binaryImage, 
   int seedX, 
   int seedY,
-  {int minSlabSize = 1000, int gapAllowedMin = 5, int gapAllowedMax = 20}
+  {
+    int minSlabSize = 1000, 
+    int gapAllowedMin = 5, 
+    int gapAllowedMax = 20,
+    int continueSearchDistance = 30
+  }
 ) {
   final width = binaryImage.width;
   final height = binaryImage.height;
-  final contourPoints = <Point>[];
+  var contourPoints = <Point>[];
   final visited = Set<String>();
+  
+  // For each angle, store the farthest edge point
+  final Map<int, Point> farthestEdgePoints = {};
   
   // Cast rays in all directions (every 5 degrees)
   for (int angle = 0; angle < 360; angle += 5) {
@@ -182,12 +190,19 @@ static List<Point> findContourByRayCasting(
     int gapSize = 0;
     bool foundEdge = false;
     Point? lastEdgePoint;
+    double lastEdgeDistance = 0;
+    double currentDistance = 0;
     
     // Cast ray until we hit the image boundary
     while (x >= 0 && x < width && y >= 0 && y < height) {
       final px = x.round();
       final py = y.round();
       final key = "$px,$py";
+      
+      // Calculate distance from seed
+      final dx = x - seedX;
+      final dy = y - seedY;
+      currentDistance = math.sqrt(dx * dx + dy * dy);
       
       // Skip if we've already visited this pixel
       if (!visited.contains(key)) {
@@ -203,19 +218,22 @@ static List<Point> findContourByRayCasting(
         if (isEdge) {
           // We found an edge pixel
           lastEdgePoint = Point(x, y);
+          lastEdgeDistance = currentDistance;
           gapSize = 0;
           foundEdge = true;
           
-          // Add the edge point to our contour
-          if (!contourPoints.contains(lastEdgePoint)) {
-            contourPoints.add(lastEdgePoint);
+          // Keep track of the farthest edge point at this angle
+          if (!farthestEdgePoints.containsKey(angle) || 
+              lastEdgeDistance > _distanceFromSeed(farthestEdgePoints[angle]!, seedX, seedY)) {
+            farthestEdgePoints[angle] = lastEdgePoint;
           }
         } else if (foundEdge) {
           // We're in a gap after finding an edge
           gapSize++;
           
           // If gap is too large, we've reached the end of this contour
-          if (gapSize > gapAllowedMax) {
+          if (gapSize > gapAllowedMax && 
+              currentDistance > lastEdgeDistance + continueSearchDistance) {
             break;
           }
         }
@@ -227,8 +245,11 @@ static List<Point> findContourByRayCasting(
     }
   }
   
+  // Use the farthest edge points to form the contour
+  contourPoints = farthestEdgePoints.values.toList();
+  
   // Post-process contour points
-  if (contourPoints.length < 10) {
+  if (contourPoints.length < 10 || _calculateArea(contourPoints) < minSlabSize) {
     return createFallbackContour(width, height, seedX, seedY);
   }
   
@@ -236,6 +257,27 @@ static List<Point> findContourByRayCasting(
   sortPointsByAngle(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
   
   return contourPoints;
+}
+
+// Add helper method to calculate distance from seed
+static double _distanceFromSeed(Point point, int seedX, int seedY) {
+  final dx = point.x - seedX;
+  final dy = point.y - seedY;
+  return math.sqrt(dx * dx + dy * dy);
+}
+
+// Add helper method to calculate contour area
+static double _calculateArea(List<Point> points) {
+  if (points.length < 3) return 0.0;
+  
+  double area = 0.0;
+  for (int i = 0; i < points.length; i++) {
+    int j = (i + 1) % points.length;
+    area += points[i].x * points[j].y;
+    area -= points[j].x * points[i].y;
+  }
+  
+  return area.abs() / 2.0;
 }
 
 /// Create a fallback contour around a seed point

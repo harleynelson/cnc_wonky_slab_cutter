@@ -469,10 +469,12 @@ void _showParametersDialog() {
   double edgeThreshold = widget.settings.edgeThreshold;
   double simplificationEpsilon = widget.settings.simplificationEpsilon;
   bool useConvexHull = widget.settings.useConvexHull;
-  
-  // New parameters to add
-  int blurRadius = 3; // Default value
-  int smoothingWindow = 5; // Default value
+  int blurRadius = widget.settings.blurRadius;
+  int smoothingWindow = widget.settings.smoothingWindowSize;
+  int minSlabSize = widget.settings.minSlabSize;
+  int gapAllowedMin = widget.settings.gapAllowedMin;
+  int gapAllowedMax = widget.settings.gapAllowedMax;
+  int continueSearchDistance = widget.settings.continueSearchDistance;
   
   showDialog(
     context: context,
@@ -513,7 +515,7 @@ void _showParametersDialog() {
                   
                   SizedBox(height: 12),
                   
-                  // Blur Radius Slider - NEW
+                  // Blur Radius Slider
                   Text('Blur Radius: $blurRadius'),
                   Text(
                     'Controls noise reduction. Higher values smooth more.',
@@ -534,7 +536,7 @@ void _showParametersDialog() {
                   
                   SizedBox(height: 12),
                   
-                  // Smoothing Window Slider - NEW
+                  // Smoothing Window Slider
                   Text('Smoothing Window: $smoothingWindow'),
                   Text(
                     'Controls contour smoothness. Higher values create smoother contours.',
@@ -549,6 +551,88 @@ void _showParametersDialog() {
                     onChanged: (value) {
                       setState(() {
                         smoothingWindow = value.round();
+                      });
+                    },
+                  ),
+                  
+                  SizedBox(height: 12),
+                  
+                  // Minimum Slab Size Slider - NEW
+                  Text('Minimum Slab Size: $minSlabSize'),
+                  Text(
+                    'Minimum area to be considered a slab.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Slider(
+                    value: minSlabSize.toDouble(),
+                    min: 100,
+                    max: 3000,
+                    divisions: 29,
+                    label: minSlabSize.toString(),
+                    onChanged: (value) {
+                      setState(() {
+                        minSlabSize = value.round();
+                      });
+                    },
+                  ),
+                  
+                  SizedBox(height: 12),
+                  
+                  // Minimum Gap Allowed Slider - NEW
+                  Text('Minimum Gap Allowed: $gapAllowedMin'),
+                  Text(
+                    'Minimum size of gap that will be bridged.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Slider(
+                    value: gapAllowedMin.toDouble(),
+                    min: 1,
+                    max: 10,
+                    divisions: 9,
+                    label: gapAllowedMin.toString(),
+                    onChanged: (value) {
+                      setState(() {
+                        gapAllowedMin = value.round();
+                      });
+                    },
+                  ),
+                  
+                  SizedBox(height: 12),
+                  
+                  // Maximum Gap Allowed Slider - NEW
+                  Text('Maximum Gap Allowed: $gapAllowedMax'),
+                  Text(
+                    'Maximum size of gap that will be bridged.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Slider(
+                    value: gapAllowedMax.toDouble(),
+                    min: 10,
+                    max: 50,
+                    divisions: 8,
+                    label: gapAllowedMax.toString(),
+                    onChanged: (value) {
+                      setState(() {
+                        gapAllowedMax = value.round();
+                      });
+                    },
+                  ),
+
+                  // Add this slider to the dialog content
+                  Text('Continue Search Distance: $continueSearchDistance'),
+                  Text(
+                    'Distance to continue searching past initial edges.',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                  Slider(
+                    value: continueSearchDistance.toDouble(),
+                    min: 0,
+                    max: 100,
+                    divisions: 20,
+                    label: continueSearchDistance.toString(),
+                    onChanged: (value) {
+                      setState(() {
+                        continueSearchDistance = value.round();
                       });
                     },
                   ),
@@ -614,25 +698,30 @@ void _showParametersDialog() {
                   final updatedSettings = widget.settings.copy()
                     ..edgeThreshold = edgeThreshold
                     ..simplificationEpsilon = simplificationEpsilon
-                    ..useConvexHull = useConvexHull;
+                    ..useConvexHull = useConvexHull
+                    ..blurRadius = blurRadius
+                    ..smoothingWindowSize = smoothingWindow
+                    ..minSlabSize = minSlabSize
+                    ..gapAllowedMin = gapAllowedMin
+                    ..gapAllowedMax = gapAllowedMax
+                    ..continueSearchDistance = continueSearchDistance;
                   
                   // Save the updated settings
                   updatedSettings.save();
 
                   // Update the flow manager's EdgeContourAlgorithm with these values
-                  {
-                    final edgeAlgorithm = EdgeContourAlgorithm(
+                  final edgeAlgorithm = EdgeContourAlgorithm(
                     generateDebugImage: true,
                     edgeThreshold: edgeThreshold,
                     useConvexHull: useConvexHull,
                     simplificationEpsilon: simplificationEpsilon,
                     blurRadius: blurRadius,
-                    smoothingWindowSize: smoothingWindow
+                    smoothingWindowSize: smoothingWindow,
+                    continueSearchDistance: continueSearchDistance,
                   );
                     
-                    // Register the updated algorithm
-                    ContourAlgorithmRegistry.registerAlgorithm(edgeAlgorithm);
-                  }
+                  // Register the updated algorithm
+                  ContourAlgorithmRegistry.registerAlgorithm(edgeAlgorithm);
                   
                   // Notify the parent widget
                   if (widget.onSettingsChanged != null) {
@@ -660,6 +749,12 @@ void _updateLocalSettings(SettingsModel updatedSettings) {
     widget.settings.edgeThreshold = updatedSettings.edgeThreshold;
     widget.settings.simplificationEpsilon = updatedSettings.simplificationEpsilon;
     widget.settings.useConvexHull = updatedSettings.useConvexHull;
+    widget.settings.blurRadius = updatedSettings.blurRadius;
+    widget.settings.smoothingWindowSize = updatedSettings.smoothingWindowSize;
+    widget.settings.minSlabSize = updatedSettings.minSlabSize;
+    widget.settings.gapAllowedMin = updatedSettings.gapAllowedMin;
+    widget.settings.gapAllowedMax = updatedSettings.gapAllowedMax;
+    widget.settings.continueSearchDistance = updatedSettings.continueSearchDistance;
     
     // Update the settings in the flow manager
     if (_flowManager != null) {

@@ -18,6 +18,9 @@ import 'contour_algorithm_interface.dart';
 
 /// Edge-based contour detection algorithm with improved consistency
 class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
+
+  final int continueSearchDistance;
+
  @override
  String get name => "Edge";
  
@@ -26,9 +29,10 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
  final bool useConvexHull;
  final double simplificationEpsilon;
  final int smoothingWindowSize;
- final bool enhanceContrast;
  final int blurRadius;
- final bool removeNoise;
+ final int minSlabSize;
+ final int gapAllowedMin;
+ final int gapAllowedMax;
 
  EdgeContourAlgorithm({
    this.generateDebugImage = true,
@@ -36,18 +40,20 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
    this.useConvexHull = true,
    this.simplificationEpsilon = 5.0,
    this.smoothingWindowSize = 5,
-   this.enhanceContrast = true,
    this.blurRadius = 3,
-   this.removeNoise = true,
+   this.minSlabSize = 1000,
+   this.gapAllowedMin = 5,
+   this.gapAllowedMax = 20,
+   this.continueSearchDistance = 30,
  });
 
  @override
-Future<SlabContourResult> detectContour(
-  img.Image image, 
-  int seedX, 
-  int seedY, 
-  MachineCoordinateSystem coordSystem
-) async {
+ Future<SlabContourResult> detectContour(
+   img.Image image, 
+   int seedX, 
+   int seedY, 
+   MachineCoordinateSystem coordSystem
+ ) async {
   // Create a fresh copy of the image
   img.Image workingImage = img.copyResize(image, width: image.width, height: image.height);
   
@@ -82,9 +88,10 @@ Future<SlabContourResult> detectContour(
       binaryEdges, 
       seedX, 
       seedY,
-      minSlabSize: 1000,
-      gapAllowedMin: 5,
-      gapAllowedMax: 20
+      minSlabSize: minSlabSize,
+      gapAllowedMin: gapAllowedMin,
+      gapAllowedMax: gapAllowedMax,
+      continueSearchDistance: continueSearchDistance
     );
     
     // 5. Apply convex hull if specified
