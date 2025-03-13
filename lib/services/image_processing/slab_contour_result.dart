@@ -4,7 +4,7 @@
 import 'dart:math' as math;
 
 import 'package:image/image.dart' as img;
-import '../gcode/machine_coordinates.dart';
+import '../../utils/general/machine_coordinates.dart';
 
 /// Result of slab contour detection
 class SlabContourResult {

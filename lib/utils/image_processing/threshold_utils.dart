@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
-import '../../services/gcode/machine_coordinates.dart';
+import '../general/machine_coordinates.dart';
 import 'base_image_utils.dart';
 
 /// Utilities for image thresholding operations

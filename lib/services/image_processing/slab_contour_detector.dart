@@ -5,7 +5,7 @@ import 'dart:async';
 import 'package:image/image.dart' as img;
 
 import '../../utils/image_processing/drawing_utils.dart';
-import '../gcode/machine_coordinates.dart';
+import '../../utils/general/machine_coordinates.dart';
 import 'slab_contour_result.dart';
 import '../../utils/image_processing/contour_detection_utils.dart';
 import '../../utils/image_processing/filter_utils.dart';

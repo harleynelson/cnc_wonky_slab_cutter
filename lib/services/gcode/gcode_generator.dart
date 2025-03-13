@@ -1,4 +1,4 @@
-import 'machine_coordinates.dart';
+import '../../utils/general/machine_coordinates.dart';
 import 'dart:math' as math;
 
 /// Class to generate G-code for CNC operations

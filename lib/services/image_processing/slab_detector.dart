@@ -10,7 +10,7 @@ import 'package:path_provider/path_provider.dart';
 import 'package:path/path.dart' as path;
 import 'package:flutter/services.dart';
 
-import '../gcode/machine_coordinates.dart';
+import '../../utils/general/machine_coordinates.dart';
 import '../gcode/gcode_generator.dart';
 import 'marker_detector.dart';
 import 'slab_contour_detector.dart';

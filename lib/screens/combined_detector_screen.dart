@@ -10,7 +10,7 @@ import 'package:image/image.dart' as img;
 
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
-import '../services/gcode/machine_coordinates.dart';
+import '../utils/general/machine_coordinates.dart';
 import '../services/image_processing/marker_detector.dart';
 import '../services/processing/processing_flow_manager.dart';
 import '../widgets/marker_overlay.dart';

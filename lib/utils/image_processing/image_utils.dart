@@ -3,7 +3,7 @@ import 'package:image/image.dart' as img;
 import 'dart:typed_data';
 import 'dart:io';
 
-import '../../services/gcode/machine_coordinates.dart';
+import '../general/machine_coordinates.dart';
 
 /// Enhanced utility class for image processing operations
 class ImageUtils {

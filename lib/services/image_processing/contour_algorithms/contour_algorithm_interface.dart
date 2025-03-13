@@ -2,7 +2,7 @@
 // Interface for contour detection algorithms
 
 import 'package:image/image.dart' as img;
-import '../../gcode/machine_coordinates.dart';
+import '../../../utils/general/machine_coordinates.dart';
 import '../slab_contour_result.dart';
 
 /// Interface for all contour detection algorithms

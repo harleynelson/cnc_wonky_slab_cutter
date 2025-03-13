@@ -1,6 +1,6 @@
 // lib/widgets/contour_overlay.dart
 import 'package:flutter/material.dart';
-import '../services/gcode/machine_coordinates.dart';
+import '../utils/general/machine_coordinates.dart';
 
 class ContourOverlay extends StatelessWidget {
   final List<Point> contourPoints;

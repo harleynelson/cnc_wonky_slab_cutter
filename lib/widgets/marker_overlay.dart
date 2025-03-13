@@ -1,6 +1,6 @@
 // lib/widgets/marker_overlay.dart
 import 'package:flutter/material.dart';
-import '../services/gcode/machine_coordinates.dart';
+import '../utils/general/machine_coordinates.dart';
 import '../services/image_processing/marker_detector.dart';
 
 class MarkerOverlay extends StatelessWidget {

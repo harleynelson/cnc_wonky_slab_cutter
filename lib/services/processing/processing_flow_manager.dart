@@ -11,7 +11,7 @@ import '../image_processing/contour_algorithms/contour_algorithm_registry.dart';
 import '../image_processing/contour_algorithms/edge_contour_algorithm.dart';
 import '../image_processing/marker_detector.dart';
 import '../image_processing/slab_contour_result.dart';
-import '../gcode/machine_coordinates.dart';
+import '../../utils/general/machine_coordinates.dart';
 import '../gcode/gcode_generator.dart';
 import '../../utils/general/error_utils.dart';
 

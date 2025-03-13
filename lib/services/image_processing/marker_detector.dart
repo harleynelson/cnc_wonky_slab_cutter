@@ -2,7 +2,7 @@ import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
-import '../gcode/machine_coordinates.dart';
+import '../../utils/general/machine_coordinates.dart';
 import '../../utils/image_processing/image_utils.dart';
 
 enum MarkerRole {
