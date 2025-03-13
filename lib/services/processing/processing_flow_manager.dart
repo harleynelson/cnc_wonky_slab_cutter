@@ -194,74 +194,81 @@ class ProcessingFlowManager with ChangeNotifier {
   
   /// Process slab contour detection using automatic method
   Future<bool> detectSlabContourAutomatic() async {
-    if (_result.markerResult == null || _result.processedImage == null) {
-      _setErrorState('Marker detection must be completed first');
-      return false;
+  if (_result.markerResult == null || _result.processedImage == null) {
+    _setErrorState('Marker detection must be completed first');
+    return false;
+  }
+  
+  try {
+    _updateState(ProcessingState.slabDetection);
+    
+    // Create coordinate system from marker detection result
+    final markerResult = _result.markerResult!;
+    final coordinateSystem = MachineCoordinateSystem.fromMarkerPointsWithDistances(
+      markerResult.markers[0].toPoint(),  // Origin
+      markerResult.markers[1].toPoint(),  // X-axis
+      markerResult.markers[2].toPoint(),  // Scale/Y-axis
+      settings.markerXDistance,
+      settings.markerYDistance
+    );
+    
+    // Initialize contour detection algorithms
+    ContourAlgorithmRegistry.initialize();
+    
+    // Use Edge contour algorithm with settings from the SettingsModel
+    final algorithm = EdgeContourAlgorithm(
+      generateDebugImage: true,
+      edgeThreshold: settings.edgeThreshold,
+      useConvexHull: settings.useConvexHull,
+      simplificationEpsilon: settings.simplificationEpsilon,
+    );
+    
+    // Estimate a seed point in the center of the image
+    final seedX = _result.processedImage!.width ~/ 2;
+    final seedY = _result.processedImage!.height ~/ 2;
+    
+    // FIXED: Use the original image from the initialization instead of the processed image
+    // which might have debug overlays from previous detection attempts
+    final originalImage = await img.decodeImage(await _result.originalImage!.readAsBytes());
+    if (originalImage == null) {
+      throw Exception('Failed to decode original image');
     }
     
-    try {
-      _updateState(ProcessingState.slabDetection);
-      
-      // Create coordinate system from marker detection result
-      final markerResult = _result.markerResult!;
-      final coordinateSystem = MachineCoordinateSystem.fromMarkerPointsWithDistances(
-        markerResult.markers[0].toPoint(),  // Origin
-        markerResult.markers[1].toPoint(),  // X-axis
-        markerResult.markers[2].toPoint(),  // Scale/Y-axis
-        settings.markerXDistance,
-        settings.markerYDistance
-      );
-      
-      // Initialize contour detection algorithms
-      ContourAlgorithmRegistry.initialize();
-      
-      // Use Edge contour algorithm with settings from the SettingsModel
-      final algorithm = EdgeContourAlgorithm(
-        generateDebugImage: true,
-        edgeThreshold: settings.edgeThreshold,
-        useConvexHull: settings.useConvexHull,
-        simplificationEpsilon: settings.simplificationEpsilon,
-      );
-      
-      // Estimate a seed point in the center of the image
-      final seedX = _result.processedImage!.width ~/ 2;
-      final seedY = _result.processedImage!.height ~/ 2;
-      
-      // Process image to detect slab contour
-      final contourResult = await algorithm.detectContour(
-        _result.processedImage!,
-        seedX,
-        seedY,
-        coordinateSystem
-      );
-      
-      // Create composite visualization image
-      final compositeImage = _createCompositeImage(
-        _result.processedImage!,
-        markerResult.debugImage,
-        contourResult.debugImage
-      );
-      
-      // Update result
-      _result = _result.copyWith(
-        contourResult: contourResult,
-        processedImage: compositeImage,
-        contourMethod: ContourDetectionMethod.automatic,
-      );
-      
-      notifyListeners();
-      return true;
-    } catch (e, stackTrace) {
-      ErrorUtils().logError(
-        'Error during automatic slab contour detection',
-        e,
-        stackTrace: stackTrace,
-        context: 'slab_detection_automatic',
-      );
-      _setErrorState('Automatic slab detection failed: ${e.toString()}');
-      return false;
-    }
+    // Process image to detect slab contour using the original image
+    final contourResult = await algorithm.detectContour(
+      originalImage,  // Changed from _result.processedImage!
+      seedX,
+      seedY,
+      coordinateSystem
+    );
+    
+    // Create composite visualization image
+    final compositeImage = _createCompositeImage(
+      originalImage,  // Changed from _result.processedImage!
+      markerResult.debugImage,
+      contourResult.debugImage
+    );
+    
+    // Update result
+    _result = _result.copyWith(
+      contourResult: contourResult,
+      processedImage: compositeImage,
+      contourMethod: ContourDetectionMethod.automatic,
+    );
+    
+    notifyListeners();
+    return true;
+  } catch (e, stackTrace) {
+    ErrorUtils().logError(
+      'Error during automatic slab contour detection',
+      e,
+      stackTrace: stackTrace,
+      context: 'slab_detection_automatic',
+    );
+    _setErrorState('Automatic slab detection failed: ${e.toString()}');
+    return false;
   }
+}
 
   /// Generate toolpath and G-code
   Future<void> generateGcode() async {
