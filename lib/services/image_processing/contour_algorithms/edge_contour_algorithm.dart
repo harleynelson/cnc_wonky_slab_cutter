@@ -221,27 +221,122 @@ List<List<bool>> _floodFillRegion(List<List<bool>> mask, int seedX, int seedY) {
   final height = mask.length;
   final width = mask[0].length;
   
-  // Result mask - start with all pixels and remove edge pixels
-  // This approach works better for wood slabs with incomplete edges
-  final result = List.generate(height, (_) => List<bool>.filled(width, true));
+  print('DEBUG: Starting flood fill from seed point ($seedX, $seedY)');
   
-  // Find edges (where mask is false) and set result to false at those locations
-  int edgeCount = 0;
+  // Create a result mask
+  final result = List.generate(height, (_) => List<bool>.filled(width, false));
+  
+  // Min size for the slab (configurable)
+  final minSlabSize = math.min(width, height) ~/ 4; // At least 1/4 of the image dimension
+  
+  // Count edge pixels in entire image
+  int totalEdgePixels = 0;
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < width; x++) {
       if (!mask[y][x]) {
-        result[y][x] = false;
-        edgeCount++;
+        totalEdgePixels++;
       }
     }
   }
   
-  print('DEBUG: Found $edgeCount edge pixels');
+  print('DEBUG: Total edge pixels: $totalEdgePixels');
   
-  // If there are very few edges, fall back to a simple box around the seed
-  if (edgeCount < 1000) {
-    print('DEBUG: Too few edges, using box fallback');
-    final boxSize = math.min(width, height) ~/ 3;
+  // If very few edges, we need to be more aggressive
+  final bool sparseEdges = totalEdgePixels < (width * height * 0.01); // Less than 1% of pixels
+  
+  // Start flood fill from seed point
+  final queue = <List<int>>[];
+  final visited = List.generate(height, (_) => List<bool>.filled(width, false));
+  
+  // Add seed point to queue
+  queue.add([seedX, seedY]);
+  visited[seedY][seedX] = true;
+  result[seedY][seedX] = true;
+  
+  // Ensure seed is within non-edge region
+  if (!mask[seedY][seedX]) {
+    // Find closest non-edge pixel to seed
+    int closestX = seedX;
+    int closestY = seedY;
+    double minDist = double.infinity;
+    
+    // Search in expanding circles
+    for (int radius = 1; radius < minSlabSize; radius++) {
+      bool found = false;
+      
+      for (int dy = -radius; dy <= radius; dy++) {
+        for (int dx = -radius; dx <= radius; dx++) {
+          // Only check points on the circle perimeter
+          if (dx.abs() + dy.abs() != radius) continue;
+          
+          final ny = seedY + dy;
+          final nx = seedX + dx;
+          
+          if (nx >= 0 && nx < width && ny >= 0 && ny < height && mask[ny][nx]) {
+            final dist = dx * dx + dy * dy;
+            if (dist < minDist) {
+              closestX = nx;
+              closestY = ny;
+              minDist = dist as double;
+              found = true;
+            }
+          }
+        }
+      }
+      
+      if (found) {
+        print('DEBUG: Adjusted seed point from ($seedX, $seedY) to ($closestX, $closestY)');
+        queue.clear();
+        queue.add([closestX, closestY]);
+        visited[closestY][closestX] = true;
+        result[closestY][closestX] = true;
+        break;
+      }
+    }
+  }
+  
+  // 8-connected neighbors for better connectivity
+  final dx = [1, 1, 0, -1, -1, -1, 0, 1];
+  final dy = [0, 1, 1, 1, 0, -1, -1, -1];
+  
+  // Flood fill
+  int filledPixels = 0;
+  final int maxPixels = width * height; // Cap to prevent excessive growth
+  
+  while (queue.isNotEmpty && filledPixels < maxPixels) {
+    final point = queue.removeAt(0);
+    final x = point[0];
+    final y = point[1];
+    
+    // Mark as filled
+    result[y][x] = true;
+    filledPixels++;
+    
+    // Check neighbors
+    for (int i = 0; i < 8; i++) {
+      final nx = x + dx[i];
+      final ny = y + dy[i];
+      
+      if (nx < 0 || nx >= width || ny < 0 || ny >= height || visited[ny][nx]) {
+        continue;
+      }
+      
+      // In sparse edge cases, be more lenient with what we consider part of the slab
+      if (mask[ny][nx] || sparseEdges) {
+        visited[ny][nx] = true;
+        queue.add([nx, ny]);
+      }
+    }
+  }
+  
+  print('DEBUG: Flood filled $filledPixels pixels');
+  
+  // Check if we found a large enough region
+  if (filledPixels < minSlabSize * minSlabSize) {
+    print('DEBUG: Flood fill region too small, using box around seed point');
+    
+    // Create a box around the seed point
+    final boxSize = minSlabSize;
     final left = math.max(0, seedX - boxSize);
     final right = math.min(width - 1, seedX + boxSize);
     final top = math.max(0, seedY - boxSize);
