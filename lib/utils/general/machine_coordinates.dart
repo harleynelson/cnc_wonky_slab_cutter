@@ -33,25 +33,22 @@ class MachineCoordinateSystem {
 
   /// Convert a point from image coordinates to display (canvas) coordinates
 static Point imageToDisplayCoordinates(Point imagePoint, Size imageSize, Size displaySize) {
-  // Calculate scale and offset - maintain aspect ratio
   final imageAspect = imageSize.width / imageSize.height;
   final displayAspect = displaySize.width / displaySize.height;
   
   double displayWidth, displayHeight, offsetX = 0, offsetY = 0;
   
   if (imageAspect > displayAspect) {
-    // Image is wider than display (letterboxed)
     displayWidth = displaySize.width;
     displayHeight = displaySize.width / imageAspect;
     offsetY = (displaySize.height - displayHeight) / 2;
+    // Remove any hardcoded offset correction
   } else {
-    // Image is taller than display (pillarboxed)
     displayHeight = displaySize.height;
     displayWidth = displaySize.height * imageAspect;
     offsetX = (displaySize.width - displayWidth) / 2;
   }
   
-  // Calculate display coordinates - normalized then scaled
   final normalizedX = imagePoint.x / imageSize.width;
   final normalizedY = imagePoint.y / imageSize.height;
   
@@ -75,9 +72,9 @@ static Point displayToImageCoordinates(Point displayPoint, Size imageSize, Size 
     displayHeight = displaySize.width / imageAspect;
     offsetY = (displaySize.height - displayHeight) / 2;
     
-    // Apply the same correction as in combined_detector_screen.dart and imageToDisplayCoordinates
-    final offsetCorrection = 85.5; // 92.5 - a7.0
-    offsetY = offsetY - offsetCorrection;
+    // Remove hardcoded correction
+    // final offsetCorrection = 85.5; // 92.5 - a7.0
+    // offsetY = offsetY - offsetCorrection;
   } else {
     // Image is taller than display (pillarboxed)
     displayHeight = displaySize.height;

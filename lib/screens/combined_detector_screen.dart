@@ -205,40 +205,33 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   }
   
   Point _calculateImagePoint(Offset tapPosition) {
-    //TODO:  Look into all the hard coding for container sizes and offset corrections.  I feel like this could screw us at some point
   if (_imageSize == null) {
     return Point(0, 0);
   }
   
-  final imageContainer = context.findRenderObject() as RenderBox;
-  final containerSize = Size(
-    imageContainer.size.width,
-    imageContainer.size.height - 100, // Account for status bar and buttons
-  );
+  // Get the direct parent render object of the image
+  final RenderBox imageContainer = context.findRenderObject() as RenderBox;
   
-  // Calculate how the image is displayed
+  // Get the overlay's container size - this is crucial
+  final markerOverlaySize = Size(imageContainer.size.width, 438.0); // Match overlay's canvas size
+  
+  print('DEBUG: Tap position: ${tapPosition.dx}x${tapPosition.dy}');
+  print('DEBUG: Using overlay size: ${markerOverlaySize.width}x${markerOverlaySize.height}');
+  
+  // Use the same logic as in imageToDisplayCoordinates but in reverse
   final imageAspect = _imageSize!.width / _imageSize!.height;
-  final containerAspect = containerSize.width / containerSize.height;
+  final displayAspect = markerOverlaySize.width / markerOverlaySize.height;
   
   double displayWidth, displayHeight, offsetX = 0, offsetY = 0;
   
-  if (imageAspect > containerAspect) {
-    // Image is wider than container (letterboxed)
-    displayWidth = containerSize.width;
-    displayHeight = containerSize.width / imageAspect;
-    // The key fix - use a relative offset calculation
-    offsetY = (containerSize.height - displayHeight) / 2;
-    
-    // Critical correction - compensate for the different container contexts
-    // The overlay uses 7.0 offset vs our 92.5
-    final offsetCorrection = 85.5; // 92.5 - 7.0
-    offsetY = offsetY - offsetCorrection;
+  if (imageAspect > displayAspect) {
+    displayWidth = markerOverlaySize.width;
+    displayHeight = displayWidth / imageAspect;
+    offsetY = (markerOverlaySize.height - displayHeight) / 2;
   } else {
-    // Image is taller than container (pillarboxed)
-    // Similar fix would apply here if needed
-    displayHeight = containerSize.height;
-    displayWidth = containerSize.height * imageAspect;
-    offsetX = (containerSize.width - displayWidth) / 2;
+    displayHeight = markerOverlaySize.height;
+    displayWidth = displayHeight * imageAspect;
+    offsetX = (markerOverlaySize.width - displayWidth) / 2;
   }
   
   // Scale factors
@@ -249,10 +242,9 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   final imageX = (tapPosition.dx - offsetX) * scaleX;
   final imageY = (tapPosition.dy - offsetY) * scaleY;
   
-  // Debugging
-  print('DEBUG: Corrected offsetY: $offsetY');
-  print('DEBUG: Scale factors: $scaleX x $scaleY');
-  print('DEBUG: Calculated image point: ${imageX}x${imageY}');
+  print('DEBUG: Display size: ${displayWidth}x${displayHeight} with offset (${offsetX},${offsetY})');
+  print('DEBUG: Scale factors: ${scaleX}x${scaleY}');
+  print('DEBUG: Tap at (${tapPosition.dx},${tapPosition.dy}) → Image (${imageX},${imageY})');
   
   return Point(imageX, imageY);
 }
