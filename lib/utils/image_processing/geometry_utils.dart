@@ -24,66 +24,66 @@ class GeometryUtils {
     return dx * dx + dy * dy;
   }
   
-  /// Calculate the angle between two points in radians
-  static double angleBetween(Point center, Point point) {
-    return math.atan2(point.y - center.y, point.x - center.x);
-  }
+  // /// Calculate the angle between two points in radians
+  // static double angleBetween(Point center, Point point) {
+  //   return math.atan2(point.y - center.y, point.x - center.x);
+  // }
   
-  /// Calculate the angle between three points in radians
-  static double angleBetweenThreePoints(Point p1, Point p2, Point p3) {
-    final a = squaredDistance(p2, p3);
-    final b = squaredDistance(p1, p3);
-    final c = squaredDistance(p1, p2);
+  // /// Calculate the angle between three points in radians
+  // static double angleBetweenThreePoints(Point p1, Point p2, Point p3) {
+  //   final a = squaredDistance(p2, p3);
+  //   final b = squaredDistance(p1, p3);
+  //   final c = squaredDistance(p1, p2);
     
-    // Use law of cosines
-    return math.acos((a + c - b) / (2 * math.sqrt(a) * math.sqrt(c)));
-  }
+  //   // Use law of cosines
+  //   return math.acos((a + c - b) / (2 * math.sqrt(a) * math.sqrt(c)));
+  // }
   
-  /// Calculate the midpoint between two points
-  static Point midpoint(Point p1, Point p2) {
-    return Point(
-      (p1.x + p2.x) / 2,
-      (p1.y + p2.y) / 2,
-    );
-  }
+  // /// Calculate the midpoint between two points
+  // static Point midpoint(Point p1, Point p2) {
+  //   return Point(
+  //     (p1.x + p2.x) / 2,
+  //     (p1.y + p2.y) / 2,
+  //   );
+  // }
   
-  /// Interpolate between two points
-  static Point interpolate(Point p1, Point p2, double t) {
-    return Point(
-      p1.x + (p2.x - p1.x) * t,
-      p1.y + (p2.y - p1.y) * t,
-    );
-  }
+  // /// Interpolate between two points
+  // static Point interpolate(Point p1, Point p2, double t) {
+  //   return Point(
+  //     p1.x + (p2.x - p1.x) * t,
+  //     p1.y + (p2.y - p1.y) * t,
+  //   );
+  // }
   
-  /// Calculate the scalar projection of vector a onto vector b
-  static double scalarProjection(Point a, Point b) {
-    return (a.x * b.x + a.y * b.y) / math.sqrt(b.x * b.x + b.y * b.y);
-  }
+  // /// Calculate the scalar projection of vector a onto vector b
+  // static double scalarProjection(Point a, Point b) {
+  //   return (a.x * b.x + a.y * b.y) / math.sqrt(b.x * b.x + b.y * b.y);
+  // }
   
-  /// Check if a point is inside a rectangle
-  static bool isPointInRectangle(Point point, Point topLeft, Point bottomRight) {
-    return point.x >= topLeft.x && 
-           point.x <= bottomRight.x && 
-           point.y >= topLeft.y && 
-           point.y <= bottomRight.y;
-  }
+  // /// Check if a point is inside a rectangle
+  // static bool isPointInRectangle(Point point, Point topLeft, Point bottomRight) {
+  //   return point.x >= topLeft.x && 
+  //          point.x <= bottomRight.x && 
+  //          point.y >= topLeft.y && 
+  //          point.y <= bottomRight.y;
+  // }
   
-  /// Check if a point is inside a circle
-  static bool isPointInCircle(Point point, Point center, double radius) {
-    return squaredDistance(point, center) <= radius * radius;
-  }
+  // /// Check if a point is inside a circle
+  // static bool isPointInCircle(Point point, Point center, double radius) {
+  //   return squaredDistance(point, center) <= radius * radius;
+  // }
   
-  /// Calculate the perpendicular distance from a point to a line
-  static double distancePointToLine(Point point, Point lineStart, Point lineEnd) {
-    // Line equation: Ax + By + C = 0
-    // A = y2 - y1, B = x1 - x2, C = x2*y1 - x1*y2
-    final A = lineEnd.y - lineStart.y;
-    final B = lineStart.x - lineEnd.x;
-    final C = lineEnd.x * lineStart.y - lineStart.x * lineEnd.y;
+  // /// Calculate the perpendicular distance from a point to a line
+  // static double distancePointToLine(Point point, Point lineStart, Point lineEnd) {
+  //   // Line equation: Ax + By + C = 0
+  //   // A = y2 - y1, B = x1 - x2, C = x2*y1 - x1*y2
+  //   final A = lineEnd.y - lineStart.y;
+  //   final B = lineStart.x - lineEnd.x;
+  //   final C = lineEnd.x * lineStart.y - lineStart.x * lineEnd.y;
     
-    // Distance = |Ax + By + C| / sqrt(A^2 + B^2)
-    return (A * point.x + B * point.y + C).abs() / math.sqrt(A * A + B * B);
-  }
+  //   // Distance = |Ax + By + C| / sqrt(A^2 + B^2)
+  //   return (A * point.x + B * point.y + C).abs() / math.sqrt(A * A + B * B);
+  // }
 
   /// Simplify a polygon using the Douglas-Peucker algorithm
   static List<Point> simplifyPolygon(List<Point> points, double epsilon, {int maxDepth = 100}) {
@@ -194,71 +194,71 @@ class GeometryUtils {
     return true;
   }
   
-  /// Find the closest point on a line segment to a given point
-  static Point closestPointOnLineSegment(Point point, Point lineStart, Point lineEnd) {
-    // Calculate direction vector of the line
-    final dx = lineEnd.x - lineStart.x;
-    final dy = lineEnd.y - lineStart.y;
+  // /// Find the closest point on a line segment to a given point
+  // static Point closestPointOnLineSegment(Point point, Point lineStart, Point lineEnd) {
+  //   // Calculate direction vector of the line
+  //   final dx = lineEnd.x - lineStart.x;
+  //   final dy = lineEnd.y - lineStart.y;
     
-    // Calculate squared length of the line segment
-    final lineLength = dx * dx + dy * dy;
+  //   // Calculate squared length of the line segment
+  //   final lineLength = dx * dx + dy * dy;
     
-    if (lineLength.abs() < 1e-10) {
-      // Line segment is a point
-      return lineStart;
-    }
+  //   if (lineLength.abs() < 1e-10) {
+  //     // Line segment is a point
+  //     return lineStart;
+  //   }
     
-    // Calculate projection of the point vector onto the line vector
-    final t = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / lineLength;
+  //   // Calculate projection of the point vector onto the line vector
+  //   final t = ((point.x - lineStart.x) * dx + (point.y - lineStart.y) * dy) / lineLength;
     
-    if (t < 0) {
-      // Closest point is line start
-      return lineStart;
-    } else if (t > 1) {
-      // Closest point is line end
-      return lineEnd;
-    } else {
-      // Closest point is on the line segment
-      return Point(
-        lineStart.x + t * dx,
-        lineStart.y + t * dy,
-      );
-    }
-  }
+  //   if (t < 0) {
+  //     // Closest point is line start
+  //     return lineStart;
+  //   } else if (t > 1) {
+  //     // Closest point is line end
+  //     return lineEnd;
+  //   } else {
+  //     // Closest point is on the line segment
+  //     return Point(
+  //       lineStart.x + t * dx,
+  //       lineStart.y + t * dy,
+  //     );
+  //   }
+  // }
   
-  /// Rotate a point around another point
-  static Point rotatePoint(Point point, Point center, double angle) {
-    // Translate to origin
-    final x = point.x - center.x;
-    final y = point.y - center.y;
+  // /// Rotate a point around another point
+  // static Point rotatePoint(Point point, Point center, double angle) {
+  //   // Translate to origin
+  //   final x = point.x - center.x;
+  //   final y = point.y - center.y;
     
-    // Rotate
-    final xRot = x * math.cos(angle) - y * math.sin(angle);
-    final yRot = x * math.sin(angle) + y * math.cos(angle);
+  //   // Rotate
+  //   final xRot = x * math.cos(angle) - y * math.sin(angle);
+  //   final yRot = x * math.sin(angle) + y * math.cos(angle);
     
-    // Translate back
-    return Point(
-      xRot + center.x,
-      yRot + center.y,
-    );
-  }
+  //   // Translate back
+  //   return Point(
+  //     xRot + center.x,
+  //     yRot + center.y,
+  //   );
+  // }
   
-  /// Scale a point around another point
-  static Point scalePoint(Point point, Point center, double scale) {
-    // Translate to origin
-    final x = point.x - center.x;
-    final y = point.y - center.y;
+  // /// Scale a point around another point
+  // static Point scalePoint(Point point, Point center, double scale) {
+  //   // Translate to origin
+  //   final x = point.x - center.x;
+  //   final y = point.y - center.y;
     
-    // Scale
-    final xScaled = x * scale;
-    final yScaled = y * scale;
+  //   // Scale
+  //   final xScaled = x * scale;
+  //   final yScaled = y * scale;
     
-    // Translate back
-    return Point(
-      xScaled + center.x,
-      yScaled + center.y,
-    );
-  }
+  //   // Translate back
+  //   return Point(
+  //     xScaled + center.x,
+  //     yScaled + center.y,
+  //   );
+  // }
   
   /// Calculate the intersection point of two lines
   static Point? lineIntersection(Point line1Start, Point line1End, Point line2Start, Point line2End) {
@@ -299,11 +299,6 @@ class GeometryUtils {
     return null;
   }
   
-  /// Calculate the area of a triangle
-  static double triangleArea(Point p1, Point p2, Point p3) {
-    return 0.5 * ((p2.x - p1.x) * (p3.y - p1.y) - (p3.x - p1.x) * (p2.y - p1.y)).abs();
-  }
-  
   /// Calculate the area of a polygon
   static double polygonArea(List<Point> points) {
     if (points.length < 3) return 0.0;
@@ -320,89 +315,6 @@ class GeometryUtils {
     return area.abs() / 2.0;
   }
   
-  /// Calculate the centroid of a polygon
-  static Point polygonCentroid(List<Point> points) {
-    if (points.length < 3) {
-      return _calculateAveragePoint(points);
-    }
-    
-    double cx = 0.0;
-    double cy = 0.0;
-    double area = 0.0;
-    
-    // Calculate centroid using shoelace formula
-    for (int i = 0; i < points.length; i++) {
-      final j = (i + 1) % points.length;
-      final p1 = points[i];
-      final p2 = points[j];
-      final cross = p1.x * p2.y - p2.x * p1.y;
-      
-      cx += (p1.x + p2.x) * cross;
-      cy += (p1.y + p2.y) * cross;
-      area += cross;
-    }
-    
-    area /= 2.0;
-    
-    if (area.abs() < 1e-10) {
-      // If area is too small, just average the points
-      return _calculateAveragePoint(points);
-    }
-    
-    cx /= 6.0 * area;
-    cy /= 6.0 * area;
-    
-    return Point(cx, cy);
-  }
-  
-  /// Calculate average of points
-  static Point _calculateAveragePoint(List<Point> points) {
-    if (points.isEmpty) return Point(0, 0);
-    
-    double sumX = 0;
-    double sumY = 0;
-    
-    for (final point in points) {
-      sumX += point.x;
-      sumY += point.y;
-    }
-    
-    return Point(sumX / points.length, sumY / points.length);
-  }
-  
-  /// Check if a polygon is convex
-  static bool isPolygonConvex(List<Point> points) {
-    if (points.length < 3) return false;
-    
-    bool sign = false;
-    bool signSet = false;
-    
-    for (int i = 0; i < points.length; i++) {
-      final j = (i + 1) % points.length;
-      final k = (i + 2) % points.length;
-      
-      final dx1 = points[j].x - points[i].x;
-      final dy1 = points[j].y - points[i].y;
-      final dx2 = points[k].x - points[j].x;
-      final dy2 = points[k].y - points[j].y;
-      
-      final crossProduct = dx1 * dy2 - dy1 * dx2;
-      
-      // Set sign on first iteration
-      if (!signSet) {
-        sign = crossProduct > 0;
-        signSet = true;
-      } else {
-        // If sign changes, the polygon is not convex
-        if ((crossProduct > 0) != sign) {
-          return false;
-        }
-      }
-    }
-    
-    return true;
-  }
-  
   /// Calculate the perimeter of a polygon
   static double polygonPerimeter(List<Point> points) {
     if (points.length < 2) return 0.0;
@@ -415,37 +327,6 @@ class GeometryUtils {
     }
     
     return perimeter;
-  }
-  
-  /// Check if two polygons intersect
-  static bool doPolygonsIntersect(List<Point> polygon1, List<Point> polygon2) {
-    // Check if any point of one polygon is inside the other
-    for (final point in polygon1) {
-      if (isPointInPolygon(point, polygon2)) {
-        return true;
-      }
-    }
-    
-    for (final point in polygon2) {
-      if (isPointInPolygon(point, polygon1)) {
-        return true;
-      }
-    }
-    
-    // Check if any line segments intersect
-    for (int i = 0; i < polygon1.length; i++) {
-      final j = (i + 1) % polygon1.length;
-      
-      for (int k = 0; k < polygon2.length; k++) {
-        final l = (k + 1) % polygon2.length;
-        
-        if (lineSegmentIntersection(polygon1[i], polygon1[j], polygon2[k], polygon2[l]) != null) {
-          return true;
-        }
-      }
-    }
-    
-    return false;
   }
   
   /// Check if a point is inside a polygon
@@ -521,45 +402,6 @@ class GeometryUtils {
   /// Cross product for determining counter-clockwise orientation
   static double _ccw(Point a, Point b, Point c) {
     return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-  }
-  
-  /// Generate a circle of points
-  static List<Point> generateCirclePoints(Point center, double radius, int numPoints) {
-    final points = <Point>[];
-    
-    for (int i = 0; i < numPoints; i++) {
-      final angle = 2 * math.pi * i / numPoints;
-      final x = center.x + radius * math.cos(angle);
-      final y = center.y + radius * math.sin(angle);
-      points.add(Point(x, y));
-    }
-    
-    return points;
-  }
-  
-  /// Generate a rectangle of points
-  static List<Point> generateRectanglePoints(Point topLeft, Point bottomRight) {
-    return [
-      topLeft,
-      Point(bottomRight.x, topLeft.y),
-      bottomRight,
-      Point(topLeft.x, bottomRight.y),
-      topLeft, // Close the rectangle
-    ];
-  }
-  
-  /// Generate a regular polygon
-  static List<Point> generateRegularPolygon(Point center, double radius, int sides) {
-    final points = <Point>[];
-    
-    for (int i = 0; i <= sides; i++) {
-      final angle = 2 * math.pi * i / sides;
-      final x = center.x + radius * math.cos(angle);
-      final y = center.y + radius * math.sin(angle);
-      points.add(Point(x, y));
-    }
-    
-    return points;
   }
   
   /// Calculate the bounding box of a set of points
