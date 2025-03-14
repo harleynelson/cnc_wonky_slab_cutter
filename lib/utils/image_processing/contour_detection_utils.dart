@@ -156,7 +156,7 @@ static List<Point> _createFallbackContour(int width, int height) {
     return applyDilation(eroded, kernelSize);
   }
 
-  /// Find contour using ray casting from a seed point with improved edge detection
+  /// Find contour using ray casting with edge-based re-seeding for complex shapes
 static List<Point> findContourByRayCasting(
   img.Image binaryImage, 
   int seedX, 
@@ -166,18 +166,137 @@ static List<Point> findContourByRayCasting(
     int gapAllowedMin = 5, 
     int gapAllowedMax = 20,
     int continueSearchDistance = 30,
-    double angularStep = 2.0 // Reduced from 5 degrees to 2 for better corner detection
+    double angularStep = 2.0,
+    bool enableReseeding = true,
+    int maxReseedPoints = 5,
+    double curveThreshold = 45.0, // degrees
+    double gapThreshold = 20.0 // pixels
   }
 ) {
   final width = binaryImage.width;
   final height = binaryImage.height;
-  var contourPoints = <Point>[];
+
+  
+  
+  // PHASE 1: Initial ray casting from seed point
+  var contourPoints = _castRaysFromPoint(
+    binaryImage, 
+    seedX, 
+    seedY, 
+    angularStep,
+    gapAllowedMin,
+    gapAllowedMax,
+    continueSearchDistance
+  );
+  
+  // Apply initial filtering to remove obvious outliers
+  contourPoints = _rejectDistanceOutliers(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
+  
+  // Sort by angle for consistent ordering
+  sortPointsByAngle(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
+  
+  // PHASE 2: Identify areas needing additional ray casting
+  if (enableReseeding && contourPoints.length >= 10) {
+    final reseedPoints = <Map<String, dynamic>>[];
+    
+    // Find potential areas for reseeding
+    for (int i = 0; i < contourPoints.length; i++) {
+      final prev = contourPoints[(i - 1 + contourPoints.length) % contourPoints.length];
+      final curr = contourPoints[i];
+      final next = contourPoints[(i + 1) % contourPoints.length];
+      
+      // Calculate angle change at this point
+      final angle = _calculateAngleChange(prev, curr, next);
+      
+      // Calculate gap size to next point
+      final gapSize = curr.distanceTo(next);
+      
+      // If sharp angle or large gap, mark for reseeding
+      if (angle > curveThreshold || gapSize > gapThreshold) {
+        reseedPoints.add({
+          'point': curr,
+          'reason': angle > curveThreshold ? 'angle' : 'gap',
+          'value': angle > curveThreshold ? angle : gapSize,
+          'index': i
+        });
+      }
+    }
+    
+    // Sort by importance (higher angle or gap size first)
+    reseedPoints.sort((a, b) => b['value'].compareTo(a['value']));
+    
+    // Limit number of reseed points
+    final limitedReseedPoints = reseedPoints.take(maxReseedPoints).toList();
+
+    
+    
+    // PHASE 3: Perform additional ray casting from strategic points
+    if (limitedReseedPoints.isNotEmpty) {
+      final newPoints = <Point>[];
+      
+      for (final reseedData in limitedReseedPoints) {
+        final reseedPoint = reseedData['point'] as Point;
+        
+        // Calculate direction for reseeding based on reason
+        int reseedX = reseedPoint.x.round();
+        int reseedY = reseedPoint.y.round();
+
+        if (isPixelInBounds(binaryImage, reseedX, reseedY)) {
+  // Cast rays from the reseed point
+  final additionalPoints = _castRaysFromEdge(
+    binaryImage,
+    reseedX,
+    reseedY,
+    angularStep * 2,
+    gapAllowedMin,
+    gapAllowedMax,
+    continueSearchDistance,
+    seedX,
+    seedY
+  );
+  newPoints.addAll(additionalPoints);
+}}
+      
+      // PHASE 4: Merge original and new points
+      contourPoints.addAll(newPoints);
+      
+      // Filter and sort the combined points
+      contourPoints = _rejectDistanceOutliers(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
+      contourPoints = _enforceNeighborhoodConsistency(contourPoints);
+      sortPointsByAngle(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
+    }
+  }
+  
+  // Final check for minimum size
+  if (contourPoints.length < 40 || _calculateArea(contourPoints) < minSlabSize) {
+    return createFallbackContour(width, height, seedX, seedY);
+  }
+  
+  return contourPoints;
+}
+
+// Add this helper method to the ContourDetectionUtils class
+static bool isPixelInBounds(img.Image image, int x, int y) {
+  return x >= 0 && x < image.width && y >= 0 && y < image.height;
+}
+
+
+/// Cast rays from a specific point with improved bounds checking
+static List<Point> _castRaysFromPoint(
+  img.Image binaryImage,
+  int seedX,
+  int seedY,
+  double angularStep,
+  int gapAllowedMin,
+  int gapAllowedMax,
+  int continueSearchDistance
+) {
+  final width = binaryImage.width;
+  final height = binaryImage.height;
   final visited = Set<String>();
+  final Map<double, Point> farthestEdgePoints = {};
   
-  // For each angle, store the farthest edge point
-  final Map<double, Point> farthestEdgePoints = {}; // Changed to double for finer angles
-  
-  // Cast rays in all directions with finer angular resolution
+  // Cast rays in all directions
   for (double angle = 0; angle < 360; angle += angularStep) {
     final radians = angle * math.pi / 180;
     final dirX = math.cos(radians);
@@ -187,14 +306,12 @@ static List<Point> findContourByRayCasting(
     double x = seedX.toDouble();
     double y = seedY.toDouble();
     
-    // Tracks if we're in a gap
+    // Tracking variables
     int gapSize = 0;
     bool foundEdge = false;
     Point? lastEdgePoint;
     double lastEdgeDistance = 0;
     double currentDistance = 0;
-    
-    // Track all edge points found along this ray
     List<Point> edgePointsOnRay = [];
     
     // Cast ray until we hit the image boundary
@@ -212,32 +329,35 @@ static List<Point> findContourByRayCasting(
       if (!visited.contains(key)) {
         visited.add(key);
         
-        // Check if this is an edge pixel (white/bright in binary image)
-        final pixel = binaryImage.getPixel(px, py);
-        final luminance = BaseImageUtils.calculateLuminance(
-          pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
-        );
-        final isEdge = luminance > 128;
-        
-        if (isEdge) {
-          // We found an edge pixel
-          lastEdgePoint = Point(x, y);
-          lastEdgeDistance = currentDistance;
-          edgePointsOnRay.add(lastEdgePoint);
-          gapSize = 0;
-          foundEdge = true;
-        } else if (foundEdge) {
-          // We're in a gap after finding an edge
-          gapSize++;
-          
-          // If gap is too large, check if we should continue searching
-          if (gapSize > gapAllowedMax) {
-            // Don't immediately stop - continue for continueSearchDistance 
-            // to see if there are more edges further out
-            if (currentDistance > lastEdgeDistance + continueSearchDistance) {
-              break;
+        try {
+          // Check if this is an edge pixel (with bounds checking)
+          if (px >= 0 && px < width && py >= 0 && py < height) {
+            final pixel = binaryImage.getPixel(px, py);
+            final luminance = BaseImageUtils.calculateLuminance(
+              pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+            );
+            final isEdge = luminance > 128;
+            
+            if (isEdge) {
+              lastEdgePoint = Point(x, y);
+              lastEdgeDistance = currentDistance;
+              edgePointsOnRay.add(lastEdgePoint);
+              gapSize = 0;
+              foundEdge = true;
+            } else if (foundEdge) {
+              gapSize++;
+              
+              if (gapSize > gapAllowedMax) {
+                if (currentDistance > lastEdgeDistance + continueSearchDistance) {
+                  break;
+                }
+              }
             }
           }
+        } catch (e) {
+          // If any error occurs (like bounds error), break the ray
+          print('Error in ray casting: $e');
+          break;
         }
       }
       
@@ -246,52 +366,170 @@ static List<Point> findContourByRayCasting(
       y += dirY;
     }
     
-    // Process the edge points found on this ray
+    // Process edge points on this ray
     if (edgePointsOnRay.isNotEmpty) {
-      // Find the farthest valid edge point
       Point farthestPoint = edgePointsOnRay.first;
       double maxDistance = _distanceFromSeed(farthestPoint, seedX, seedY);
       
       for (int i = 1; i < edgePointsOnRay.length; i++) {
         final point = edgePointsOnRay[i];
         final distance = _distanceFromSeed(point, seedX, seedY);
-        
-        // Check if this point is within a valid distance from the previous farthest
         final prevDistance = _distanceFromSeed(farthestPoint, seedX, seedY);
         
-        // If this point is significantly farther (more than continueSearchDistance), 
-        // it might be an outer edge we want to consider
         if (distance > prevDistance && 
-            (distance - prevDistance < continueSearchDistance * 2 || // Normal progression
-             i == edgePointsOnRay.length - 1)) { // Or last point on ray
+            (distance - prevDistance < continueSearchDistance * 2 || 
+             i == edgePointsOnRay.length - 1)) {
           farthestPoint = point;
           maxDistance = distance;
         }
       }
       
-      // Store the farthest edge point for this angle
       farthestEdgePoints[angle] = farthestPoint;
     }
   }
   
-  // Use the farthest edge points to form the contour
-  contourPoints = farthestEdgePoints.values.toList();
+  return farthestEdgePoints.values.toList();
+}
+
+/// Cast rays from an edge point, primarily looking outward
+static List<Point> _castRaysFromEdge(
+  img.Image binaryImage,
+  int edgeX,
+  int edgeY,
+  double angularStep,
+  int gapAllowedMin,
+  int gapAllowedMax,
+  int continueSearchDistance,
+  int originalSeedX,
+  int originalSeedY
+) {
+  final width = binaryImage.width;
+  final height = binaryImage.height;
+  final visited = Set<String>();
+  final Map<double, Point> edgePoints = {};
   
-  // Reject outliers based on distance consistency
-  contourPoints = _rejectDistanceOutliers(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
+  // Calculate vector from original seed to edge point
+  final seedToEdgeX = edgeX - originalSeedX;
+  final seedToEdgeY = edgeY - originalSeedY;
+  final baseAngle = math.atan2(seedToEdgeY, seedToEdgeX) * 180 / math.pi;
   
-  // Check neighborhood consistency
-  contourPoints = _enforceNeighborhoodConsistency(contourPoints);
-  
-  // Post-process contour points
-  if (contourPoints.length < 40 || _calculateArea(contourPoints) < minSlabSize) {
-    return createFallbackContour(width, height, seedX, seedY);
+  // Cast rays primarily in the outward direction and sides
+  // Range is 180 degrees centered on the outward direction
+  for (double angleOffset = -90; angleOffset <= 90; angleOffset += angularStep) {
+    final angle = (baseAngle + angleOffset) % 360;
+    final radians = angle * math.pi / 180;
+    final dirX = math.cos(radians);
+    final dirY = math.sin(radians);
+    
+    // Start from edge point
+    double x = edgeX.toDouble();
+    double y = edgeY.toDouble();
+    
+    // Similar tracking variables as the main ray casting
+    int gapSize = 0;
+    bool foundEdge = false;
+    Point? lastEdgePoint;
+    double lastEdgeDistance = 0;
+    double currentDistance = 0;
+    List<Point> edgePointsOnRay = [];
+    
+    // First move a bit in the ray direction to avoid detecting the starting edge
+    x += dirX * 3;
+    y += dirY * 3;
+    
+    // Cast ray until we hit the image boundary
+    while (x >= 0 && x < width && y >= 0 && y < height) {
+      final px = x.round();
+      final py = y.round();
+      final key = "$px,$py";
+      
+      // Calculate distance from edge point
+      final dx = x - edgeX;
+      final dy = y - edgeY;
+      currentDistance = math.sqrt(dx * dx + dy * dy);
+      
+      if (!visited.contains(key)) {
+        visited.add(key);
+        
+        final luminance = getLuminance(binaryImage, px, py);
+        final isEdge = luminance > 128;
+        
+        if (isEdge) {
+          lastEdgePoint = Point(x, y);
+          lastEdgeDistance = currentDistance;
+          edgePointsOnRay.add(lastEdgePoint);
+          gapSize = 0;
+          foundEdge = true;
+        } else if (foundEdge) {
+          gapSize++;
+          
+          if (gapSize > gapAllowedMax) {
+            if (currentDistance > lastEdgeDistance + continueSearchDistance) {
+              break;
+            }
+          }
+        }
+      }
+      
+      x += dirX;
+      y += dirY;
+    }
+    
+    // Similar processing as main ray casting
+    if (edgePointsOnRay.isNotEmpty) {
+      Point bestPoint = edgePointsOnRay.first;
+      
+      // For edge reseeding, prefer points that form good continuations of the contour
+      for (int i = 1; i < edgePointsOnRay.length; i++) {
+        // For reseeding points, we may use different criteria to select the best point
+        // This could be extended with more sophisticated logic if needed
+        bestPoint = edgePointsOnRay[i];
+      }
+      
+      edgePoints[angle] = bestPoint;
+    }
   }
   
-  // Sort contour points by their angle from the center for a consistent order
-  sortPointsByAngle(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
+  return edgePoints.values.toList();
+}
+
+
+static int getLuminance(img.Image image, int x, int y) {
+  if (!isPixelInBounds(image, x, y)) {
+    return 0; // Default to black (not edge) for out-of-bounds
+  }
+  try {
+    final pixel = image.getPixel(x, y);
+    return BaseImageUtils.calculateLuminance(
+      pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+    );
+  } catch (e) {
+    print('Error accessing pixel at ($x,$y): $e');
+    return 0;
+  }
+}
+
+/// Calculate the angle change (in degrees) at a point on the contour
+static double _calculateAngleChange(Point p1, Point p2, Point p3) {
+  // Calculate vectors
+  final v1x = p1.x - p2.x;
+  final v1y = p1.y - p2.y;
+  final v2x = p3.x - p2.x;
+  final v2y = p3.y - p2.y;
   
-  return contourPoints;
+  // Calculate magnitudes
+  final mag1 = math.sqrt(v1x * v1x + v1y * v1y);
+  final mag2 = math.sqrt(v2x * v2x + v2y * v2y);
+  
+  if (mag1 == 0 || mag2 == 0) return 0;
+  
+  // Calculate dot product and angle
+  final dotProduct = v1x * v2x + v1y * v2y;
+  final cosAngle = dotProduct / (mag1 * mag2);
+  
+  // Calculate angle in degrees
+  final angleRad = math.acos(cosAngle.clamp(-1.0, 1.0));
+  return angleRad * 180 / math.pi;
 }
 
 /// Calculate average of points (centroid)
