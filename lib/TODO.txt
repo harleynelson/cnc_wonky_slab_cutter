@@ -17,4 +17,28 @@ Our post processing of contour points should probably be a parameter we should s
             if (contourPoints.length < 40 || _calculateArea(contourPoints) < minSlabSize) {
                 return createFallbackContour(width, height, seedX, seedY);
             }
-    
+
+
+Fix Hard coded things...
+    In lib/screens/combined_detector_screen.dart:
+        containerSize.height - 100 calculation for accounting for status/buttons
+        Seed point indicator width/height hardcoded as 20x20
+        Fixed padding values in various UI elements
+
+    In lib/camera_screen_with_overlay.dart:
+        Hardcoded marker positions using relative coordinates like size.width * 0.2
+
+    In lib/widgets/contour_overlay.dart:
+        Fixed stroke widths for drawing contours
+        Hardcoded showPoints parameters
+
+    In lib/utils/image_processing/contour_detection_utils.dart:
+        Several magic numbers in algorithms like _createFallbackContour which uses width * 0.3
+        Fixed values for gap handling and continuation thresholds
+
+    In lib/widgets/camera_overlay.dart:
+        Hardcoded marker positions and sizes
+
+    In lib/utils/general/constants.dart:
+        Consider moving device-specific or display-dependent constants to a dynamic configuration
+        
