@@ -66,9 +66,11 @@ class _GcodeGeneratorScreenState extends State<GcodeGeneratorScreen> {
     }
   }
 
-// Update the _updateAdjustedContour method to use buffered polygon technique
-
+// Update the _updateAdjustedContour method to use Simplified Polygon Buffering
 // Simplified polygon buffering implementation
+// SOOOOOOO helpful: https://medium.com/@gurbuzkaanakkaya/polygon-buffering-algorithm-generating-buffer-points-228ed062fdf9
+// https://github.com/gurbuzkaanakkaya/Buffer-and-Path-Planning
+
 
 void _updateAdjustedContour() {
   final provider = Provider.of<ProcessingProvider>(context, listen: false);

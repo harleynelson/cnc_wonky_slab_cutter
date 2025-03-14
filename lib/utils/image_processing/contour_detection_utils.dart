@@ -620,26 +620,26 @@ static double _calculateAverageEdgeDistance(List<Point> points) {
   return totalDistance / points.length;
 }
 
-/// Create an adaptive angular sampling based on initial coarse sampling
-static List<double> _createAdaptiveAngularSampling() {
-  // Start with standard sampling
-  final List<double> angles = [];
+// /// Create an adaptive angular sampling based on initial coarse sampling
+// static List<double> _createAdaptiveAngularSampling() {
+//   // Start with standard sampling
+//   final List<double> angles = [];
   
-  // First pass - coarse sampling to detect general shape
-  for (double angle = 0; angle < 360; angle += 5.0) {
-    angles.add(angle);
-  }
+//   // First pass - coarse sampling to detect general shape
+//   for (double angle = 0; angle < 360; angle += 5.0) {
+//     angles.add(angle);
+//   }
   
-  // Add four extra rays in each cardinal direction (helps with 90-degree corners)
-  for (int i = 0; i < 4; i++) {
-    angles.add(i * 90.0 - 1.0);  // Just before cardinal axis
-    angles.add(i * 90.0 + 1.0);  // Just after cardinal axis
-  }
+//   // Add four extra rays in each cardinal direction (helps with 90-degree corners)
+//   for (int i = 0; i < 4; i++) {
+//     angles.add(i * 90.0 - 1.0);  // Just before cardinal axis
+//     angles.add(i * 90.0 + 1.0);  // Just after cardinal axis
+//   }
   
-  // Sort and remove duplicates
-  angles.sort();
-  return angles.toSet().toList();
-}
+//   // Sort and remove duplicates
+//   angles.sort();
+//   return angles.toSet().toList();
+// }
 
 // Add helper method to calculate distance from seed
 static double _distanceFromSeed(Point point, int seedX, int seedY) {

@@ -1,14 +1,56 @@
 
 generate gcode
+    - still janky
+        - this is our output from our L shaped slab with no margin...
+            (CNC Slab Scanner - Surfacing Operation)
+            (Generated on 2025-03-14 10:30:23.280889)
+            (Tool Diameter: 25.4mm)
+            (Stepover: 18.0mm)
+            (Cutting Depth: 2.0mm)
+            (Feed Rate: 1000.0mm/min)
+            (Plunge Rate: 500.0mm/min)
+
+            G90 G94
+            G17
+            G21
+
+            (Start operation)
+            S18000 M3
+            G54
+
+            G0 Z10.0000
+            G0 X283.7330 Y513.7024
+            G1 Z10.0000 F1000.0
+            Z0 F500.0
+            Z2.0000 F500.0
+            G1 X283.7330 Y513.7024 F1000.0
+
+            (End operation)
+            G0 Z10.0000
+            G0 X0 Y0
+            M5
+            M30
+    Goals for gcode:
+        Properly initializes the CNC machine
+        Safely approaches the work area
+        Cuts the entire slab surface using an efficient zigzag pattern
+        Uses appropriate feed rates for both cutting and plunging
+        Returns safely to the home position when complete
+        Adaptive zigzag pattern based on slab shape (horizontal or vertical depending on which dimension is larger)
+        Proper intersection detection with the slab contour
+        Stepover calculation based on tool diameter
+        Safe retracts between passes
+        Return to home position at the end
+        Implemented intelligent path generation that follows the shape of the contour
+        Added header/footer with proper machine initialization commands
+        Added proper safe height movements between passes
+        Included appropriate comments in the generated G-code
+        Maintained backward compatibility with previous methods
+        allow for multiple passes on depths
+            ie you know you need to eventually chop down 10 mms, but 2 at a time...
+
 crashes when minimized
 
-Appears to recognize an inner edge sometimes and conclude our search for edges that might be just a little further outward.  
-    Should we build in some mechanism that when the algorithm thinks it's done...
-        essentially samples a little further out from a random position along the edge
-        checks if it's an edge and not a random piece of artifact?  
-        And then samples a little further out from a random point along the edge.  
-        Until it no longer finds edges to combine to our original slab outline?  
-        We can repurpose our 'continueSearchDistance' variable so we don't have to make another.
 
 Our post processing of contour points should probably be a parameter we should save/edit:
     contour_detection_utils.dart:
