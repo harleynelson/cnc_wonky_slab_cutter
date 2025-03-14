@@ -267,7 +267,7 @@ double _crossProduct(Point a, Point b, Point c) {
       feedRate: _settings.feedRate,
       plungeRate: _settings.plungeRate,
       cuttingDepth: _settings.cuttingDepth,
-      stepover: _settings.stepover,
+      stepover: _settings.stepover / _settings.toolDiameter, // Convert to percentage of tool diameter
       toolDiameter: _settings.toolDiameter,
     );
     
