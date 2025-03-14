@@ -20,6 +20,7 @@ const double defaultSafetyHeight = 10.0;
 const double defaultFeedRate = 1000.0;
 const double defaultPlungeRate = 500.0;
 const double defaultCuttingDepth = 0.0;
+const int defaultSpindleSpeed = 18000;
 
 // UI Constants
 const double appBarHeight = 56.0;

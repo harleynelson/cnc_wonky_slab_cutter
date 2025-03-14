@@ -293,6 +293,7 @@ Future<bool> detectSlabContourAutomatic([int? seedX, int? seedY]) async {
         contourResult.machineContour,
         settings.toolDiameter,
         settings.stepover
+        
       );
       
       // Generate G-code
@@ -301,6 +302,9 @@ Future<bool> detectSlabContourAutomatic([int? seedX, int? seedY]) async {
         feedRate: settings.feedRate,
         plungeRate: settings.plungeRate,
         cuttingDepth: settings.cuttingDepth,
+        stepover: settings.stepover,
+        toolDiameter: settings.toolDiameter,
+        spindleSpeed: settings.spindleSpeed,
       );
       
       final gcode = gcodeGenerator.generateGcode(toolpath);

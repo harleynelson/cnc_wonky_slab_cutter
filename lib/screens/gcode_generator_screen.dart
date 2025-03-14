@@ -66,56 +66,142 @@ class _GcodeGeneratorScreenState extends State<GcodeGeneratorScreen> {
     }
   }
 
-  void _updateAdjustedContour() {
-    final provider = Provider.of<ProcessingProvider>(context, listen: false);
-    final flowManager = provider.flowManager;
+// Update the _updateAdjustedContour method to use buffered polygon technique
+
+// Simplified polygon buffering implementation
+
+void _updateAdjustedContour() {
+  final provider = Provider.of<ProcessingProvider>(context, listen: false);
+  final flowManager = provider.flowManager;
+  
+  if (flowManager?.result.contourResult != null) {
+    final originalContour = flowManager!.result.contourResult!.machineContour;
     
-    if (flowManager?.result.contourResult != null) {
-      final originalContour = flowManager!.result.contourResult!.machineContour;
-      
-      // Create expanded contour if margin is not zero
-      if (_slabMargin > 0) {
-        // We work directly with machine coordinates which already account for rotation
-        // Simply add margin to every point's distance from centroid
-        
-        // First calculate contour centroid
-        double sumX = 0, sumY = 0;
-        for (final point in originalContour) {
-          sumX += point.x;
-          sumY += point.y;
-        }
-        final centroidX = sumX / originalContour.length;
-        final centroidY = sumY / originalContour.length;
-        
-        // Create expanded contour by moving each point away from centroid
-        _adjustedContour = originalContour.map((point) {
-          // Calculate vector from centroid to point
-          final vx = point.x - centroidX;
-          final vy = point.y - centroidY;
-          
-          // Calculate distance and normalized direction
-          final dist = math.sqrt(vx * vx + vy * vy);
-          if (dist < 0.0001) return point; // Avoid division by zero
-          
-          final nx = vx / dist;
-          final ny = vy / dist;
-          
-          // Add margin in the direction from centroid to point
-          return Point(
-            point.x + nx * _slabMargin,
-            point.y + ny * _slabMargin
-          );
-        }).toList();
-        
-        // Recalculate area and time based on adjusted contour
-        _contourArea = _calculateContourArea(_adjustedContour!);
-        _estimatedTime = _estimateMachiningTime(_adjustedContour!, _settings);
-      } else {
-        // Use original contour if no margin
-        _adjustedContour = List.from(originalContour);
-      }
+    // Use original contour if no margin needed
+    if (_slabMargin <= 0) {
+      _adjustedContour = List.from(originalContour);
+    } else {
+      // Use buffered polygon approach for positive margins
+      _adjustedContour = _createBufferedPolygon(originalContour, _slabMargin);
     }
+    
+    // Recalculate area and time based on adjusted contour
+    _contourArea = _calculateContourArea(_adjustedContour!);
+    _estimatedTime = _estimateMachiningTime(_adjustedContour!, _settings);
   }
+}
+
+/// Create a buffered polygon from the original contour using angle bisector method
+List<Point> _createBufferedPolygon(List<Point> originalContour, double distance) {
+  if (originalContour.length < 3) {
+    return originalContour;
+  }
+  
+  // Ensure the contour is closed
+  final contour = List<Point>.from(originalContour);
+  if (contour.first.x != contour.last.x || contour.first.y != contour.last.y) {
+    contour.add(contour.first);
+  }
+  
+  final bufferedPoints = <Point>[];
+  final size = contour.length;
+  
+  // Process each vertex except the last one (which is a duplicate of the first for closed polygon)
+  for (int i = 0; i < size - 1; i++) {
+    // Get previous, current, and next vertices
+    final prev = contour[(i - 1 + size - 1) % (size - 1)]; // Previous vertex
+    final curr = contour[i];                               // Current vertex
+    final next = contour[(i + 1) % (size - 1)];            // Next vertex
+    
+    // Skip duplicate points
+    if ((curr.x == prev.x && curr.y == prev.y) || 
+        (curr.x == next.x && curr.y == next.y)) {
+      continue;
+    }
+    
+    // Calculate vectors from current vertex to previous and next vertices
+    final v1x = prev.x - curr.x;
+    final v1y = prev.y - curr.y;
+    final v2x = next.x - curr.x;
+    final v2y = next.y - curr.y;
+    
+    // Calculate distances to previous and next vertices
+    final dist1 = math.sqrt(v1x * v1x + v1y * v1y);
+    final dist2 = math.sqrt(v2x * v2x + v2y * v2y);
+    
+    if (dist1 < 1e-10 || dist2 < 1e-10) continue; // Skip if distances are too small
+    
+    // Calculate difference in coordinates between the previous and next vertices
+    final thirdFirstXDist = next.x - prev.x;
+    final thirdFirstYDist = next.y - prev.y;
+    
+    // Calculate the total rate (sum of distances between vertices)
+    final totalRate = dist1 + dist2;
+    
+    // Calculate the point of the angle bisector
+    final pointOfBisectorX = prev.x + ((thirdFirstXDist / totalRate) * dist1);
+    final pointOfBisectorY = prev.y + ((thirdFirstYDist / totalRate) * dist1);
+    
+    // Handle case where calculated bisector point coincides with the current vertex
+    double bisectorDistanceVertex;
+    double currX = curr.x;
+    double currY = curr.y;
+    
+    if ((pointOfBisectorX == currX) && (pointOfBisectorY == currY)) {
+      // Add a tiny offset to avoid division by zero
+      currX += 0.000001;
+      bisectorDistanceVertex = 0.000001;
+    } else {
+      // Calculate distance between the bisector point and the current vertex
+      final dx = pointOfBisectorX - currX;
+      final dy = pointOfBisectorY - currY;
+      bisectorDistanceVertex = math.sqrt(dx * dx + dy * dy);
+    }
+    
+    // Check if the vertex is convex or concave
+    final isConvex = _isVertexConvex([prev, curr, next], 1);
+    
+    double newPointX, newPointY;
+    
+    if (!isConvex) {
+      // For concave vertices, move away from the bisector point
+      newPointX = currX + (currX - pointOfBisectorX) * distance / bisectorDistanceVertex;
+      newPointY = currY + (currY - pointOfBisectorY) * distance / bisectorDistanceVertex;
+    } else {
+      // For convex vertices, move toward the bisector point
+      newPointX = currX - (currX - pointOfBisectorX) * distance / bisectorDistanceVertex;
+      newPointY = currY - (currY - pointOfBisectorY) * distance / bisectorDistanceVertex;
+    }
+    
+    bufferedPoints.add(Point(newPointX, newPointY));
+  }
+  
+  // Close the polygon
+  if (bufferedPoints.isNotEmpty) {
+    bufferedPoints.add(bufferedPoints.first);
+  }
+  
+  return bufferedPoints;
+}
+
+/// Check if a vertex is convex
+bool _isVertexConvex(List<Point> vertices, int vertexIndex) {
+  final prev = vertices[(vertexIndex - 1 + vertices.length) % vertices.length];
+  final curr = vertices[vertexIndex];
+  final next = vertices[(vertexIndex + 1) % vertices.length];
+  
+  // Calculate cross product
+  final crossProduct = (curr.x - prev.x) * (next.y - curr.y) - 
+                       (curr.y - prev.y) * (next.x - curr.x);
+  
+  // If cross product is positive, the vertex is convex
+  return crossProduct > 0;
+}
+
+/// Calculate cross product (z component) for CCW check
+double _crossProduct(Point a, Point b, Point c) {
+  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+}
 
   double _calculateContourArea(List<Point> contour) {
     if (contour.length < 3) return 0;
@@ -157,51 +243,56 @@ class _GcodeGeneratorScreenState extends State<GcodeGeneratorScreen> {
   }
 
   Future<void> _generateGcode() async {
-    setState(() {
-      _isGenerating = true;
-      _errorMessage = '';
-    });
+  setState(() {
+    _isGenerating = true;
+    _errorMessage = '';
+  });
 
-    try {
-      final provider = Provider.of<ProcessingProvider>(context, listen: false);
-      final flowManager = provider.flowManager;
-      
-      if (flowManager == null || flowManager.result.contourResult == null) {
-        throw Exception('No contour data available');
-      }
-      
-      // Generate G-code using adjusted contour
-      final gcodeGenerator = GcodeGenerator(
-        safetyHeight: _settings.safetyHeight,
-        feedRate: _settings.feedRate,
-        plungeRate: _settings.plungeRate,
-        cuttingDepth: _settings.cuttingDepth,
-      );
-      
-      final contour = _adjustedContour ?? flowManager.result.contourResult!.machineContour;
-      final gcode = gcodeGenerator.generateContourGcode(contour);
-      
-      // Save G-code to file
-      final tempDir = await Directory.systemTemp.createTemp('gcode_');
-      final gcodeFile = File('${tempDir.path}/slab_surfacing.gcode');
-      await gcodeFile.writeAsString(gcode);
-      
-      setState(() {
-        _isGenerating = false;
-        _isGenerated = true;
-        _gcodePath = gcodeFile.path;
-      });
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('G-code generated successfully!')),
-      );
-    } catch (e) {
-      setState(() {
-        _isGenerating = false;
-        _errorMessage = 'Error generating G-code: ${e.toString()}';
-      });
+  try {
+    final provider = Provider.of<ProcessingProvider>(context, listen: false);
+    final flowManager = provider.flowManager;
+    
+    if (flowManager == null || flowManager.result.contourResult == null) {
+      throw Exception('No contour data available');
     }
+    
+    // Use the adjusted contour or fall back to the original contour
+    final contour = _adjustedContour ?? flowManager.result.contourResult!.machineContour;
+    
+    // Generate G-code using our new surfacing operation
+    final gcodeGenerator = GcodeGenerator(
+      safetyHeight: _settings.safetyHeight,
+      feedRate: _settings.feedRate,
+      plungeRate: _settings.plungeRate,
+      cuttingDepth: _settings.cuttingDepth,
+      stepover: _settings.stepover,
+      toolDiameter: _settings.toolDiameter,
+    );
+    
+    // Generate surfacing G-code instead of just contour G-code
+    final gcode = gcodeGenerator.generateSurfacingGcode(contour);
+    
+    // Save G-code to file
+    final tempDir = await Directory.systemTemp.createTemp('gcode_');
+    final gcodeFile = File('${tempDir.path}/slab_surfacing.gcode');
+    await gcodeFile.writeAsString(gcode);
+    
+    setState(() {
+      _isGenerating = false;
+      _isGenerated = true;
+      _gcodePath = gcodeFile.path;
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('G-code generated successfully!')),
+    );
+  } catch (e) {
+    setState(() {
+      _isGenerating = false;
+      _errorMessage = 'Error generating G-code: ${e.toString()}';
+    });
   }
+}
 
   Future<void> _shareGcode() async {
     if (_gcodePath == null) {
@@ -271,91 +362,93 @@ class _GcodeGeneratorScreenState extends State<GcodeGeneratorScreen> {
   }
 
   Widget _buildImagePreview() {
-    final provider = Provider.of<ProcessingProvider>(context, listen: false);
-    final flowManager = provider.flowManager;
-    
-    if (flowManager?.result.originalImage == null) {
-      return Container(
-        height: 250,
-        color: Colors.grey.shade300,
-        child: Center(child: Text('No image available')),
-      );
-    }
-    
+  final provider = Provider.of<ProcessingProvider>(context, listen: false);
+  final flowManager = provider.flowManager;
+  
+  if (flowManager?.result.originalImage == null) {
     return Container(
       height: 250,
-      width: double.infinity,
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          return Stack(
-            fit: StackFit.expand,
-            children: [
-              // Display the image
-              Center(
-                child: Image.file(
-                  flowManager!.result.originalImage!,
-                  fit: BoxFit.contain,
-                ),
-              ),
-              
-              // Get image dimensions for proper overlay positioning
-              FutureBuilder<Size>(
-                future: _getImageDimensions(flowManager.result.originalImage!),
-                builder: (context, snapshot) {
-                  if (!snapshot.hasData) {
-                    return Container(); // Still loading
-                  }
-                  
-                  final imageSize = snapshot.data!;
-                  
-                  return Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      // Marker overlay
-                      if (flowManager.result.markerResult != null)
-                        MarkerOverlay(
-                          markers: flowManager.result.markerResult!.markers,
-                          imageSize: imageSize,
-                        ),
-                      
-                      // Original contour overlay
-                      if (flowManager.result.contourResult != null)
-                        ContourOverlay(
-                          contourPoints: flowManager.result.contourResult!.pixelContour,
-                          imageSize: imageSize,
-                          color: Colors.green,
-                          strokeWidth: 2,
-                        ),
-                        
-                      // Adjusted contour preview
-                      if (_adjustedContour != null && _slabMargin > 0 && flowManager.result.markerResult != null)
-                        Container(
-                          child: CustomPaint(
-                            size: Size(constraints.maxWidth, constraints.maxHeight),
-                            painter: AdjustedContourPainter(
-                              adjustedContour: _adjustedContour!,
-                              coordSystem: MachineCoordinateSystem.fromMarkerPointsWithDistances(
-                                flowManager.result.markerResult!.markers[0].toPoint(),
-                                flowManager.result.markerResult!.markers[1].toPoint(),
-                                flowManager.result.markerResult!.markers[2].toPoint(),
-                                _settings.markerXDistance,
-                                _settings.markerYDistance
-                              ),
-                              imageSize: imageSize,
-                              displaySize: Size(constraints.maxWidth, constraints.maxHeight),
-                            ),
-                          ),
-                        ),
-                    ],
-                  );
-                },
-              ),
-            ],
-          );
-        },
-      ),
+      color: Colors.grey.shade300,
+      child: Center(child: Text('No image available')),
     );
   }
+  
+  return Container(
+    height: 250,
+    width: double.infinity,
+    child: LayoutBuilder(
+      builder: (context, constraints) {
+        return Stack(
+          fit: StackFit.expand,
+          children: [
+            // Display the image
+            Center(
+              child: Image.file(
+                flowManager!.result.originalImage!,
+                fit: BoxFit.contain,
+              ),
+            ),
+            
+            // Get image dimensions for proper overlay positioning
+            FutureBuilder<Size>(
+              future: _getImageDimensions(flowManager.result.originalImage!),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) {
+                  return Container(); // Still loading
+                }
+                
+                final imageSize = snapshot.data!;
+                
+                return Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    // Marker overlay
+                    if (flowManager.result.markerResult != null)
+                      MarkerOverlay(
+                        markers: flowManager.result.markerResult!.markers,
+                        imageSize: imageSize,
+                      ),
+                    
+                    // Original contour overlay
+                    if (flowManager.result.contourResult != null)
+                      ContourOverlay(
+                        contourPoints: flowManager.result.contourResult!.pixelContour,
+                        imageSize: imageSize,
+                        color: Colors.green,
+                        strokeWidth: 2,
+                      ),
+                      
+                    // Adjusted contour preview with both original and buffered contours
+                    if (_adjustedContour != null && _slabMargin > 0 && flowManager.result.markerResult != null)
+                      Container(
+                        child: CustomPaint(
+                          size: Size(constraints.maxWidth, constraints.maxHeight),
+                          painter: AdjustedContourPainter(
+                            adjustedContour: _adjustedContour!,
+                            originalContour: flowManager.result.contourResult!.machineContour,
+                            coordSystem: MachineCoordinateSystem.fromMarkerPointsWithDistances(
+                              flowManager.result.markerResult!.markers[0].toPoint(),
+                              flowManager.result.markerResult!.markers[1].toPoint(),
+                              flowManager.result.markerResult!.markers[2].toPoint(),
+                              _settings.markerXDistance,
+                              _settings.markerYDistance
+                            ),
+                            imageSize: imageSize,
+                            displaySize: Size(constraints.maxWidth, constraints.maxHeight),
+                            showOriginalContour: true,
+                          ),
+                        ),
+                      ),
+                  ],
+                );
+              },
+            ),
+          ],
+        );
+      },
+    ),
+  );
+}
   
   // Helper method to get image dimensions
   Future<Size> _getImageDimensions(File imageFile) async {
@@ -602,17 +695,21 @@ class AdjustedContourPainter extends CustomPainter {
   final MachineCoordinateSystem coordSystem;
   final Size imageSize;
   final Size displaySize;
+  final bool showOriginalContour;
+  final List<Point>? originalContour;
 
   AdjustedContourPainter({
     required this.adjustedContour,
     required this.coordSystem,
     required this.imageSize,
     required this.displaySize,
+    this.showOriginalContour = true,
+    this.originalContour,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Create a path for the adjusted contour
+    // Paint for the buffered contour
     final path = Path();
     final paint = Paint()
       ..color = Colors.blue
@@ -650,6 +747,60 @@ class AdjustedContourPainter extends CustomPainter {
     
     // Draw outline for adjusted contour
     canvas.drawPath(path, paint);
+    
+    // Draw the original contour in a different color if requested
+    if (showOriginalContour && originalContour != null && originalContour!.isNotEmpty) {
+      final originalPath = Path();
+      final originalPaint = Paint()
+        ..color = Colors.green.withOpacity(0.5)
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0
+        ..strokeJoin = StrokeJoin.round;
+      
+      // Convert original contour to pixel and display coordinates
+      final originalPixelPoints = coordSystem.convertPointListToPixelCoords(originalContour!);
+      bool isFirstOriginal = true;
+      
+      for (final point in originalPixelPoints) {
+        final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
+          point,
+          imageSize,
+          displaySize
+        );
+        
+        if (isFirstOriginal) {
+          originalPath.moveTo(displayPoint.x, displayPoint.y);
+          isFirstOriginal = false;
+        } else {
+          originalPath.lineTo(displayPoint.x, displayPoint.y);
+        }
+      }
+      
+      // Close the original path if needed
+      if (originalPixelPoints.isNotEmpty && 
+          (originalPixelPoints.first.x != originalPixelPoints.last.x || 
+           originalPixelPoints.first.y != originalPixelPoints.last.y)) {
+        originalPath.close();
+      }
+      
+      // Draw outline for original contour
+      canvas.drawPath(originalPath, originalPaint);
+    }
+    
+    // Draw points at vertices to highlight them
+    final pointPaint = Paint()
+      ..color = Colors.blue
+      ..style = PaintingStyle.fill;
+    
+    for (final point in pixelPoints) {
+      final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
+        point,
+        imageSize,
+        displaySize
+      );
+      
+      canvas.drawCircle(Offset(displayPoint.x, displayPoint.y), 3, pointPaint);
+    }
   }
 
   @override

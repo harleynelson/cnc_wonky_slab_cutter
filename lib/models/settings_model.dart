@@ -13,6 +13,7 @@ class SettingsModel {
   double feedRate;
   double plungeRate;
   double cuttingDepth;
+  int spindleSpeed;
   double edgeThreshold;
   double simplificationEpsilon;
   bool useConvexHull;
@@ -34,6 +35,7 @@ int continueSearchDistance;  // Distance to continue searching past first edge
   required this.feedRate,
   required this.plungeRate,
   required this.cuttingDepth,
+  required this.spindleSpeed,
   this.edgeThreshold = 65.0,
   this.simplificationEpsilon = 5.0,
   this.useConvexHull = true,
@@ -57,6 +59,7 @@ int continueSearchDistance;  // Distance to continue searching past first edge
     feedRate: feedRate,
     plungeRate: plungeRate,
     cuttingDepth: cuttingDepth,
+    spindleSpeed: spindleSpeed,
     edgeThreshold: edgeThreshold,
     simplificationEpsilon: simplificationEpsilon,
     useConvexHull: useConvexHull,
@@ -81,6 +84,7 @@ int continueSearchDistance;  // Distance to continue searching past first edge
     feedRate: defaultFeedRate,
     plungeRate: defaultPlungeRate,
     cuttingDepth: defaultCuttingDepth,
+    spindleSpeed: defaultSpindleSpeed,
     edgeThreshold: 65.0,
     simplificationEpsilon: 5.0,
     useConvexHull: true,
@@ -106,6 +110,7 @@ int continueSearchDistance;  // Distance to continue searching past first edge
     'feedRate': feedRate,
     'plungeRate': plungeRate,
     'cuttingDepth': cuttingDepth,
+    'spindleSpeed': spindleSpeed,
     'edgeThreshold': edgeThreshold,
     'simplificationEpsilon': simplificationEpsilon,
     'useConvexHull': useConvexHull,
@@ -130,6 +135,7 @@ int continueSearchDistance;  // Distance to continue searching past first edge
     feedRate: json['feedRate'] ?? defaultFeedRate,
     plungeRate: json['plungeRate'] ?? defaultPlungeRate,
     cuttingDepth: json['cuttingDepth'] ?? defaultCuttingDepth,
+    spindleSpeed: json['spindleSpeed'] ?? defaultSpindleSpeed,
     edgeThreshold: json['edgeThreshold'] ?? 50.0,
     simplificationEpsilon: json['simplificationEpsilon'] ?? 5.0,
     useConvexHull: json['useConvexHull'] ?? true,
