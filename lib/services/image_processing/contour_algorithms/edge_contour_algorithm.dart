@@ -82,17 +82,17 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
       }
     }
     
-    // 4. Find contour using ray casting (now from utility)
-    final contourPoints = ContourDetectionUtils.findContourByRayCasting(
-      binaryEdges, 
-      seedX, 
-      seedY,
-      minSlabSize: minSlabSize,
-      gapAllowedMin: gapAllowedMin,
-      gapAllowedMax: gapAllowedMax,
-      continueSearchDistance: continueSearchDistance,
-      angularStep: 2.0  // Use finer angular resolution
-    );
+    // 4. Find contour using ray casting
+final contourPoints = ContourDetectionUtils.findContourByRayCasting(
+  binaryEdges, 
+  seedX, 
+  seedY,
+  minSlabSize: minSlabSize,
+  gapAllowedMin: gapAllowedMin,
+  gapAllowedMax: gapAllowedMax,
+  continueSearchDistance: continueSearchDistance * 3, // Increase search distance
+  angularStep: 1.0  // Use finer angular resolution
+);
     
      // 5. Apply convex hull only if specified AND if there are no sharp corners
   List<Point> processedContour = contourPoints;

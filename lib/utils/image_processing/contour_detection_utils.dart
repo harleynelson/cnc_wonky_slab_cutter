@@ -280,7 +280,6 @@ static bool isPixelInBounds(img.Image image, int x, int y) {
   return x >= 0 && x < image.width && y >= 0 && y < image.height;
 }
 
-
 /// Cast rays from a specific point with improved bounds checking
 static List<Point> _castRaysFromPoint(
   img.Image binaryImage,
@@ -348,7 +347,8 @@ static List<Point> _castRaysFromPoint(
               gapSize++;
               
               if (gapSize > gapAllowedMax) {
-                if (currentDistance > lastEdgeDistance + continueSearchDistance) {
+                // Continue searching much further than the specified continueSearchDistance
+                if (currentDistance > lastEdgeDistance + continueSearchDistance * 4) {
                   break;
                 }
               }

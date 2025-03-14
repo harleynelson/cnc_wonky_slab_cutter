@@ -193,7 +193,7 @@ class ProcessingFlowManager with ChangeNotifier {
   }
   
   /// Process slab contour detection using automatic method
-  Future<bool> detectSlabContourAutomatic() async {
+Future<bool> detectSlabContourAutomatic([int? seedX, int? seedY]) async {
   if (_result.markerResult == null || _result.processedImage == null) {
     _setErrorState('Marker detection must be completed first');
     return false;
@@ -221,11 +221,17 @@ class ProcessingFlowManager with ChangeNotifier {
       edgeThreshold: settings.edgeThreshold,
       useConvexHull: settings.useConvexHull,
       simplificationEpsilon: settings.simplificationEpsilon,
+      blurRadius: settings.blurRadius,
+      smoothingWindowSize: settings.smoothingWindowSize,
+      minSlabSize: settings.minSlabSize,
+      gapAllowedMin: settings.gapAllowedMin,
+      gapAllowedMax: settings.gapAllowedMax,
+      continueSearchDistance: settings.continueSearchDistance,
     );
     
-    // Estimate a seed point in the center of the image
-    final seedX = _result.processedImage!.width ~/ 2;
-    final seedY = _result.processedImage!.height ~/ 2;
+    // Estimate a seed point in the center of the image ONLY if no seed point provided
+    final useSeedX = seedX ?? _result.processedImage!.width ~/ 2;
+    final useSeedY = seedY ?? _result.processedImage!.height ~/ 2;
     
     // FIXED: Use the original image from the initialization instead of the processed image
     // which might have debug overlays from previous detection attempts
@@ -237,8 +243,8 @@ class ProcessingFlowManager with ChangeNotifier {
     // Process image to detect slab contour using the original image
     final contourResult = await algorithm.detectContour(
       originalImage,  // Changed from _result.processedImage!
-      seedX,
-      seedY,
+      useSeedX,
+      useSeedY,
       coordinateSystem
     );
     

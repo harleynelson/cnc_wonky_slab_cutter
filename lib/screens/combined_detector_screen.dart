@@ -156,8 +156,11 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
     // Create coordinate system from marker detection result
     final coordinateSystem = _flowManager.result.markerResult!;
     
-    // Use edge contour algorithm
-    final contourAlgorithmRegistry = await _flowManager.detectSlabContourAutomatic();
+    // Use edge contour algorithm with the calculated image point coordinates
+    final contourAlgorithmRegistry = await _flowManager.detectSlabContourAutomatic(
+      imagePoint.x.toInt(),  // Pass the seed point x coordinate
+      imagePoint.y.toInt()   // Pass the seed point y coordinate
+    );
     
     setState(() {
       _contourDetected = true;
