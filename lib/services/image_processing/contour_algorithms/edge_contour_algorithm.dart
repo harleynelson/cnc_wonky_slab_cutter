@@ -19,8 +19,6 @@ import 'contour_algorithm_interface.dart';
 /// Edge-based contour detection algorithm with improved consistency
 class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
 
-  final int continueSearchDistance;
-
  @override
  String get name => "Edge";
  
@@ -33,6 +31,7 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
  final int minSlabSize;
  final int gapAllowedMin;
  final int gapAllowedMax;
+ final int continueSearchDistance;
 
  EdgeContourAlgorithm({
    this.generateDebugImage = true,
@@ -91,21 +90,29 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
       minSlabSize: minSlabSize,
       gapAllowedMin: gapAllowedMin,
       gapAllowedMax: gapAllowedMax,
-      continueSearchDistance: continueSearchDistance
+      continueSearchDistance: continueSearchDistance,
+      angularStep: 2.0  // Use finer angular resolution
     );
     
-    // 5. Apply convex hull if specified
-    List<Point> processedContour = contourPoints;
-    if (useConvexHull && contourPoints.length >= 3) {
+     // 5. Apply convex hull only if specified AND if there are no sharp corners
+  List<Point> processedContour = contourPoints;
+  if (useConvexHull && contourPoints.length >= 3) {
+    // Check for sharp corners before applying convex hull
+    final corners = ContourDetectionUtils.detectCorners(contourPoints);
+    final hasSharpCorners = corners.length >= 2;
+    
+    if (!hasSharpCorners) {
       processedContour = GeometryUtils.convexHull(contourPoints);
     }
+  }
     
-    // 6. Simplify and smooth contour
-    final smoothContour = ContourDetectionUtils.smoothAndSimplifyContour(
-      processedContour,
-      simplificationEpsilon,
-      windowSize: smoothingWindowSize
-    );
+    // 6. Simplify and smooth contour with corner preservation
+  final smoothContour = ContourDetectionUtils.smoothAndSimplifyContour(
+    processedContour,
+    simplificationEpsilon,
+    windowSize: smoothingWindowSize,
+    preserveCorners: true
+  );
     
     // 7. Convert to machine coordinates
     final machineContour = coordSystem.convertPointListToMachineCoords(smoothContour);

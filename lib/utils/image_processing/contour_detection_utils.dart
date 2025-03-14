@@ -156,8 +156,7 @@ static List<Point> _createFallbackContour(int width, int height) {
     return applyDilation(eroded, kernelSize);
   }
 
-  /// Find contour using ray casting from a seed point
-
+  /// Find contour using ray casting from a seed point with improved edge detection
 static List<Point> findContourByRayCasting(
   img.Image binaryImage, 
   int seedX, 
@@ -166,7 +165,8 @@ static List<Point> findContourByRayCasting(
     int minSlabSize = 1000, 
     int gapAllowedMin = 5, 
     int gapAllowedMax = 20,
-    int continueSearchDistance = 30
+    int continueSearchDistance = 30,
+    double angularStep = 2.0 // Reduced from 5 degrees to 2 for better corner detection
   }
 ) {
   final width = binaryImage.width;
@@ -175,10 +175,10 @@ static List<Point> findContourByRayCasting(
   final visited = Set<String>();
   
   // For each angle, store the farthest edge point
-  final Map<int, Point> farthestEdgePoints = {};
+  final Map<double, Point> farthestEdgePoints = {}; // Changed to double for finer angles
   
-  // Cast rays in all directions (every 5 degrees)
-  for (int angle = 0; angle < 360; angle += 5) {
+  // Cast rays in all directions with finer angular resolution
+  for (double angle = 0; angle < 360; angle += angularStep) {
     final radians = angle * math.pi / 180;
     final dirX = math.cos(radians);
     final dirY = math.sin(radians);
@@ -277,6 +277,12 @@ static List<Point> findContourByRayCasting(
   // Use the farthest edge points to form the contour
   contourPoints = farthestEdgePoints.values.toList();
   
+  // Reject outliers based on distance consistency
+  contourPoints = _rejectDistanceOutliers(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
+  
+  // Check neighborhood consistency
+  contourPoints = _enforceNeighborhoodConsistency(contourPoints);
+  
   // Post-process contour points
   if (contourPoints.length < 40 || _calculateArea(contourPoints) < minSlabSize) {
     return createFallbackContour(width, height, seedX, seedY);
@@ -286,6 +292,115 @@ static List<Point> findContourByRayCasting(
   sortPointsByAngle(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
   
   return contourPoints;
+}
+
+/// Calculate average of points (centroid)
+static Point _calculateAveragePoint(List<Point> points) {
+  if (points.isEmpty) return Point(0, 0);
+  
+  double sumX = 0;
+  double sumY = 0;
+  
+  for (final point in points) {
+    sumX += point.x;
+    sumY += point.y;
+  }
+  
+  return Point(sumX / points.length, sumY / points.length);
+}
+
+/// Reject outlier points based on distance from center
+static List<Point> _rejectDistanceOutliers(List<Point> points, Point center) {
+  if (points.length < 5) return points;
+  
+  // Calculate distances from center for all points
+  final distances = points.map((p) => _distanceFromSeed(p, center.x.toInt(), center.y.toInt())).toList();
+  
+  // Calculate median and quartiles for distance
+  distances.sort();
+  final median = distances[distances.length ~/ 2];
+  final q1 = distances[distances.length ~/ 4];
+  final q3 = distances[3 * distances.length ~/ 4];
+  
+  // Calculate interquartile range (IQR) and bounds
+  final iqr = q3 - q1;
+  final upperBound = q3 + 1.5 * iqr;
+  
+  // Filter points based on distance bounds
+  final result = <Point>[];
+  for (int i = 0; i < points.length; i++) {
+    final distance = _distanceFromSeed(points[i], center.x.toInt(), center.y.toInt());
+    if (distance <= upperBound) {
+      result.add(points[i]);
+    }
+  }
+  
+  return result;
+}
+
+
+/// Enforce neighborhood consistency by removing isolated points
+static List<Point> _enforceNeighborhoodConsistency(List<Point> points) {
+  if (points.length < 5) return points;
+  
+  // Sort points by angle so neighbors in the list are neighbors in polar space
+  final center = _calculateAveragePoint(points);
+  final sorted = List<Point>.from(points);
+  sortPointsByAngle(sorted, center);
+  
+  final maxGapAllowed = _calculateAverageEdgeDistance(sorted) * 3;
+  final result = <Point>[];
+  
+  for (int i = 0; i < sorted.length; i++) {
+    final prev = sorted[(i - 1 + sorted.length) % sorted.length];
+    final curr = sorted[i];
+    final next = sorted[(i + 1) % sorted.length];
+    
+    // Calculate distances to neighbors
+    final distToPrev = curr.distanceTo(prev);
+    final distToNext = curr.distanceTo(next);
+    
+    // If both distances are reasonable, keep the point
+    if (distToPrev <= maxGapAllowed || distToNext <= maxGapAllowed) {
+      result.add(curr);
+    }
+  }
+  
+  return result;
+}
+
+/// Calculate average edge distance between consecutive points
+static double _calculateAverageEdgeDistance(List<Point> points) {
+  if (points.length < 2) return 0.0;
+  
+  double totalDistance = 0.0;
+  for (int i = 0; i < points.length; i++) {
+    final next = points[(i + 1) % points.length];
+    totalDistance += points[i].distanceTo(next);
+  }
+  
+  return totalDistance / points.length;
+}
+
+/// Create an adaptive angular sampling based on initial coarse sampling
+static List<double> _createAdaptiveAngularSampling() {
+  // Start with standard sampling
+  final List<double> angles = [];
+  
+  // First pass - coarse sampling to detect general shape
+  for (double angle = 0; angle < 360; angle += 5.0) {
+    angles.add(angle);
+  }
+  
+  // Add four extra rays in each cardinal direction (helps with 90-degree corners)
+  for (int i = 0; i < 4; i++) {
+    angles.add(i * 90.0 - 1.0);  // Just before cardinal axis
+    angles.add(i * 90.0 + 1.0);  // Just after cardinal axis
+  }
+  
+  // Sort and remove duplicates
+  angles.sort();
+  return angles.toSet().toList();
 }
 
 // Add helper method to calculate distance from seed
@@ -372,6 +487,47 @@ static void sortPointsByAngle(List<Point> points, Point center) {
     
     return result;
   }
+
+  /// Detect potential corners in a contour
+static List<int> detectCorners(List<Point> contour) {
+  if (contour.length < 4) return [];
+  
+  final corners = <int>[];
+  final angleThreshold = 135.0; // Angle in degrees below which a point is considered a corner
+  
+  for (int i = 0; i < contour.length; i++) {
+    final prev = contour[(i - 1 + contour.length) % contour.length];
+    final curr = contour[i];
+    final next = contour[(i + 1) % contour.length];
+    
+    // Calculate vectors
+    final v1x = prev.x - curr.x;
+    final v1y = prev.y - curr.y;
+    final v2x = next.x - curr.x;
+    final v2y = next.y - curr.y;
+    
+    // Calculate dot product
+    final dotProduct = v1x * v2x + v1y * v2y;
+    
+    // Calculate magnitudes
+    final mag1 = math.sqrt(v1x * v1x + v1y * v1y);
+    final mag2 = math.sqrt(v2x * v2x + v2y * v2y);
+    
+    // Calculate angle in degrees
+    if (mag1 > 0 && mag2 > 0) {
+      final cosAngle = dotProduct / (mag1 * mag2);
+      final angleRad = math.acos(cosAngle.clamp(-1.0, 1.0));
+      final angleDeg = angleRad * 180 / math.pi;
+      
+      // If angle is sharp enough, mark as corner
+      if (angleDeg < angleThreshold) {
+        corners.add(i);
+      }
+    }
+  }
+  
+  return corners;
+}
   
   /// Apply morphological erosion to a binary mask
   static List<List<bool>> applyErosion(List<List<bool>> mask, int kernelSize) {
@@ -532,9 +688,12 @@ static void sortPointsByAngle(List<Point> points, Point center) {
     return mask;
   }
 
-  /// Smooth and simplify a contour
-  static List<Point> smoothAndSimplifyContour(List<Point> contour, double epsilon, 
-    {int windowSize = 5, double sigma = 1.0}) {
+  /// Smooth and simplify a contour with corner preservation
+static List<Point> smoothAndSimplifyContour(
+  List<Point> contour, 
+  double epsilon, 
+  {int windowSize = 5, double sigma = 1.0, bool preserveCorners = true}
+) {
   if (contour.length <= 3) return contour;
   
   // 1. Apply Douglas-Peucker simplification
