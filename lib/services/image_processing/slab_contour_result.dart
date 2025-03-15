@@ -23,12 +23,16 @@ class SlabContourResult {
   /// Area in millimeters squared (optional)
   final double machineArea;
   
+  /// Optional detection method used
+  final String? detectionMethod;
+  
   SlabContourResult({
     required this.pixelContour,
     required this.machineContour,
     this.debugImage,
     this.pixelArea = 0.0,
     this.machineArea = 0.0,
+    this.detectionMethod,
   });
   
   /// Check if the contour is valid

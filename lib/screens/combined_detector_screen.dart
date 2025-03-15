@@ -17,6 +17,7 @@ import '../widgets/marker_overlay.dart';
 import '../widgets/contour_overlay.dart';
 import '../utils/general/error_utils.dart';
 import 'gcode_generator_screen.dart';
+import 'multi_tap_detection_screen.dart';
 
 class CombinedDetectorScreen extends StatefulWidget {
   final File imageFile;
@@ -179,6 +180,50 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
       _errorMessage = 'Contour detection failed: ${e.toString()}';
       _isLoading = false;
     });
+    
+    // Show dialog offering multi-tap detection
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (BuildContext context) {
+        return AlertDialog(
+          title: Text('Detection Failed'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.warning_amber_rounded, color: Colors.orange, size: 48),
+              SizedBox(height: 16),
+              Text(
+                'The automatic contour detection failed. This often happens when the slab and background are similar colors.',
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 16),
+              Text(
+                'Would you like to try the multi-tap detection method?',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _openMultiTapDetection();
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+              ),
+              child: Text('Try Multi-Tap'),
+            ),
+          ],
+        );
+      },
+    );
   }
 }
   
@@ -408,6 +453,19 @@ Widget build(BuildContext context) {
         
         SizedBox(height: 8),
         
+        // Multi-Tap Mode Button (new)
+        ElevatedButton.icon(
+          icon: Icon(Icons.touch_app),
+          label: Text('Multi-Tap Mode'),
+          onPressed: _isLoading || !_markersDetected ? null : _openMultiTapDetection,
+          style: ElevatedButton.styleFrom(
+            minimumSize: Size(double.infinity, 48),
+            backgroundColor: Colors.orange,
+          ),
+        ),
+        
+        SizedBox(height: 8),
+        
         // Reset and Parameters buttons row
         Row(
           children: [
@@ -458,6 +516,22 @@ Widget build(BuildContext context) {
     ),
   );
 }
+
+// Add method to navigate to multi-tap detection screen around line ~380
+
+  Future<void> _openMultiTapDetection() async {
+    // Navigate to the multi-tap detection screen if contour detection fails
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MultiTapDetectionScreen(
+          imageFile: widget.imageFile,
+          settings: widget.settings,
+          onSettingsChanged: widget.onSettingsChanged,
+        ),
+      ),
+    );
+  }
 
 void _showParametersDialog() {
   // Get values from settings

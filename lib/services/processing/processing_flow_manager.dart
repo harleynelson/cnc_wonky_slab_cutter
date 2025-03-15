@@ -29,7 +29,8 @@ enum ProcessingState {
 enum ContourDetectionMethod {
   automatic,
   interactive,
-  manual
+  manual,
+  multiTap  // Added multiTap method
 }
 
 /// Result of the processing flow containing all intermediate and final results
@@ -345,19 +346,31 @@ Future<bool> detectSlabContourAutomatic([int? seedX, int? seedY]) async {
     notifyListeners();
   }
   
-  /// Update contour result from external source (interactive or manual methods)
-  void updateContourResult(SlabContourResult contourResult, {ContourDetectionMethod? method}) {
-    final usedMethod = method ?? _preferredContourMethod;
-    
-    _result = _result.copyWith(
-      contourResult: contourResult,
-      processedImage: contourResult.debugImage ?? _result.processedImage,
-      state: ProcessingState.slabDetection,
-      contourMethod: usedMethod,
-    );
-    
-    notifyListeners();
-  }
+  /// Update marker detection result
+void updateMarkerResult(MarkerDetectionResult markerResult) {
+  _result = _result.copyWith(
+    markerResult: markerResult,
+    state: ProcessingState.markerDetection
+  );
+  
+  notifyListeners();
+}
+  /// Update contour result and method
+void updateContourResults(SlabContourResult contourResult, {ContourDetectionMethod? method}) {
+  // Create a new version of the result with the updated contour
+  _result = _result.copyWith(
+    contourResult: contourResult,
+    state: ProcessingState.slabDetection,
+    contourMethod: method ?? _preferredContourMethod,
+  );
+  
+  notifyListeners();
+}
+
+// Then update the existing updateContourResult method
+void updateContourResult(SlabContourResult contourResult, {ContourDetectionMethod? method}) {
+  updateContourResults(contourResult, method: method);
+}
   
   /// Update the processing state
   void _updateState(ProcessingState newState) {
