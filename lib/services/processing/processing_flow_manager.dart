@@ -22,7 +22,7 @@ enum ProcessingState {
   slabDetection,
   gcodeGeneration,
   completed,
-  error
+  error, imageProcessing
 }
 
 /// Method used for contour detection
@@ -45,7 +45,8 @@ class ProcessingResult {
   final String? errorMessage;
   final ProcessingState state;
   final ContourDetectionMethod? contourMethod;
-  
+  final File? correctedImage;
+
   ProcessingResult({
     this.originalImage,
     this.processedImage,
@@ -57,6 +58,7 @@ class ProcessingResult {
     this.errorMessage,
     this.state = ProcessingState.notStarted,
     this.contourMethod,
+    this.correctedImage,
   });
   
   /// Create a copy with updated values
@@ -71,6 +73,7 @@ class ProcessingResult {
     String? errorMessage,
     ProcessingState? state,
     ContourDetectionMethod? contourMethod,
+    File? correctedImage,
   }) {
     return ProcessingResult(
       originalImage: originalImage ?? this.originalImage,
@@ -83,6 +86,7 @@ class ProcessingResult {
       errorMessage: errorMessage ?? this.errorMessage,
       state: state ?? this.state,
       contourMethod: contourMethod ?? this.contourMethod,
+      correctedImage: correctedImage ?? this.correctedImage,
     );
   }
   
@@ -109,6 +113,9 @@ class ProcessingResult {
         return false;
       case ProcessingState.error:
         return false;
+      case ProcessingState.imageProcessing:
+        // TODO: Handle this case.
+        throw UnimplementedError();
     }
   }
 }
@@ -355,6 +362,17 @@ void updateMarkerResult(MarkerDetectionResult markerResult) {
   
   notifyListeners();
 }
+
+/// Update the flow manager with a corrected image and markers
+  void updateCorrectedImage(File correctedImageFile, MarkerDetectionResult markerResult) {
+    _result = _result.copyWith(
+      correctedImage: correctedImageFile,
+      markerResult: markerResult,
+      state: ProcessingState.imageProcessing
+    );
+    
+    notifyListeners();
+  }
   /// Update contour result and method
 void updateContourResults(SlabContourResult contourResult, {ContourDetectionMethod? method}) {
   // Create a new version of the result with the updated contour
