@@ -51,7 +51,7 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
   // Marker positions
   Point? _originMarkerPoint;
   Point? _xAxisMarkerPoint;
-  Point? _scaleMarkerPoint;
+  Point? _yAxisMarkerPoint;
   File? _correctedImageFile;
   
   @override
@@ -116,9 +116,9 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
         _statusMessage = 'Tap the X-AXIS marker (bottom right)';
       } else if (_xAxisMarkerPoint == null) {
         _xAxisMarkerPoint = imagePoint;
-        _statusMessage = 'Tap the SCALE/Y-AXIS marker (top left)';
-      } else if (_scaleMarkerPoint == null) {
-        _scaleMarkerPoint = imagePoint;
+        _statusMessage = 'Tap the Y-AXIS marker (top left)';
+      } else if (_yAxisMarkerPoint == null) {
+        _yAxisMarkerPoint = imagePoint;
         _statusMessage = 'Processing markers...';
         _processMarkerPoints();
       }
@@ -126,7 +126,7 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
   }
   
   Future<void> _processMarkerPoints() async {
-    if (_originMarkerPoint == null || _xAxisMarkerPoint == null || _scaleMarkerPoint == null) {
+    if (_originMarkerPoint == null || _xAxisMarkerPoint == null || _yAxisMarkerPoint == null) {
       setState(() {
         _errorMessage = 'All three marker points are required';
       });
@@ -153,8 +153,8 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
       );
       
       final scaleMarker = MarkerPoint(
-        _scaleMarkerPoint!.x.toInt(), 
-        _scaleMarkerPoint!.y.toInt(), 
+        _yAxisMarkerPoint!.x.toInt(), 
+        _yAxisMarkerPoint!.y.toInt(), 
         MarkerRole.scale
       );
       
@@ -211,7 +211,7 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
       
       // Calculate pixel to mm ratio for corrected image
       final pixelToMmRatioX = widget.settings.markerXDistance / (_xAxisMarkerPoint!.x - _originMarkerPoint!.x).abs();
-      final pixelToMmRatioY = widget.settings.markerYDistance / (_scaleMarkerPoint!.y - _originMarkerPoint!.y).abs();
+      final pixelToMmRatioY = widget.settings.markerYDistance / (_yAxisMarkerPoint!.y - _originMarkerPoint!.y).abs();
       final pixelToMmRatio = (pixelToMmRatioX + pixelToMmRatioY) / 2;
       
       // Create marker result
@@ -384,7 +384,7 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
       _markersDetected = false;
       _originMarkerPoint = null;
       _xAxisMarkerPoint = null;
-      _scaleMarkerPoint = null;
+      _yAxisMarkerPoint = null;
       _errorMessage = '';
       _statusMessage = 'Tap the ORIGIN marker (bottom left)';
     });
@@ -397,7 +397,7 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: Text('Image Correction'),
+        title: Text('Perspective Correction'),
         actions: [
           IconButton(
             icon: Icon(Icons.help_outline),
@@ -434,9 +434,9 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
                       'X-Axis Marker'
                     ),
                     
-                  if (_scaleMarkerPoint != null && _imageSize != null)
+                  if (_yAxisMarkerPoint != null && _imageSize != null)
                     _buildSamplePointIndicator(
-                      _scaleMarkerPoint!, 
+                      _yAxisMarkerPoint!, 
                       Colors.blue,
                       'Scale Marker'
                     ),
@@ -546,7 +546,7 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Image Correction Help'),
+        title: Text('Perspective Correction Help'),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -584,7 +584,7 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
                 Icon(Icons.circle, color: Colors.blue, size: 16),
                 SizedBox(width: 8),
                 Expanded(
-                  child: Text('Tap the SCALE marker (top left corner)'),
+                  child: Text('Tap the Y marker (top left corner)'),
                 ),
               ],
             ),
