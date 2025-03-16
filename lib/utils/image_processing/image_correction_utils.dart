@@ -10,7 +10,6 @@ import 'image_utils.dart';
 /// Utilities for image perspective correction
 class ImageCorrectionUtils {
   /// Correct perspective distortion of an image based on marker positions
-  /// Correct perspective distortion of an image based on marker positions
 static Future<img.Image> correctPerspective(
   img.Image sourceImage,
   Point originMarker,
@@ -116,10 +115,29 @@ static Future<img.Image> correctPerspective(
     img.ColorRgba8(0, 100, 255, 80)
   );
   
-  return destImage;
+  // NEW CODE: Crop the image back to a rectangle and resize to match original dimensions
+  final img.Image croppedImage = _cropToRectangle(
+  destImage, 
+  destPts,
+  Point(destPts[0].x, destPts[0].y),  // Origin marker in dest coordinates
+  Point(destPts[1].x, destPts[1].y)   // X-axis marker in dest coordinates
+);
+  
+  // Resize to match the original width while preserving aspect ratio
+final double aspectRatio = croppedImage.width / croppedImage.height;
+final int resizedWidth = sourceImage.width;
+final int resizedHeight = (resizedWidth / aspectRatio).round();
+
+final img.Image resizedImage = img.copyResize(
+  croppedImage,
+  width: resizedWidth,
+  height: resizedHeight,
+  interpolation: img.Interpolation.cubic
+);
+  
+  return resizedImage;
 }
   
-  /// Create a debug image showing original and corrected images
   /// Create a debug image showing original and corrected images
 static img.Image createDebugImage(
   img.Image originalImage,
@@ -209,7 +227,7 @@ static img.Image createDebugImage(
     if (originalImage.height < debugHeight) {
       ImageUtils.drawText(
         debugImage,
-        "Perspective Corrected Image",
+        "Perspective Corrected (Cropped & Resized)",
         10,
         originalImage.height + 10,
         img.ColorRgba8(255, 255, 255, 255)
@@ -219,50 +237,92 @@ static img.Image createDebugImage(
     print('Error drawing labels: $e');
   }
   
-  // Scale corrected image to fit in the bottom half
-  try {
-    final scaledCorrected = img.copyResize(
-      correctedImage,
-      width: debugWidth,
-      height: originalImage.height,
-      interpolation: img.Interpolation.cubic
-    );
-    
-    // Copy corrected image to bottom half
-    final bottomHalfStart = originalImage.height;
-    if (bottomHalfStart < debugHeight) {
-      for (int y = 0; y < scaledCorrected.height; y++) {
-        final destY = y + bottomHalfStart;
-        if (destY >= debugHeight) break; // Prevent overflow
-        
-        for (int x = 0; x < scaledCorrected.width; x++) {
-          if (x >= debugWidth) break; // Prevent overflow
-          try {
-            debugImage.setPixel(x, destY, scaledCorrected.getPixel(x, y));
-          } catch (e) {
-            // Skip this pixel if there's an error
-          }
+  // Copy corrected image to bottom half - we don't need to resize
+  // since we already made it match the original dimensions
+  final bottomHalfStart = originalImage.height;
+  if (bottomHalfStart < debugHeight) {
+    for (int y = 0; y < correctedImage.height; y++) {
+      final destY = y + bottomHalfStart;
+      if (destY >= debugHeight) break; // Prevent overflow
+      
+      for (int x = 0; x < correctedImage.width; x++) {
+        if (x >= debugWidth) break; // Prevent overflow
+        try {
+          debugImage.setPixel(x, destY, correctedImage.getPixel(x, y));
+        } catch (e) {
+          // Skip this pixel if there's an error
         }
       }
-      
-      // Draw grid on corrected image to show calibration
-      try {
-        _drawCalibrationGrid(
-          debugImage, 
-          0, bottomHalfStart, 
-          debugWidth, originalImage.height,
-          50, // Grid spacing in pixels
-          img.ColorRgba8(0, 255, 255, 100)
-        );
-      } catch (e) {
-        print('Error drawing calibration grid: $e');
-      }
     }
-  } catch (e) {
-    print('Error adding corrected image to debug: $e');
+    
+    // Draw grid on corrected image to show calibration
+    try {
+      _drawCalibrationGrid(
+        debugImage, 
+        0, bottomHalfStart, 
+        debugWidth, originalImage.height,
+        50, // Grid spacing in pixels
+        img.ColorRgba8(0, 255, 255, 100)
+      );
+    } catch (e) {
+      print('Error drawing calibration grid: $e');
+    }
   }
   
   return debugImage;
+}
+
+/// Crop the image to create a rectangle based on the narrowest width of the trapezoid
+static img.Image _cropToRectangle(img.Image image, List<Point> destPts) {
+  const int margin = 10;
+  
+  // Find narrowest width - typically this would be between top points (points 2 and 3)
+  final double topWidth = (destPts[2].x - destPts[3].x).abs();
+  final double bottomWidth = (destPts[1].x - destPts[0].x).abs();
+  final double narrowestWidth = math.min(topWidth, bottomWidth);
+  
+  // Get the midpoint of the top edge and bottom edge
+  final double topMidX = (destPts[2].x + destPts[3].x) / 2;
+  final double bottomMidX = (destPts[0].x + destPts[1].x) / 2;
+  
+  // Calculate crop bounds centered on the midpoint of the narrowest edge
+  double cropLeft, cropRight;
+  if (topWidth < bottomWidth) {
+    // Top is narrower, center the crop on the top midpoint
+    cropLeft = topMidX - narrowestWidth / 2 - margin;
+    cropRight = topMidX + narrowestWidth / 2 + margin;
+  } else {
+    // Bottom is narrower, center the crop on the bottom midpoint
+    cropLeft = bottomMidX - narrowestWidth / 2 - margin;
+    cropRight = bottomMidX + narrowestWidth / 2 + margin;
+  }
+  
+  // Ensure crop bounds are within image
+  final int safeLeft = math.max(0, cropLeft.round());
+  final int safeRight = math.min(image.width - 1, cropRight.round());
+  
+  // Calculate crop dimensions
+  final int cropWidth = safeRight - safeLeft + 1;
+  final int cropHeight = image.height;
+  
+  // Create new image for cropped area
+  final img.Image croppedImage = img.Image(width: cropWidth, height: cropHeight);
+  
+  // Copy pixels
+  for (int y = 0; y < cropHeight; y++) {
+    for (int x = 0; x < cropWidth; x++) {
+      final srcX = safeLeft + x;
+      final srcY = y;
+      
+      if (srcX >= 0 && srcX < image.width && srcY >= 0 && srcY < image.height) {
+        croppedImage.setPixel(x, y, image.getPixel(srcX, srcY));
+      } else {
+        croppedImage.setPixel(x, y, img.ColorRgba8(255, 255, 255, 255));
+      }
+    }
+  }
+  
+  return croppedImage;
 }
   
   /// Calculate perspective transform matrix
