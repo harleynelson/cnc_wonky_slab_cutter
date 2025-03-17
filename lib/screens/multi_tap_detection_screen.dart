@@ -10,9 +10,9 @@ import 'package:image/image.dart' as img;
 
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
-import '../services/image_processing/marker_detector.dart';
-import '../services/image_processing/slab_contour_result.dart';
-import '../services/processing/processing_flow_manager.dart';
+import '../services/detection/marker_detector.dart';
+import '../services/detection/slab_contour_result.dart';
+import '../services/flow/processing_flow_manager.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../utils/image_processing/image_utils.dart';
 import '../utils/image_processing/multi_tap_detection_utils.dart';

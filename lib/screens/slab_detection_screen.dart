@@ -1,7 +1,6 @@
 // lib/screens/slab_detection_screen.dart
 // Screen for slab detection on the corrected image
 
-import 'dart:io';
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -9,10 +8,10 @@ import 'package:image/image.dart' as img;
 
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
-import '../services/processing/processing_flow_manager.dart';
+import '../services/flow/processing_flow_manager.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../utils/image_processing/multi_tap_detection_utils.dart';
-import '../services/image_processing/slab_contour_result.dart';
+import '../services/detection/slab_contour_result.dart';
 import 'gcode_generator_screen.dart';
 
 class SlabDetectionScreen extends StatefulWidget {

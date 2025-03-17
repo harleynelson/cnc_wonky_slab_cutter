@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 import '../../utils/general/machine_coordinates.dart';
@@ -68,8 +67,8 @@ class MarkerDetector {
   print('Marker detection - input image dimensions: ${image.width}x${image.height}');
   
   // IMPORTANT: Store original image dimensions before any resizing
-  final origWidth = image.width;
-  final origHeight = image.height;
+  // final origWidth = image.width;
+  // final origHeight = image.height;
   
   // Downsample large images to conserve memory
   img.Image processImage = image;

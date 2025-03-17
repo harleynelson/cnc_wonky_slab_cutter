@@ -369,7 +369,7 @@ static List<Point> _castRaysFromPoint(
     // Process edge points on this ray
     if (edgePointsOnRay.isNotEmpty) {
       Point farthestPoint = edgePointsOnRay.first;
-      double maxDistance = _distanceFromSeed(farthestPoint, seedX, seedY);
+      //double maxDistance = _distanceFromSeed(farthestPoint, seedX, seedY);
       
       for (int i = 1; i < edgePointsOnRay.length; i++) {
         final point = edgePointsOnRay[i];
@@ -380,7 +380,7 @@ static List<Point> _castRaysFromPoint(
             (distance - prevDistance < continueSearchDistance * 2 || 
              i == edgePointsOnRay.length - 1)) {
           farthestPoint = point;
-          maxDistance = distance;
+          //maxDistance = distance;
         }
       }
       
@@ -556,7 +556,7 @@ static List<Point> _rejectDistanceOutliers(List<Point> points, Point center) {
   
   // Calculate median and quartiles for distance
   distances.sort();
-  final median = distances[distances.length ~/ 2];
+  //final median = distances[distances.length ~/ 2];
   final q1 = distances[distances.length ~/ 4];
   final q3 = distances[3 * distances.length ~/ 4];
   

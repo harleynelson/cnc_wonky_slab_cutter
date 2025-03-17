@@ -7,10 +7,10 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 import '../../models/settings_model.dart';
-import '../image_processing/contour_algorithms/contour_algorithm_registry.dart';
-import '../image_processing/contour_algorithms/edge_contour_algorithm.dart';
-import '../image_processing/marker_detector.dart';
-import '../image_processing/slab_contour_result.dart';
+import '../detection/contour_algorithms/contour_algorithm_registry.dart';
+import '../detection/contour_algorithms/edge_contour_algorithm.dart';
+import '../detection/marker_detector.dart';
+import '../detection/slab_contour_result.dart';
 import '../../utils/general/machine_coordinates.dart';
 import '../gcode/gcode_generator.dart';
 import '../../utils/general/error_utils.dart';

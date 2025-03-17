@@ -4,7 +4,7 @@
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 import '../general/machine_coordinates.dart';
-import '../../services/image_processing/marker_detector.dart';
+import '../../services/detection/marker_detector.dart';
 import 'image_utils.dart';
 
 /// Utilities for image perspective correction

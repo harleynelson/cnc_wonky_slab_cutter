@@ -3,18 +3,14 @@
 
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:image/image.dart' as img;
 
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
 import '../services/gcode/gcode_generator.dart';
 import '../utils/general/machine_coordinates.dart';
-import '../utils/image_processing/contour_detection_utils.dart';
-import '../utils/image_processing/drawing_utils.dart';
 import '../widgets/settings_fields.dart';
 import '../widgets/contour_overlay.dart';
 import '../widgets/marker_overlay.dart';
@@ -200,10 +196,6 @@ bool _isVertexConvex(List<Point> vertices, int vertexIndex) {
   return crossProduct > 0;
 }
 
-/// Calculate cross product (z component) for CCW check
-double _crossProduct(Point a, Point b, Point c) {
-  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-}
 
   double _calculateContourArea(List<Point> contour) {
     if (contour.length < 3) return 0;

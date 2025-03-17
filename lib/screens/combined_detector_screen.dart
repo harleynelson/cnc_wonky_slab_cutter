@@ -9,10 +9,10 @@ import 'package:image/image.dart' as img;
 
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
-import '../services/image_processing/contour_algorithms/contour_algorithm_registry.dart';
-import '../services/image_processing/contour_algorithms/edge_contour_algorithm.dart';
+import '../services/detection/contour_algorithms/contour_algorithm_registry.dart';
+import '../services/detection/contour_algorithms/edge_contour_algorithm.dart';
 import '../utils/general/machine_coordinates.dart';
-import '../services/processing/processing_flow_manager.dart';
+import '../services/flow/processing_flow_manager.dart';
 import '../widgets/marker_overlay.dart';
 import '../widgets/contour_overlay.dart';
 import '../utils/general/error_utils.dart';
@@ -137,8 +137,8 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
       throw Exception('Image dimensions not available');
     }
     
-    // Calculate the actual seed point in the image
-    final imagePoint = _calculateImagePoint(_selectedPoint!);
+    // // Calculate the actual seed point in the image
+    // final imagePoint = _calculateImagePoint(_selectedPoint!);
     
     // Detect contour using interactive method
     final markerResult = _flowManager.result.markerResult;
@@ -154,14 +154,14 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
       throw Exception('Failed to decode image');
     }
     
-    // Create coordinate system from marker detection result
-    final coordinateSystem = _flowManager.result.markerResult!;
+    // // Create coordinate system from marker detection result
+    // final coordinateSystem = _flowManager.result.markerResult!;
     
-    // Use edge contour algorithm with the calculated image point coordinates
-    final contourAlgorithmRegistry = await _flowManager.detectSlabContourAutomatic(
-      imagePoint.x.toInt(),  // Pass the seed point x coordinate
-      imagePoint.y.toInt()   // Pass the seed point y coordinate
-    );
+    // // Use edge contour algorithm with the calculated image point coordinates
+    // final contourAlgorithmRegistry = await _flowManager.detectSlabContourAutomatic(
+    //   imagePoint.x.toInt(),  // Pass the seed point x coordinate
+    //   imagePoint.y.toInt()   // Pass the seed point y coordinate
+    // );
     
     setState(() {
       _contourDetected = true;
@@ -826,10 +826,8 @@ void _updateLocalSettings(SettingsModel updatedSettings) {
     widget.settings.continueSearchDistance = updatedSettings.continueSearchDistance;
     
     // Update the settings in the flow manager
-    if (_flowManager != null) {
-      _flowManager.updateSettings(updatedSettings);
-    }
-  });
+    _flowManager.updateSettings(updatedSettings);
+    });
 }
 
 // Add this method to display the debug image

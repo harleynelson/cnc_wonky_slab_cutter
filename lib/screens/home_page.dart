@@ -13,7 +13,6 @@ import 'file_picker_screen.dart';
 import 'image_correction_screen.dart';
 import 'image_selection_screen.dart';
 import 'settings_screen.dart';
-import 'combined_detector_screen.dart';
 
 class HomePage extends StatefulWidget {
   final List<CameraDescription> cameras;

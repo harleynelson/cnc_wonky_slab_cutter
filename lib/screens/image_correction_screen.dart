@@ -3,18 +3,16 @@
 
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image/image.dart' as img;
 
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
-import '../services/processing/processing_flow_manager.dart';
+import '../services/flow/processing_flow_manager.dart';
 import '../utils/image_processing/image_correction_utils.dart';
 import '../utils/general/machine_coordinates.dart';
-import '../services/image_processing/marker_detector.dart';
-import '../utils/image_processing/image_utils.dart';
+import '../services/detection/marker_detector.dart';
 import 'slab_detection_screen.dart';
 
 class ImageCorrectionScreen extends StatefulWidget {
@@ -46,13 +44,11 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
   
   // Processing state
   bool _markersDetected = false;
-  bool _imageProcessed = false;
   
   // Marker positions
   Point? _originMarkerPoint;
   Point? _xAxisMarkerPoint;
   Point? _yAxisMarkerPoint;
-  File? _correctedImageFile;
   
   @override
   void initState() {
@@ -231,7 +227,6 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
       
       setState(() {
         _markersDetected = true;
-        _correctedImageFile = correctedImageFile;
         _isLoading = false;
         _statusMessage = 'Image corrected! Tap "Continue" to proceed.';
       });
