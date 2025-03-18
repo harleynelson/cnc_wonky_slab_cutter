@@ -91,16 +91,6 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
     // Log raw tap position for debugging
     print('DEBUG: Raw tap at (${tapPosition.dx}, ${tapPosition.dy})');
     
-    // Verify tap is within a reasonable range for the image container
-    final RenderBox imageContainer = context.findRenderObject() as RenderBox;
-    final containerSize = imageContainer.size;
-    
-    if (tapPosition.dx < 0 || tapPosition.dx > containerSize.width || 
-        tapPosition.dy < 0 || tapPosition.dy > 438.0) { // Using fixed height of 438
-      print('DEBUG: Tap outside of image container bounds');
-      return;
-    }
-    
     // Calculate actual image coordinates from tap position
     final imagePoint = _calculateImagePoint(tapPosition);
     
@@ -191,13 +181,6 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
         widget.settings.markerYDistance
       );
       
-      // Create a debug visualization
-      final debugImage = ImageCorrectionUtils.createDebugImage(
-        image,
-        markers,
-        correctedImage
-      );
-      
       // Save the corrected image to a temporary file
       final tempDir = await Directory.systemTemp.createTemp('corrected_image_');
       final correctedImagePath = '${tempDir.path}/corrected_image.png';
@@ -216,7 +199,7 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
         pixelToMmRatio: pixelToMmRatio,
         origin: origin,
         orientationAngle: orientationAngle,
-        debugImage: debugImage
+        debugImage: null // No debug image
       );
       
       // Update the flow manager with the corrected image and markers
@@ -244,68 +227,71 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
       return Point(0, 0);
     }
     
-    // Get the direct parent render object of the image
-    final RenderBox imageContainer = context.findRenderObject() as RenderBox;
+    final RenderBox box = context.findRenderObject() as RenderBox;
+    final Size boxSize = box.size;
     
-    // Get the overlay's container size - using the same fixed height as in combined_detector_screen
-    final markerOverlaySize = Size(imageContainer.size.width, 438.0); // Match overlay's canvas size
+    // Calculate image display size and position within container
+    final double imageAspect = _imageSize!.width / _imageSize!.height;
+    final double boxAspect = boxSize.width / boxSize.height;
     
-    print('DEBUG: Tap position: ${tapPosition.dx}x${tapPosition.dy}');
-    print('DEBUG: Using overlay size: ${markerOverlaySize.width}x${markerOverlaySize.height}');
+    double scaledWidth, scaledHeight;
+    double offsetX = 0, offsetY = 0;
     
-    // Use the same logic as in imageToDisplayCoordinates but in reverse
-    final imageAspect = _imageSize!.width / _imageSize!.height;
-    final displayAspect = markerOverlaySize.width / markerOverlaySize.height;
-    
-    double displayWidth, displayHeight, offsetX = 0, offsetY = 0;
-    
-    if (imageAspect > displayAspect) {
-      displayWidth = markerOverlaySize.width;
-      displayHeight = displayWidth / imageAspect;
-      offsetY = (markerOverlaySize.height - displayHeight) / 2;
+    if (imageAspect > boxAspect) {
+      // Image is wider than box - fills width, centers vertically
+      scaledWidth = boxSize.width;
+      scaledHeight = boxSize.width / imageAspect;
+      offsetY = (boxSize.height - scaledHeight) / 2;
     } else {
-      displayHeight = markerOverlaySize.height;
-      displayWidth = displayHeight * imageAspect;
-      offsetX = (markerOverlaySize.width - displayWidth) / 2;
+      // Image is taller than box - fills height, centers horizontally
+      scaledHeight = boxSize.height;
+      scaledWidth = boxSize.height * imageAspect;
+      offsetX = (boxSize.width - scaledWidth) / 2;
     }
     
-    // Scale factors
-    final scaleX = _imageSize!.width / displayWidth;
-    final scaleY = _imageSize!.height / displayHeight;
+    // Check if tap is inside image bounds
+    if (tapPosition.dx < offsetX || tapPosition.dx > offsetX + scaledWidth ||
+        tapPosition.dy < offsetY || tapPosition.dy > offsetY + scaledHeight) {
+      print("Warning: Tap outside image bounds");
+    }
     
     // Convert tap position to image coordinates
-    final imageX = (tapPosition.dx - offsetX) * scaleX;
-    final imageY = (tapPosition.dy - offsetY) * scaleY;
-    
-    print('DEBUG: Display size: ${displayWidth}x${displayHeight} with offset (${offsetX},${offsetY})');
-    print('DEBUG: Scale factors: ${scaleX}x${scaleY}');
-    print('DEBUG: Tap at (${tapPosition.dx},${tapPosition.dy}) → Image (${imageX},${imageY})');
+    final imageX = ((tapPosition.dx - offsetX) / scaledWidth) * _imageSize!.width;
+    final imageY = ((tapPosition.dy - offsetY) / scaledHeight) * _imageSize!.height;
     
     return Point(imageX, imageY);
   }
   
   Widget _buildSamplePointIndicator(Point point, Color color, String label) {
-    if (_imageSize == null) return Container();
+    final RenderBox box = context.findRenderObject() as RenderBox;
+    final Size boxSize = box.size;
     
-    // Get container size with fixed height for consistency
-    final containerSize = Size(
-      (context.findRenderObject() as RenderBox).size.width,
-      438.0 // Fixed height to match combined_detector_screen
-    );
+    // Calculate image display size and position
+    final double imageAspect = _imageSize!.width / _imageSize!.height;
+    final double boxAspect = boxSize.width / boxSize.height;
     
-    // Use standard method for coordinate transformation
-    final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
-      point,
-      _imageSize!,
-      containerSize
-    );
+    double scaledWidth, scaledHeight;
+    double offsetX = 0, offsetY = 0;
     
-    // Add debug logs
-    print('DEBUG INDICATOR: Image point (${point.x}, ${point.y}) -> Display point (${displayPoint.x}, ${displayPoint.y})');
+    if (imageAspect > boxAspect) {
+      scaledWidth = boxSize.width;
+      scaledHeight = boxSize.width / imageAspect;
+      offsetY = (boxSize.height - scaledHeight) / 2;
+    } else {
+      scaledHeight = boxSize.height;
+      scaledWidth = boxSize.height * imageAspect;
+      offsetX = (boxSize.width - scaledWidth) / 2;
+    }
+    
+    // Convert image to screen coordinates
+    final screenX = (point.x / _imageSize!.width) * scaledWidth + offsetX;
+    final screenY = (point.y / _imageSize!.height) * scaledHeight + offsetY;
+    
+    print('DEBUG INDICATOR: Image point (${point.x}, ${point.y}) -> Display point (${screenX}, ${screenY})');
     
     return Positioned(
-      left: displayPoint.x - 10,
-      top: displayPoint.y - 10,
+      left: screenX - 10,
+      top: screenY - 10,
       child: Column(
         children: [
           Container(
@@ -403,37 +389,53 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
       ),
       body: Column(
         children: [
-          // Main content area with fixed height for consistency
-          Container(
-            height: 438.0, // Fixed height to match combined_detector_screen
+          // Main content area - responsive
+          Expanded(
             child: GestureDetector(
               onTapDown: _handleImageTap,
               child: Stack(
                 fit: StackFit.expand,
                 children: [
                   // Image display
-                  _buildImageDisplay(),
+                  Center(
+                    child: _imageSize != null
+                        ? AspectRatio(
+                            aspectRatio: _imageSize!.width / _imageSize!.height,
+                            child: _markersDetected && _flowManager.result.correctedImage != null
+                                ? Image.file(
+                                    _flowManager.result.correctedImage!,
+                                    fit: BoxFit.contain,
+                                  )
+                                : Image.file(
+                                    _flowManager.result.originalImage!,
+                                    fit: BoxFit.contain,
+                                  ),
+                          )
+                        : Container(
+                            child: Text('Image not available'),
+                          ),
+                  ),
                   
                   // Marker point indicators
                   if (_originMarkerPoint != null && _imageSize != null)
                     _buildSamplePointIndicator(
                       _originMarkerPoint!, 
                       Colors.red,
-                      'Origin Marker'
+                      "Origin Marker"
                     ),
                     
                   if (_xAxisMarkerPoint != null && _imageSize != null)
                     _buildSamplePointIndicator(
                       _xAxisMarkerPoint!, 
                       Colors.green,
-                      'X-Axis Marker'
+                      "X-Axis Marker"
                     ),
                     
                   if (_yAxisMarkerPoint != null && _imageSize != null)
                     _buildSamplePointIndicator(
                       _yAxisMarkerPoint!, 
                       Colors.blue,
-                      'Scale Marker'
+                      "Scale Marker"
                     ),
                     
                   // Loading indicator

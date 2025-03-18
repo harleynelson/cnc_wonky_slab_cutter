@@ -22,9 +22,6 @@ static Future<img.Image> correctPerspective(
   print('MARKER DEBUG: X-Axis (${xAxisMarker.x.round()}, ${xAxisMarker.y.round()})');
   print('MARKER DEBUG: Y-Axis (${scaleMarker.x.round()}, ${scaleMarker.y.round()})');
   
-  // IMPORTANT: In image coordinates, y=0 is at the TOP of the image
-  // This means the "top" of our markers is actually at LOWER y values
-  
   // Calculate the vectors between markers
   final double baseVectorX = xAxisMarker.x - originMarker.x;
   final double baseVectorY = xAxisMarker.y - originMarker.y;
@@ -36,8 +33,6 @@ static Future<img.Image> correctPerspective(
   final double sideLength = math.sqrt(sideVectorX * sideVectorX + sideVectorY * sideVectorY);
   
   // Calculate the top-right corner from our three markers
-  // It's important to note that in image coordinates, the "top" of our trapezoid
-  // has SMALLER y values than the bottom
   final Point topRightCorner = Point(
     xAxisMarker.x + sideVectorX,
     xAxisMarker.y + sideVectorY
@@ -115,27 +110,7 @@ static Future<img.Image> correctPerspective(
     img.ColorRgba8(0, 100, 255, 80)
   );
   
-  // NEW CODE: Crop the image back to a rectangle and resize to match original dimensions
-  final img.Image croppedImage = _cropToRectangle(
-  destImage, 
-  destPts,
-  Point(destPts[0].x, destPts[0].y),  // Origin marker in dest coordinates
-  Point(destPts[1].x, destPts[1].y)   // X-axis marker in dest coordinates
-);
-  
-  // Resize to match the original width while preserving aspect ratio
-final double aspectRatio = croppedImage.width / croppedImage.height;
-final int resizedWidth = sourceImage.width;
-final int resizedHeight = (resizedWidth / aspectRatio).round();
-
-final img.Image resizedImage = img.copyResize(
-  croppedImage,
-  width: resizedWidth,
-  height: resizedHeight,
-  interpolation: img.Interpolation.cubic
-);
-  
-  return resizedImage;
+  return destImage;
 }
   
   /// Create a debug image showing original and corrected images
@@ -273,7 +248,12 @@ static img.Image createDebugImage(
 }
 
 /// Crop the image to create a rectangle based on the narrowest width of the trapezoid
-static img.Image _cropToRectangle(img.Image image, List<Point> destPts) {
+static img.Image _cropToRectangle(
+  img.Image image, 
+  List<Point> destPts,
+  Point originPoint,
+  Point xAxisPoint
+) {
   const int margin = 10;
   
   // Find narrowest width - typically this would be between top points (points 2 and 3)
