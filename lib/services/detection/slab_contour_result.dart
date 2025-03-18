@@ -9,10 +9,10 @@ import '../../utils/general/machine_coordinates.dart';
 /// Result of slab contour detection
 class SlabContourResult {
   /// Contour in image pixel coordinates
-  final List<Point> pixelContour;
+  final List<PointOfCoordinates> pixelContour;
   
   /// Contour in machine (mm) coordinates
-  final List<Point> machineContour;
+  final List<PointOfCoordinates> machineContour;
   
   /// Optional debug image with visualizations
   final img.Image? debugImage;
@@ -23,12 +23,16 @@ class SlabContourResult {
   /// Area in millimeters squared (optional)
   final double machineArea;
   
+  /// Optional detection method used
+  final String? detectionMethod;
+  
   SlabContourResult({
     required this.pixelContour,
     required this.machineContour,
     this.debugImage,
     this.pixelArea = 0.0,
     this.machineArea = 0.0,
+    this.detectionMethod,
   });
   
   /// Check if the contour is valid

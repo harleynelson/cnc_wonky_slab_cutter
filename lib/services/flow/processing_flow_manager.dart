@@ -7,10 +7,10 @@ import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
 import '../../models/settings_model.dart';
-import '../image_processing/contour_algorithms/contour_algorithm_registry.dart';
-import '../image_processing/contour_algorithms/edge_contour_algorithm.dart';
-import '../image_processing/marker_detector.dart';
-import '../image_processing/slab_contour_result.dart';
+import '../detection/contour_algorithms/contour_algorithm_registry.dart';
+import '../detection/contour_algorithms/edge_contour_algorithm.dart';
+import '../detection/marker_detector.dart';
+import '../detection/slab_contour_result.dart';
 import '../../utils/general/machine_coordinates.dart';
 import '../gcode/gcode_generator.dart';
 import '../../utils/general/error_utils.dart';
@@ -22,14 +22,15 @@ enum ProcessingState {
   slabDetection,
   gcodeGeneration,
   completed,
-  error
+  error, imageProcessing
 }
 
 /// Method used for contour detection
 enum ContourDetectionMethod {
   automatic,
   interactive,
-  manual
+  manual,
+  multiTap  // Added multiTap method
 }
 
 /// Result of the processing flow containing all intermediate and final results
@@ -38,13 +39,14 @@ class ProcessingResult {
   final img.Image? processedImage;
   final MarkerDetectionResult? markerResult;
   final SlabContourResult? contourResult;
-  final List<Point>? toolpath;
+  final List<PointOfCoordinates>? toolpath;
   final String? gcode;
   final File? gcodeFile;
   final String? errorMessage;
   final ProcessingState state;
   final ContourDetectionMethod? contourMethod;
-  
+  final File? correctedImage;
+
   ProcessingResult({
     this.originalImage,
     this.processedImage,
@@ -56,6 +58,7 @@ class ProcessingResult {
     this.errorMessage,
     this.state = ProcessingState.notStarted,
     this.contourMethod,
+    this.correctedImage,
   });
   
   /// Create a copy with updated values
@@ -64,12 +67,13 @@ class ProcessingResult {
     img.Image? processedImage,
     MarkerDetectionResult? markerResult,
     SlabContourResult? contourResult,
-    List<Point>? toolpath,
+    List<PointOfCoordinates>? toolpath,
     String? gcode,
     File? gcodeFile,
     String? errorMessage,
     ProcessingState? state,
     ContourDetectionMethod? contourMethod,
+    File? correctedImage,
   }) {
     return ProcessingResult(
       originalImage: originalImage ?? this.originalImage,
@@ -82,6 +86,7 @@ class ProcessingResult {
       errorMessage: errorMessage ?? this.errorMessage,
       state: state ?? this.state,
       contourMethod: contourMethod ?? this.contourMethod,
+      correctedImage: correctedImage ?? this.correctedImage,
     );
   }
   
@@ -108,6 +113,9 @@ class ProcessingResult {
         return false;
       case ProcessingState.error:
         return false;
+      case ProcessingState.imageProcessing:
+        // TODO: Handle this case.
+        throw UnimplementedError();
     }
   }
 }
@@ -345,19 +353,42 @@ Future<bool> detectSlabContourAutomatic([int? seedX, int? seedY]) async {
     notifyListeners();
   }
   
-  /// Update contour result from external source (interactive or manual methods)
-  void updateContourResult(SlabContourResult contourResult, {ContourDetectionMethod? method}) {
-    final usedMethod = method ?? _preferredContourMethod;
-    
+  /// Update marker detection result
+void updateMarkerResult(MarkerDetectionResult markerResult) {
+  _result = _result.copyWith(
+    markerResult: markerResult,
+    state: ProcessingState.markerDetection
+  );
+  
+  notifyListeners();
+}
+
+/// Update the flow manager with a corrected image and markers
+  void updateCorrectedImage(File correctedImageFile, MarkerDetectionResult markerResult) {
     _result = _result.copyWith(
-      contourResult: contourResult,
-      processedImage: contourResult.debugImage ?? _result.processedImage,
-      state: ProcessingState.slabDetection,
-      contourMethod: usedMethod,
+      correctedImage: correctedImageFile,
+      markerResult: markerResult,
+      state: ProcessingState.imageProcessing
     );
     
     notifyListeners();
   }
+  /// Update contour result and method
+void updateContourResults(SlabContourResult contourResult, {ContourDetectionMethod? method}) {
+  // Create a new version of the result with the updated contour
+  _result = _result.copyWith(
+    contourResult: contourResult,
+    state: ProcessingState.slabDetection,
+    contourMethod: method ?? _preferredContourMethod,
+  );
+  
+  notifyListeners();
+}
+
+// Then update the existing updateContourResult method
+void updateContourResult(SlabContourResult contourResult, {ContourDetectionMethod? method}) {
+  updateContourResults(contourResult, method: method);
+}
   
   /// Update the processing state
   void _updateState(ProcessingState newState) {
@@ -435,7 +466,7 @@ Future<bool> detectSlabContourAutomatic([int? seedX, int? seedY]) async {
   }
   
   /// Generate a toolpath for the contour
-  List<Point> _generateToolpath(List<Point> contour, double toolDiameter, double stepover) {
+  List<PointOfCoordinates> _generateToolpath(List<PointOfCoordinates> contour, double toolDiameter, double stepover) {
     // Find the bounding box of the contour
     double minX = double.infinity;
     double minY = double.infinity;
@@ -457,17 +488,17 @@ Future<bool> detectSlabContourAutomatic([int? seedX, int? seedY]) async {
     maxY -= inset;
     
     // Generate zigzag pattern
-    final toolpath = <Point>[];
+    final toolpath = <PointOfCoordinates>[];
     double y = minY;
     bool movingRight = true;
     
     while (y <= maxY) {
       if (movingRight) {
-        toolpath.add(Point(minX, y));
-        toolpath.add(Point(maxX, y));
+        toolpath.add(PointOfCoordinates(minX, y));
+        toolpath.add(PointOfCoordinates(maxX, y));
       } else {
-        toolpath.add(Point(maxX, y));
-        toolpath.add(Point(minX, y));
+        toolpath.add(PointOfCoordinates(maxX, y));
+        toolpath.add(PointOfCoordinates(minX, y));
       }
       
       y += stepover;

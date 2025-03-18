@@ -4,21 +4,21 @@ import '../general/machine_coordinates.dart';
 /// Utilities for geometric operations and calculations
 class GeometryUtils {
   /// Calculate distance between two points
-  static double distance(Point p1, Point p2) {
+  static double distance(PointOfCoordinates p1, PointOfCoordinates p2) {
     final dx = p2.x - p1.x;
     final dy = p2.y - p1.y;
     return math.sqrt(dx * dx + dy * dy);
   }
 
   /// Calculate distance between two points
-  static double distanceBetween(Point a, Point b) {
+  static double distanceBetween(PointOfCoordinates a, PointOfCoordinates b) {
     final dx = b.x - a.x;
     final dy = b.y - a.y;
     return math.sqrt(dx * dx + dy * dy);
   }
   
   /// Calculate squared distance between two points (faster when only comparing distances)
-  static double squaredDistance(Point p1, Point p2) {
+  static double squaredDistance(PointOfCoordinates p1, PointOfCoordinates p2) {
     final dx = p2.x - p1.x;
     final dy = p2.y - p1.y;
     return dx * dx + dy * dy;
@@ -86,7 +86,7 @@ class GeometryUtils {
   // }
 
   /// Simplify a polygon using the Douglas-Peucker algorithm
-  static List<Point> simplifyPolygon(List<Point> points, double epsilon, {int maxDepth = 100}) {
+  static List<PointOfCoordinates> simplifyPolygon(List<PointOfCoordinates> points, double epsilon, {int maxDepth = 100}) {
     if (points.length <= 2) return List.from(points);
     
     try {
@@ -98,8 +98,8 @@ class GeometryUtils {
   }
 
   /// Find intersections between a line segment and a polygon
-  static List<Point> findLinePolygonIntersections(Point p1, Point p2, List<Point> polygon) {
-    final intersections = <Point>[];
+  static List<PointOfCoordinates> findLinePolygonIntersections(PointOfCoordinates p1, PointOfCoordinates p2, List<PointOfCoordinates> polygon) {
+    final intersections = <PointOfCoordinates>[];
     
     for (int i = 0; i < polygon.length - 1; i++) {
       final q1 = polygon[i];
@@ -115,7 +115,7 @@ class GeometryUtils {
   }
   
   /// Calculate perpendicular distance from point to line segment
-  static double _perpendicularDistance(Point point, Point lineStart, Point lineEnd) {
+  static double _perpendicularDistance(PointOfCoordinates point, PointOfCoordinates lineStart, PointOfCoordinates lineEnd) {
     try {
       final dx = lineEnd.x - lineStart.x;
       final dy = lineEnd.y - lineStart.y;
@@ -137,7 +137,7 @@ class GeometryUtils {
   }
 
   /// Douglas-Peucker algorithm with stack overflow prevention
-  static List<Point> _douglasPeucker(List<Point> points, double epsilon, int depth, int maxDepth) {
+  static List<PointOfCoordinates> _douglasPeucker(List<PointOfCoordinates> points, double epsilon, int depth, int maxDepth) {
     if (points.length <= 2) return List.from(points);
     if (depth >= maxDepth) return List.from(points);
     
@@ -175,7 +175,7 @@ class GeometryUtils {
   }
   
   /// Check if a point is on a line segment
-  static bool isPointOnLineSegment(Point point, Point lineStart, Point lineEnd) {
+  static bool isPointOnLineSegment(PointOfCoordinates point, PointOfCoordinates lineStart, PointOfCoordinates lineEnd) {
     // Check if point is on line
     final crossProduct = (point.y - lineStart.y) * (lineEnd.x - lineStart.x) - 
                       (point.x - lineStart.x) * (lineEnd.y - lineStart.y);
@@ -261,7 +261,7 @@ class GeometryUtils {
   // }
   
   /// Calculate the intersection point of two lines
-  static Point? lineIntersection(Point line1Start, Point line1End, Point line2Start, Point line2End) {
+  static PointOfCoordinates? lineIntersection(PointOfCoordinates line1Start, PointOfCoordinates line1End, PointOfCoordinates line2Start, PointOfCoordinates line2End) {
     // Line 1 represented as a1x + b1y = c1
     final a1 = line1End.y - line1Start.y;
     final b1 = line1Start.x - line1End.x;
@@ -281,11 +281,11 @@ class GeometryUtils {
     final x = (b2 * c1 - b1 * c2) / determinant;
     final y = (a1 * c2 - a2 * c1) / determinant;
     
-    return Point(x, y);
+    return PointOfCoordinates(x, y);
   }
   
   /// Calculate the intersection point of two line segments
-  static Point? lineSegmentIntersection(Point line1Start, Point line1End, Point line2Start, Point line2End) {
+  static PointOfCoordinates? lineSegmentIntersection(PointOfCoordinates line1Start, PointOfCoordinates line1End, PointOfCoordinates line2Start, PointOfCoordinates line2End) {
     final intersection = lineIntersection(line1Start, line1End, line2Start, line2End);
     
     if (intersection == null) return null;
@@ -300,7 +300,7 @@ class GeometryUtils {
   }
   
   /// Calculate the area of a polygon
-  static double polygonArea(List<Point> points) {
+  static double polygonArea(List<PointOfCoordinates> points) {
     if (points.length < 3) return 0.0;
     
     double area = 0.0;
@@ -316,7 +316,7 @@ class GeometryUtils {
   }
   
   /// Calculate the perimeter of a polygon
-  static double polygonPerimeter(List<Point> points) {
+  static double polygonPerimeter(List<PointOfCoordinates> points) {
     if (points.length < 2) return 0.0;
     
     double perimeter = 0.0;
@@ -330,7 +330,7 @@ class GeometryUtils {
   }
   
   /// Check if a point is inside a polygon
-  static bool isPointInPolygon(Point point, List<Point> polygon) {
+  static bool isPointInPolygon(PointOfCoordinates point, List<PointOfCoordinates> polygon) {
     if (polygon.length < 3) return false;
     
     bool inside = false;
@@ -349,7 +349,7 @@ class GeometryUtils {
   }
   
   /// Calculate the convex hull of a set of points using Graham scan
-  static List<Point> convexHull(List<Point> points) {
+  static List<PointOfCoordinates> convexHull(List<PointOfCoordinates> points) {
     if (points.length <= 3) return List.from(points);
     
     // Find point with lowest y-coordinate (and leftmost if tied)
@@ -385,7 +385,7 @@ class GeometryUtils {
     });
     
     // Build convex hull
-    final hull = <Point>[];
+    final hull = <PointOfCoordinates>[];
     hull.add(points[0]);
     hull.add(points[1]);
     
@@ -400,12 +400,12 @@ class GeometryUtils {
   }
   
   /// Cross product for determining counter-clockwise orientation
-  static double _ccw(Point a, Point b, Point c) {
+  static double _ccw(PointOfCoordinates a, PointOfCoordinates b, PointOfCoordinates c) {
     return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
   }
   
   /// Calculate the bounding box of a set of points
-  static Map<String, double> calculateBoundingBox(List<Point> points) {
+  static Map<String, double> calculateBoundingBox(List<PointOfCoordinates> points) {
     if (points.isEmpty) {
       return {
         'minX': 0.0,

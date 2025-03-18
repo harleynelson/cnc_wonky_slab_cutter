@@ -146,7 +146,7 @@ class SlabContourDetector {
       final grayscale = ImageUtils.convertToGrayscale(image);
       
       // Try multiple threshold levels to find the best contour
-      List<Point> bestContour = [];
+      List<PointOfCoordinates> bestContour = [];
       int bestThreshold = 128;
       
       // Try different threshold levels
@@ -209,12 +209,12 @@ class SlabContourDetector {
       final binary = ThresholdUtils.applyBinaryThreshold(grayscale, threshold);
       
       // Find all non-zero points
-      final nonZeroPoints = <Point>[];
+      final nonZeroPoints = <PointOfCoordinates>[];
       for (int y = 0; y < binary.height; y++) {
         for (int x = 0; x < binary.width; x++) {
           final pixel = binary.getPixel(x, y);
           if (ImageUtils.calculateLuminance(pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()) < 128) {
-            nonZeroPoints.add(Point(x.toDouble(), y.toDouble()));
+            nonZeroPoints.add(PointOfCoordinates(x.toDouble(), y.toDouble()));
           }
         }
       }
@@ -282,7 +282,7 @@ class SlabContourDetector {
 }
   
   /// Visualize contour on debug image
-  void _visualizeContourOnDebug(img.Image debugImage, List<Point> contour, img.Color color, String label) {
+  void _visualizeContourOnDebug(img.Image debugImage, List<PointOfCoordinates> contour, img.Color color, String label) {
     try {
       // Draw contour
       for (int i = 0; i < contour.length - 1; i++) {

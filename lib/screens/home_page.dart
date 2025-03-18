@@ -10,9 +10,9 @@ import 'package:provider/provider.dart';
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
 import 'file_picker_screen.dart';
+import 'image_correction_screen.dart';
 import 'image_selection_screen.dart';
 import 'settings_screen.dart';
-import 'combined_detector_screen.dart';
 
 class HomePage extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -61,22 +61,23 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _handleImageCaptured(File imageFile) {
-    // Initialize the processing provider
-    final processingProvider = Provider.of<ProcessingProvider>(context, listen: false);
-    processingProvider.createFlowManager(_settings);
-    
-    // Navigate to the combined detector screen
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => CombinedDetectorScreen(
-          imageFile: imageFile,
-          settings: _settings,
-          onSettingsChanged: _handleSettingsChanged,
-        ),
+  // Initialize the processing provider
+  final processingProvider = Provider.of<ProcessingProvider>(context, listen: false);
+  processingProvider.createFlowManager(_settings);
+  
+  // Navigate to the image correction screen instead of combined detector
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => ImageCorrectionScreen(
+        imageFile: imageFile,
+        settings: _settings,
+        onSettingsChanged: _handleSettingsChanged,
       ),
-    );
-  }
+    ),
+  );
+}
+
 
   void _handleSettingsChanged(SettingsModel newSettings) async {
     setState(() {

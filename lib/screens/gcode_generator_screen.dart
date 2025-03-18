@@ -3,18 +3,14 @@
 
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:image/image.dart' as img;
 
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
 import '../services/gcode/gcode_generator.dart';
 import '../utils/general/machine_coordinates.dart';
-import '../utils/image_processing/contour_detection_utils.dart';
-import '../utils/image_processing/drawing_utils.dart';
 import '../widgets/settings_fields.dart';
 import '../widgets/contour_overlay.dart';
 import '../widgets/marker_overlay.dart';
@@ -42,7 +38,7 @@ class _GcodeGeneratorScreenState extends State<GcodeGeneratorScreen> {
   
   // Add slabMargin for adjusting the contour size
   double _slabMargin = 5.0; // Default 5mm margin
-  List<Point>? _adjustedContour;
+  List<PointOfCoordinates>? _adjustedContour;
 
   @override
   void initState() {
@@ -94,18 +90,18 @@ void _updateAdjustedContour() {
 }
 
 /// Create a buffered polygon from the original contour using angle bisector method
-List<Point> _createBufferedPolygon(List<Point> originalContour, double distance) {
+List<PointOfCoordinates> _createBufferedPolygon(List<PointOfCoordinates> originalContour, double distance) {
   if (originalContour.length < 3) {
     return originalContour;
   }
   
   // Ensure the contour is closed
-  final contour = List<Point>.from(originalContour);
+  final contour = List<PointOfCoordinates>.from(originalContour);
   if (contour.first.x != contour.last.x || contour.first.y != contour.last.y) {
     contour.add(contour.first);
   }
   
-  final bufferedPoints = <Point>[];
+  final bufferedPoints = <PointOfCoordinates>[];
   final size = contour.length;
   
   // Process each vertex except the last one (which is a duplicate of the first for closed polygon)
@@ -175,7 +171,7 @@ List<Point> _createBufferedPolygon(List<Point> originalContour, double distance)
       newPointY = currY - (currY - pointOfBisectorY) * distance / bisectorDistanceVertex;
     }
     
-    bufferedPoints.add(Point(newPointX, newPointY));
+    bufferedPoints.add(PointOfCoordinates(newPointX, newPointY));
   }
   
   // Close the polygon
@@ -187,7 +183,7 @@ List<Point> _createBufferedPolygon(List<Point> originalContour, double distance)
 }
 
 /// Check if a vertex is convex
-bool _isVertexConvex(List<Point> vertices, int vertexIndex) {
+bool _isVertexConvex(List<PointOfCoordinates> vertices, int vertexIndex) {
   final prev = vertices[(vertexIndex - 1 + vertices.length) % vertices.length];
   final curr = vertices[vertexIndex];
   final next = vertices[(vertexIndex + 1) % vertices.length];
@@ -200,12 +196,8 @@ bool _isVertexConvex(List<Point> vertices, int vertexIndex) {
   return crossProduct > 0;
 }
 
-/// Calculate cross product (z component) for CCW check
-double _crossProduct(Point a, Point b, Point c) {
-  return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
-}
 
-  double _calculateContourArea(List<Point> contour) {
+  double _calculateContourArea(List<PointOfCoordinates> contour) {
     if (contour.length < 3) return 0;
     
     double area = 0;
@@ -218,7 +210,7 @@ double _crossProduct(Point a, Point b, Point c) {
     return (area.abs() / 2);
   }
 
-  double _estimateMachiningTime(List<Point> contour, SettingsModel settings) {
+  double _estimateMachiningTime(List<PointOfCoordinates> contour, SettingsModel settings) {
     // Approximate toolpath length
     double pathLength = 0;
     for (int i = 0; i < contour.length - 1; i++) {
@@ -693,12 +685,12 @@ double _crossProduct(Point a, Point b, Point c) {
 
 /// Custom painter for visualizing the adjusted contour
 class AdjustedContourPainter extends CustomPainter {
-  final List<Point> adjustedContour;
+  final List<PointOfCoordinates> adjustedContour;
   final MachineCoordinateSystem coordSystem;
   final Size imageSize;
   final Size displaySize;
   final bool showOriginalContour;
-  final List<Point>? originalContour;
+  final List<PointOfCoordinates>? originalContour;
 
   AdjustedContourPainter({
     required this.adjustedContour,

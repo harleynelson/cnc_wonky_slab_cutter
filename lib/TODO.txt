@@ -1,4 +1,5 @@
-
+Perspective Correction:
+    -  Crop back to rectangle.  Our current stuff isn't working.  Doesn't appear to actually crop the trapezoid off.  Double check the math/flow.
 generate gcode
     - still janky
         - this is our output from our L shaped slab with no margin...

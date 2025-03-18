@@ -1,5 +1,4 @@
 import 'dart:async';
-import 'dart:io';
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 import '../../utils/general/machine_coordinates.dart';
@@ -19,13 +18,13 @@ class MarkerPoint {
 
   MarkerPoint(this.x, this.y, this.role, {this.confidence = 1.0});
   
-  Point toPoint() => Point(x.toDouble(), y.toDouble());
+  PointOfCoordinates toPoint() => PointOfCoordinates(x.toDouble(), y.toDouble());
 }
 
 class MarkerDetectionResult {
   final List<MarkerPoint> markers;
   final double pixelToMmRatio;
-  final Point origin;
+  final PointOfCoordinates origin;
   final double orientationAngle;
   final img.Image? debugImage;
 
@@ -68,8 +67,8 @@ class MarkerDetector {
   print('Marker detection - input image dimensions: ${image.width}x${image.height}');
   
   // IMPORTANT: Store original image dimensions before any resizing
-  final origWidth = image.width;
-  final origHeight = image.height;
+  // final origWidth = image.width;
+  // final origHeight = image.height;
   
   // Downsample large images to conserve memory
   img.Image processImage = image;
@@ -576,7 +575,7 @@ Map<String, double> _calculateBlobProperties(List<int> blob) {
     return MarkerDetectionResult(
       markers: markers,
       pixelToMmRatio: pixelToMmRatio,
-      origin: Point(originMarker.x.toDouble(), originMarker.y.toDouble()),
+      origin: PointOfCoordinates(originMarker.x.toDouble(), originMarker.y.toDouble()),
       orientationAngle: orientationAngle,
       debugImage: debugImage,
     );
@@ -928,7 +927,7 @@ List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
     }
     
     // Create origin point
-    final origin = Point(originMarker.x.toDouble(), originMarker.y.toDouble());
+    final origin = PointOfCoordinates(originMarker.x.toDouble(), originMarker.y.toDouble());
     
     // Draw debug visualizations if needed
     if (debugImage != null) {
