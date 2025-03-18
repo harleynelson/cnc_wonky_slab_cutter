@@ -123,131 +123,112 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
   }
   
   Future<void> _processMarkerPoints() async {
-    if (_originMarkerPoint == null || _xAxisMarkerPoint == null || 
-        _yAxisMarkerPoint == null || _topRightMarkerPoint == null) {
-      setState(() {
-        _errorMessage = 'All four marker points are required';
-      });
-      return;
+  if (_originMarkerPoint == null || _xAxisMarkerPoint == null || 
+      _yAxisMarkerPoint == null || _topRightMarkerPoint == null) {
+    setState(() {
+      _errorMessage = 'All four marker points are required';
+    });
+    return;
+  }
+  
+  setState(() {
+    _isLoading = true;
+    _statusMessage = 'Processing marker points...';
+  });
+  
+  try {
+    // Validate points are within image bounds
+    if (_isPointOutOfBounds(_originMarkerPoint!) || 
+        _isPointOutOfBounds(_xAxisMarkerPoint!) ||
+        _isPointOutOfBounds(_yAxisMarkerPoint!) ||
+        _isPointOutOfBounds(_topRightMarkerPoint!)) {
+      throw Exception('One or more markers are outside the image bounds');
     }
+    
+    // Create marker points from tap positions
+    final originMarker = MarkerPoint(
+      _originMarkerPoint!.x.toInt(), 
+      _originMarkerPoint!.y.toInt(), 
+      MarkerRole.origin
+    );
+    
+    final xAxisMarker = MarkerPoint(
+      _xAxisMarkerPoint!.x.toInt(), 
+      _xAxisMarkerPoint!.y.toInt(), 
+      MarkerRole.xAxis
+    );
+    
+    final scaleMarker = MarkerPoint(
+      _yAxisMarkerPoint!.x.toInt(), 
+      _yAxisMarkerPoint!.y.toInt(), 
+      MarkerRole.scale
+    );
+    
+    final topRightMarker = MarkerPoint(
+      _topRightMarkerPoint!.x.toInt(), 
+      _topRightMarkerPoint!.y.toInt(), 
+      MarkerRole.topRight
+    );
+    
+    // Load the original image for visualization
+    final imageBytes = await widget.imageFile.readAsBytes();
+    final image = img.decodeImage(imageBytes);
+    
+    if (image == null) {
+      throw Exception('Failed to decode image');
+    }
+    
+    // Apply perspective correction with four markers
+    final correctedImage = await ImageCorrectionUtils.correctPerspective(
+      image, 
+      originMarker.toPoint(), 
+      xAxisMarker.toPoint(), 
+      scaleMarker.toPoint(),
+      topRightMarker.toPoint(),
+      widget.settings.markerXDistance,
+      widget.settings.markerYDistance
+    );
+    
+    // Save the corrected image to a temporary file
+    final tempDir = await Directory.systemTemp.createTemp('corrected_image_');
+    final correctedImagePath = '${tempDir.path}/corrected_image.png';
+    final correctedImageBytes = img.encodePng(correctedImage);
+    final correctedImageFile = File(correctedImagePath);
+    await correctedImageFile.writeAsBytes(correctedImageBytes);
+    
+    // Calculate pixel to mm ratio for corrected image
+    // Since we're using the real-world dimensions directly in the correction,
+    // the ratio in the corrected image is simply 1:1 (one pixel = one mm)
+    final pixelToMmRatio = 1.0;
+    
+    // Create marker result
+    final markerResult = MarkerDetectionResult(
+      markers: [originMarker, xAxisMarker, scaleMarker, topRightMarker],
+      pixelToMmRatio: pixelToMmRatio,
+      origin: CoordinatePointXY(0, widget.settings.markerYDistance),  // Bottom-left in corrected image
+      orientationAngle: 0.0,  // No rotation in the corrected image
+      debugImage: null // No debug image
+    );
+    
+    // Update the flow manager with the corrected image and markers
+    _flowManager.updateCorrectedImage(
+      correctedImageFile,
+      markerResult
+    );
     
     setState(() {
-      _isLoading = true;
-      _statusMessage = 'Processing marker points...';
+      _markersDetected = true;
+      _isLoading = false;
+      _statusMessage = 'Image corrected! Tap "Continue" to proceed.';
     });
     
-    try {
-      // Validate points are within image bounds
-      if (_isPointOutOfBounds(_originMarkerPoint!) || 
-          _isPointOutOfBounds(_xAxisMarkerPoint!) ||
-          _isPointOutOfBounds(_yAxisMarkerPoint!) ||
-          _isPointOutOfBounds(_topRightMarkerPoint!)) {
-        throw Exception('One or more markers are outside the image bounds');
-      }
-      
-      // Create marker points from tap positions
-      final originMarker = MarkerPoint(
-        _originMarkerPoint!.x.toInt(), 
-        _originMarkerPoint!.y.toInt(), 
-        MarkerRole.origin
-      );
-      
-      final xAxisMarker = MarkerPoint(
-        _xAxisMarkerPoint!.x.toInt(), 
-        _xAxisMarkerPoint!.y.toInt(), 
-        MarkerRole.xAxis
-      );
-      
-      final scaleMarker = MarkerPoint(
-        _yAxisMarkerPoint!.x.toInt(), 
-        _yAxisMarkerPoint!.y.toInt(), 
-        MarkerRole.scale
-      );
-      
-      final topRightMarker = MarkerPoint(
-        _topRightMarkerPoint!.x.toInt(), 
-        _topRightMarkerPoint!.y.toInt(), 
-        MarkerRole.topRight
-      );
-      
-      // Calculate orientation angle
-      final dx = xAxisMarker.x - originMarker.x;
-      final dy = xAxisMarker.y - originMarker.y;
-      final orientationAngle = math.atan2(dy, dx);
-      
-      // Validate markers aren't too close
-      final bottomEdgeLength = math.sqrt(math.pow(xAxisMarker.x - originMarker.x, 2) + 
-                                       math.pow(xAxisMarker.y - originMarker.y, 2));
-      final leftEdgeLength = math.sqrt(math.pow(scaleMarker.x - originMarker.x, 2) + 
-                                     math.pow(scaleMarker.y - originMarker.y, 2));
-                                     
-      if (bottomEdgeLength < 10.0 || leftEdgeLength < 10.0) {
-        throw Exception('Markers too close together');
-      }
-      
-      // Create marker detection result
-      final markers = [originMarker, xAxisMarker, scaleMarker, topRightMarker];
-      final origin = CoordinatePointXY(originMarker.x.toDouble(), originMarker.y.toDouble());
-      
-      // Load the original image for visualization
-      final imageBytes = await widget.imageFile.readAsBytes();
-      final image = img.decodeImage(imageBytes);
-      
-      if (image == null) {
-        throw Exception('Failed to decode image');
-      }
-      
-      // Apply perspective correction with four markers
-      final correctedImage = await ImageCorrectionUtils.correctPerspective(
-        image, 
-        originMarker.toPoint(), 
-        xAxisMarker.toPoint(), 
-        scaleMarker.toPoint(),
-        topRightMarker.toPoint(),
-        widget.settings.markerXDistance,
-        widget.settings.markerYDistance
-      );
-      
-      // Save the corrected image to a temporary file
-      final tempDir = await Directory.systemTemp.createTemp('corrected_image_');
-      final correctedImagePath = '${tempDir.path}/corrected_image.png';
-      final correctedImageBytes = img.encodePng(correctedImage);
-      final correctedImageFile = File(correctedImagePath);
-      await correctedImageFile.writeAsBytes(correctedImageBytes);
-      
-      // Calculate pixel to mm ratio for corrected image
-      final pixelToMmRatioX = widget.settings.markerXDistance / (xAxisMarker.x - originMarker.x).abs();
-      final pixelToMmRatioY = widget.settings.markerYDistance / (scaleMarker.y - originMarker.y).abs();
-      final pixelToMmRatio = (pixelToMmRatioX + pixelToMmRatioY) / 2;
-      
-      // Create marker result
-      final markerResult = MarkerDetectionResult(
-        markers: markers,
-        pixelToMmRatio: pixelToMmRatio,
-        origin: origin,
-        orientationAngle: orientationAngle,
-        debugImage: null // No debug image
-      );
-      
-      // Update the flow manager with the corrected image and markers
-      _flowManager.updateCorrectedImage(
-        correctedImageFile,
-        markerResult
-      );
-      
-      setState(() {
-        _markersDetected = true;
-        _isLoading = false;
-        _statusMessage = 'Image corrected! Tap "Continue" to proceed.';
-      });
-      
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Error processing markers: ${e.toString()}';
-        _isLoading = false;
-      });
-    }
+  } catch (e) {
+    setState(() {
+      _errorMessage = 'Error processing markers: ${e.toString()}';
+      _isLoading = false;
+    });
   }
+}
   
   // Helper method to check if a point is outside image bounds
   bool _isPointOutOfBounds(CoordinatePointXY point) {
@@ -383,7 +364,8 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
                 fit: StackFit.expand,
                 children: [
                   // Image display
-                  Center(
+                  Align(
+                    alignment: Alignment.topCenter, // Align to top instead of center
                     child: _imageSize != null
                         ? AspectRatio(
                             aspectRatio: _imageSize!.width / _imageSize!.height,
