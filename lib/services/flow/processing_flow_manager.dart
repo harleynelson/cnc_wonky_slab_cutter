@@ -156,49 +156,50 @@ class ProcessingFlowManager with ChangeNotifier {
   
   /// Process markers in the image
   Future<void> detectMarkers() async {
-    if (_result.originalImage == null) {
-      _setErrorState('No image available for marker detection');
+  if (result.originalImage == null) {
+    _setErrorState('No image available for marker detection');
+    return;
+  }
+  
+  try {
+    _updateState(ProcessingState.markerDetection);
+    
+    // Load image
+    final imageBytes = await result.originalImage!.readAsBytes();
+    final image = img.decodeImage(imageBytes);
+    
+    if (image == null) {
+      _setErrorState('Failed to decode image');
       return;
     }
     
-    try {
-      _updateState(ProcessingState.markerDetection);
-      
-      // Load image
-      final imageBytes = await _result.originalImage!.readAsBytes();
-      final image = img.decodeImage(imageBytes);
-      
-      if (image == null) {
-        _setErrorState('Failed to decode image');
-        return;
-      }
-      
-      // Create marker detector
-      final markerDetector = MarkerDetector(
-        markerRealDistanceMm: settings.markerXDistance,
-        generateDebugImage: true,
-      );
-      
-      // Process image to detect markers - this should not modify the original image
-      final markerResult = await markerDetector.detectMarkers(image);
-      
-      // Update result but keep original image intact
-      _result = _result.copyWith(
-        processedImage: image, // Keep original image without markers drawn on it
-        markerResult: markerResult,
-      );
-      
-      notifyListeners();
-    } catch (e, stackTrace) {
-      ErrorUtils().logError(
-        'Error during marker detection',
-        e,
-        stackTrace: stackTrace,
-        context: 'marker_detection',
-      );
-      _setErrorState('Marker detection failed: ${e.toString()}');
-    }
+    // Create marker detector with both X and Y distances
+    final markerDetector = MarkerDetector(
+      markerXDistanceMm: settings.markerXDistance,
+      markerYDistanceMm: settings.markerYDistance,
+      generateDebugImage: true,
+    );
+    
+    // Process image to detect markers - this should not modify the original image
+    final markerResult = await markerDetector.detectMarkers(image);
+    
+    // Update result but keep original image intact
+    _result = _result.copyWith(
+      processedImage: image, // Keep original image without markers drawn on it
+      markerResult: markerResult,
+    );
+    
+    notifyListeners();
+  } catch (e, stackTrace) {
+    ErrorUtils().logError(
+      'Error during marker detection',
+      e,
+      stackTrace: stackTrace,
+      context: 'marker_detection',
+    );
+    _setErrorState('Marker detection failed: ${e.toString()}');
   }
+}
   
   /// Process slab contour detection using automatic method
 Future<bool> detectSlabContourAutomatic([int? seedX, int? seedY]) async {

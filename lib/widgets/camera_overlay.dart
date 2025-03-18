@@ -1,3 +1,4 @@
+// lib/widgets/camera_overlay.dart
 import 'package:flutter/material.dart';
 
 class CameraOverlay extends StatelessWidget {
@@ -5,6 +6,7 @@ class CameraOverlay extends StatelessWidget {
   final Color markerOriginColor;
   final Color markerXAxisColor;
   final Color markerScaleColor;
+  final Color markerTopRightColor;
 
   const CameraOverlay({
     Key? key,
@@ -12,6 +14,7 @@ class CameraOverlay extends StatelessWidget {
     required this.markerOriginColor,
     required this.markerXAxisColor,
     required this.markerScaleColor,
+    this.markerTopRightColor = Colors.yellow, // Default color for top-right marker
   }) : super(key: key);
 
   @override
@@ -25,6 +28,7 @@ class CameraOverlay extends StatelessWidget {
             markerOriginColor: markerOriginColor,
             markerXAxisColor: markerXAxisColor,
             markerScaleColor: markerScaleColor,
+            markerTopRightColor: markerTopRightColor,
           ),
         );
       },
@@ -37,37 +41,47 @@ class MarkerGuidePainter extends CustomPainter {
   final Color markerOriginColor;
   final Color markerXAxisColor;
   final Color markerScaleColor;
+  final Color markerTopRightColor;
 
   MarkerGuidePainter({
     required this.markerSize,
     required this.markerOriginColor,
     required this.markerXAxisColor,
     required this.markerScaleColor,
+    required this.markerTopRightColor,
   });
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Define marker positions - origin at bottom left
+    // Define marker positions - forming a rectangle
     final originPosition = Offset(size.width * 0.2, size.height * 0.8);    // Bottom left
     final xAxisPosition = Offset(size.width * 0.8, size.height * 0.8);     // Bottom right
     final scalePosition = Offset(size.width * 0.2, size.height * 0.2);     // Top left
+    final topRightPosition = Offset(size.width * 0.8, size.height * 0.2);  // Top right
 
     // Draw guide circles for markers
     _drawMarkerGuide(canvas, originPosition, markerOriginColor, "Origin");
     _drawMarkerGuide(canvas, xAxisPosition, markerXAxisColor, "X-Axis");
-    _drawMarkerGuide(canvas, scalePosition, markerScaleColor, "Y-Axis/Scale");
+    _drawMarkerGuide(canvas, scalePosition, markerScaleColor, "Y-Axis");
+    _drawMarkerGuide(canvas, topRightPosition, markerTopRightColor, "Top-Right");
     
-    // Draw connecting lines between markers
+    // Draw connecting lines between markers to form a rectangle
     final linePaint = Paint()
       ..color = Colors.white.withOpacity(0.5)
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.0;
     
-    // Origin to X-Axis line (horizontal)
+    // Origin to X-Axis line (bottom edge)
     canvas.drawLine(originPosition, xAxisPosition, linePaint);
     
-    // Origin to Scale line (vertical)
+    // Origin to Scale line (left edge)
     canvas.drawLine(originPosition, scalePosition, linePaint);
+    
+    // X-Axis to Top-Right line (right edge)
+    canvas.drawLine(xAxisPosition, topRightPosition, linePaint);
+    
+    // Scale to Top-Right line (top edge)
+    canvas.drawLine(scalePosition, topRightPosition, linePaint);
     
     // Draw work area border
     canvas.drawRect(
@@ -87,7 +101,7 @@ class MarkerGuidePainter extends CustomPainter {
     _drawInstructionText(
       canvas, 
       size, 
-      "Position the markers as shown: Origin (bottom left), X-Axis (bottom right), Y-Axis (top left)"
+      "Position the 4 markers in a rectangle: Origin (bottom left), X-Axis (bottom right), Y-Axis (top left), Top-Right (top right)"
     );
   }
   

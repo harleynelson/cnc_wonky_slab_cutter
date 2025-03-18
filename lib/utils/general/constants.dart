@@ -1,8 +1,9 @@
-/// App-wide constants
+// lib/utils/general/constants.dart
+// App-wide constants
 
 // App Info
 const String appName = "CNC Slab Scanner";
-const String appVersion = "1.0.0";
+const String appVersion = "1.1.0";
 
 // File Names
 const String settingsFileName = "settings.json";
@@ -45,6 +46,7 @@ const double markerSize = 10.0;
 const int markerOriginColorHex = 0xFFFF0000; // Red
 const int markerXAxisColorHex = 0xFF00FF00; // Green
 const int markerScaleColorHex = 0xFF0000FF; // Blue
+const int markerTopRightColorHex = 0xFFFFFF00; // Yellow
 
 // Processing Constants
 const int defaultThreshold = 128;

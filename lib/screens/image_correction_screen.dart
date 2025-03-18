@@ -49,6 +49,7 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
   CoordinatePointXY? _originMarkerPoint;
   CoordinatePointXY? _xAxisMarkerPoint;
   CoordinatePointXY? _yAxisMarkerPoint;
+  CoordinatePointXY? _topRightMarkerPoint;
   
   @override
   void initState() {
@@ -105,6 +106,9 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
         _statusMessage = 'Tap the Y-AXIS marker (top left)';
       } else if (_yAxisMarkerPoint == null) {
         _yAxisMarkerPoint = imagePoint;
+        _statusMessage = 'Tap the TOP-RIGHT marker (top right)';
+      } else if (_topRightMarkerPoint == null) {
+        _topRightMarkerPoint = imagePoint;
         _statusMessage = 'Processing markers...';
         _processMarkerPoints();
       }
@@ -112,9 +116,10 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
   }
   
   Future<void> _processMarkerPoints() async {
-    if (_originMarkerPoint == null || _xAxisMarkerPoint == null || _yAxisMarkerPoint == null) {
+    if (_originMarkerPoint == null || _xAxisMarkerPoint == null || 
+        _yAxisMarkerPoint == null || _topRightMarkerPoint == null) {
       setState(() {
-        _errorMessage = 'All three marker points are required';
+        _errorMessage = 'All four marker points are required';
       });
       return;
     }
@@ -144,23 +149,29 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
         MarkerRole.scale
       );
       
+      final topRightMarker = MarkerPoint(
+        _topRightMarkerPoint!.x.toInt(), 
+        _topRightMarkerPoint!.y.toInt(), 
+        MarkerRole.topRight
+      );
+      
       // Calculate orientation angle
       final dx = xAxisMarker.x - originMarker.x;
       final dy = xAxisMarker.y - originMarker.y;
       final orientationAngle = math.atan2(dy, dx);
       
-      // Calculate pixel to mm ratio
-      final scaleX = scaleMarker.x - originMarker.x;
-      final scaleY = scaleMarker.y - originMarker.y;
-      final distancePx = math.sqrt(scaleX * scaleX + scaleY * scaleY);
-      
-      // Validate markers aren't collinear or too close
-      if (distancePx < 10.0) {
-        throw Exception('Scale marker too close to origin');
+      // Validate markers aren't too close
+      final bottomEdgeLength = math.sqrt(math.pow(xAxisMarker.x - originMarker.x, 2) + 
+                                       math.pow(xAxisMarker.y - originMarker.y, 2));
+      final leftEdgeLength = math.sqrt(math.pow(scaleMarker.x - originMarker.x, 2) + 
+                                     math.pow(scaleMarker.y - originMarker.y, 2));
+                                     
+      if (bottomEdgeLength < 10.0 || leftEdgeLength < 10.0) {
+        throw Exception('Markers too close together');
       }
       
       // Create marker detection result
-      final markers = [originMarker, xAxisMarker, scaleMarker];
+      final markers = [originMarker, xAxisMarker, scaleMarker, topRightMarker];
       final origin = CoordinatePointXY(originMarker.x.toDouble(), originMarker.y.toDouble());
       
       // Load the original image for visualization
@@ -171,12 +182,13 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
         throw Exception('Failed to decode image');
       }
       
-      // Apply perspective correction
+      // Apply perspective correction with four markers
       final correctedImage = await ImageCorrectionUtils.correctPerspective(
         image, 
         originMarker.toPoint(), 
         xAxisMarker.toPoint(), 
         scaleMarker.toPoint(),
+        topRightMarker.toPoint(),
         widget.settings.markerXDistance,
         widget.settings.markerYDistance
       );
@@ -324,30 +336,6 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
     );
   }
   
-  Widget _buildImageDisplay() {
-    if (_flowManager.result.originalImage != null) {
-      if (_markersDetected && _flowManager.result.correctedImage != null) {
-        // Display corrected image
-        return Center(
-          child: Image.file(
-            _flowManager.result.correctedImage!,
-            fit: BoxFit.contain,
-          ),
-        );
-      } else {
-        // Show the original image if not yet corrected
-        return Center(
-          child: Image.file(
-            _flowManager.result.originalImage!,
-            fit: BoxFit.contain,
-          ),
-        );
-      }
-    } else {
-      return Center(child: Text('Image not available'));
-    }
-  }
-  
   void _continueToSlabDetection() {
     Navigator.push(
       context,
@@ -366,6 +354,7 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
       _originMarkerPoint = null;
       _xAxisMarkerPoint = null;
       _yAxisMarkerPoint = null;
+      _topRightMarkerPoint = null;
       _errorMessage = '';
       _statusMessage = 'Tap the ORIGIN marker (bottom left)';
     });
@@ -435,7 +424,14 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
                     _buildSamplePointIndicator(
                       _yAxisMarkerPoint!, 
                       Colors.blue,
-                      "Scale Marker"
+                      "Y-Axis Marker"
+                    ),
+                    
+                  if (_topRightMarkerPoint != null && _imageSize != null)
+                    _buildSamplePointIndicator(
+                      _topRightMarkerPoint!, 
+                      Colors.yellow,
+                      "Top-Right Marker"
                     ),
                     
                   // Loading indicator
@@ -554,7 +550,8 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
             ),
             SizedBox(height: 16),
             
-            Text('Place three markers on your slab:', style: TextStyle(fontWeight: FontWeight.bold)),
+            Text('Place four markers on your slab to form a perfect rectangle:',
+                style: TextStyle(fontWeight: FontWeight.bold)),
             SizedBox(height: 8),
             Row(
               children: [
@@ -581,14 +578,24 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
                 Icon(Icons.circle, color: Colors.blue, size: 16),
                 SizedBox(width: 8),
                 Expanded(
-                  child: Text('Tap the Y marker (top left corner)'),
+                  child: Text('Tap the Y-AXIS marker (top left corner)'),
+                ),
+              ],
+            ),
+            SizedBox(height: 4),
+            Row(
+              children: [
+                Icon(Icons.circle, color: Colors.yellow, size: 16),
+                SizedBox(width: 8),
+                Expanded(
+                  child: Text('Tap the TOP-RIGHT marker (top right corner)'),
                 ),
               ],
             ),
             
             SizedBox(height: 12),
             Text(
-              'The app will correct the image to match the real-world coordinates for accurate CNC processing.',
+              'The app will correct the image to match the real-world coordinates for accurate CNC processing. Make sure your markers form a true rectangle with 90-degree corners.',
               style: TextStyle(fontStyle: FontStyle.italic),
             ),
           ],
