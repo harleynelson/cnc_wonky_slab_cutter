@@ -22,6 +22,7 @@ const double defaultFeedRate = 1000.0;
 const double defaultPlungeRate = 500.0;
 const double defaultCuttingDepth = 0.0;
 const int defaultSpindleSpeed = 18000;
+const bool defaultReturnToHome = true;          // Default return to home option
 
 // UI Constants
 const double appBarHeight = 56.0;

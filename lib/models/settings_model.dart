@@ -26,6 +26,7 @@ class SettingsModel {
   int continueSearchDistance;
   int contourPostProcessPoints;  // New property for contour post-processing
   bool forceHorizontalPaths; // for path direction preference
+  bool returnToHome;
 
   SettingsModel({
     required this.cncWidth,
@@ -51,6 +52,7 @@ class SettingsModel {
     this.continueSearchDistance = continueSearchDistanceDefault,
     this.contourPostProcessPoints = defaultContourPostProcessPoints,
     this.forceHorizontalPaths = true, // Default to horizontal
+    this.returnToHome = true, // Default to returning home
   });
   
   SettingsModel copy() {
@@ -78,6 +80,7 @@ class SettingsModel {
       continueSearchDistance: continueSearchDistance,
       contourPostProcessPoints: contourPostProcessPoints,
     forceHorizontalPaths: forceHorizontalPaths,
+      returnToHome: returnToHome,
     );
   }
 
@@ -106,6 +109,7 @@ class SettingsModel {
       continueSearchDistance: continueSearchDistanceDefault,
       contourPostProcessPoints: defaultContourPostProcessPoints,
       forceHorizontalPaths: true,
+      returnToHome: true,
     );
   }
 
@@ -135,6 +139,7 @@ class SettingsModel {
       'continueSearchDistance': continueSearchDistance,
       'contourPostProcessPoints': contourPostProcessPoints,
       'forceHorizontalPaths': forceHorizontalPaths,
+      'returnToHome': returnToHome,
     };
   }
 
@@ -163,6 +168,7 @@ class SettingsModel {
       continueSearchDistance: json['continueSearchDistance'] ?? continueSearchDistanceDefault,
       contourPostProcessPoints: json['contourPostProcessPoints'] ?? defaultContourPostProcessPoints,
       forceHorizontalPaths: json['forceHorizontalPaths'] ?? true,
+      returnToHome: json['returnToHome'] ?? true,
     );
   }
 

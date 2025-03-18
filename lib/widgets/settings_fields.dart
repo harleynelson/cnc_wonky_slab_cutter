@@ -10,6 +10,7 @@ class SettingsTextField extends StatelessWidget {
   final String? helperText;
   final double min;
   final double max;
+  final bool isInteger; // New property to indicate integer display
 
   const SettingsTextField({
     Key? key,
@@ -20,14 +21,18 @@ class SettingsTextField extends StatelessWidget {
     this.helperText,
     this.min = 0.1,
     this.max = 10000.0,
+    this.isInteger = false, // Default to false for backward compatibility
   }) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
+    // Format the value based on isInteger flag
+    final displayValue = isInteger ? value.round().toString() : value.toString();
+    
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: TextFormField(
-        initialValue: value.toString(),
+        initialValue: displayValue,
         decoration: InputDecoration(
           labelText: label,
           border: OutlineInputBorder(
@@ -37,9 +42,13 @@ class SettingsTextField extends StatelessWidget {
           helperText: helperText,
           prefixIcon: icon != null ? Icon(icon) : null,
         ),
-        keyboardType: TextInputType.numberWithOptions(decimal: true),
+        keyboardType: TextInputType.numberWithOptions(decimal: !isInteger),
         inputFormatters: [
-          FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
+          // Use different formatters based on isInteger
+          if (isInteger)
+            FilteringTextInputFormatter.digitsOnly
+          else
+            FilteringTextInputFormatter.allow(RegExp(r'^\d*\.?\d*')),
         ],
         validator: (value) {
           if (value == null || value.isEmpty) {

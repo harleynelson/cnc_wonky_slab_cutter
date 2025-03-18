@@ -16,6 +16,7 @@ class GcodeGenerator {
   final int depthPasses;
   final double margin;
   final bool forceHorizontal;
+  final bool returnToHome; // return to home position
   
   GcodeGenerator({
     required this.safetyHeight,
@@ -28,6 +29,7 @@ class GcodeGenerator {
     this.depthPasses = 1,
     this.margin = 5.0,
     this.forceHorizontal = true, // Default to horizontal paths
+    this.returnToHome = true, // return to home position
   });
 
   /// Generate G-code for a surfacing operation within a contour
@@ -54,26 +56,27 @@ class GcodeGenerator {
 
   /// Write G-code header with initialization commands
   void _writeHeader(StringBuffer buffer, {String filename = ''}) {
-  buffer.writeln("(CNC Slab Scanner - Surfacing Operation)");
-  buffer.writeln("(Generated on ${DateTime.now().toString()})");
-  if (filename.isNotEmpty) {
-    buffer.writeln("(Filename: $filename)");
+    buffer.writeln("(CNC Slab Scanner - Surfacing Operation)");
+    buffer.writeln("(Generated on ${DateTime.now().toString()})");
+    if (filename.isNotEmpty) {
+      buffer.writeln("(Filename: $filename)");
+    }
+    buffer.writeln("(Tool Diameter: ${toolDiameter}mm)");
+    buffer.writeln("(Stepover: ${stepover}mm)");
+    buffer.writeln("(Cutting Depth: ${cuttingDepth}mm in $depthPasses passes)");
+    buffer.writeln("(Feed Rate: ${feedRate}mm/min)");
+    buffer.writeln("(Plunge Rate: ${plungeRate}mm/min)");
+    buffer.writeln("(Path Direction: ${forceHorizontal ? 'Horizontal' : 'Vertical'})");
+    buffer.writeln("");
+    buffer.writeln("G90 G94"); // Absolute positioning, Feed rate mode in units per minute
+    buffer.writeln("G17");     // XY plane selection
+    buffer.writeln("G21");     // Set units to millimeters
+    buffer.writeln("");
+    buffer.writeln("(Start operation)");
+    buffer.writeln("S$spindleSpeed M3"); // Set spindle speed and start spindle
+    buffer.writeln("G54");     // Use work coordinate system 1
+    buffer.writeln("");
   }
-  buffer.writeln("(Tool Diameter: ${toolDiameter}mm)");
-  buffer.writeln("(Stepover: ${stepover}mm)");
-  buffer.writeln("(Cutting Depth: ${cuttingDepth}mm)");
-  buffer.writeln("(Feed Rate: ${feedRate}mm/min)");
-  buffer.writeln("(Plunge Rate: ${plungeRate}mm/min)");
-  buffer.writeln("");
-  buffer.writeln("G90 G94"); // Absolute positioning, Feed rate mode in units per minute
-  buffer.writeln("G17");     // XY plane selection
-  buffer.writeln("G21");     // Set units to millimeters
-  buffer.writeln("");
-  buffer.writeln("(Start operation)");
-  buffer.writeln("S$spindleSpeed M3"); // Set spindle speed and start spindle
-  buffer.writeln("G54");     // Use work coordinate system 1
-  buffer.writeln("");
-}
 
   /// Calculate the bounding box of a contour
   Map<String, double> _calculateBoundingBox(List<CoordinatePointXY> contour) {
@@ -126,16 +129,19 @@ class GcodeGenerator {
     // Determine the primary direction based on settings or shape dimensions
     bool isHorizontal = forceHorizontal || width >= height;
     
-    // Calculate stepover distance
-    final double stepDistance = stepover;
+    // Calculate stepover distance based on tool diameter
+    final double effectiveStepover = stepover <= 0 ? toolDiameter * 0.75 : stepover;
     
     // Calculate number of passes
     final int numPasses = isHorizontal 
-        ? (height / stepDistance).ceil() + 1
-        : (width / stepDistance).ceil() + 1;
+        ? (height / effectiveStepover).ceil() + 1
+        : (width / effectiveStepover).ceil() + 1;
     
     // Create toolpaths array
     final List<List<CoordinatePointXY>> toolpaths = [];
+    
+    // Optimize for U-shaped pieces - determine if we should bridge gaps
+    final shouldBridgeGaps = true; // This could be a setting parameter
     
     // Generate parallel toolpaths
     for (int i = 0; i < numPasses; i++) {
@@ -143,7 +149,7 @@ class GcodeGenerator {
       
       if (isHorizontal) {
         // Horizontal passes (fixed Y)
-        double y = minY + i * stepDistance;
+        double y = minY + i * effectiveStepover;
         
         // Ensure we don't exceed the maximum Y
         if (y > maxY) continue;
@@ -162,21 +168,32 @@ class GcodeGenerator {
         // Determine direction (alternate for zig-zag)
         bool leftToRight = (i % 2 == 0);
         
-        // For each pair of intersections, add a path segment
-        for (int j = 0; j < intersections.length - 1; j += 2) {
-          if (j + 1 < intersections.length) {
-            if (leftToRight) {
-              currentPath.add(intersections[j]);
-              currentPath.add(intersections[j + 1]);
-            } else {
-              currentPath.add(intersections[j + 1]);
-              currentPath.add(intersections[j]);
+        if (shouldBridgeGaps) {
+          // Efficient path - bridge gaps for U-shaped pieces
+          if (leftToRight) {
+            currentPath.add(intersections.first);
+            currentPath.add(intersections.last);
+          } else {
+            currentPath.add(intersections.last);
+            currentPath.add(intersections.first);
+          }
+        } else {
+          // Strictly follow contour - move through each pair of intersections
+          for (int j = 0; j < intersections.length - 1; j += 2) {
+            if (j + 1 < intersections.length) {
+              if (leftToRight) {
+                currentPath.add(intersections[j]);
+                currentPath.add(intersections[j + 1]);
+              } else {
+                currentPath.add(intersections[j + 1]);
+                currentPath.add(intersections[j]);
+              }
             }
           }
         }
       } else {
         // Vertical passes (fixed X)
-        double x = minX + i * stepDistance;
+        double x = minX + i * effectiveStepover;
         
         // Ensure we don't exceed the maximum X
         if (x > maxX) continue;
@@ -195,15 +212,26 @@ class GcodeGenerator {
         // Determine direction (alternate for zig-zag)
         bool bottomToTop = (i % 2 == 0);
         
-        // For each pair of intersections, add a path segment
-        for (int j = 0; j < intersections.length - 1; j += 2) {
-          if (j + 1 < intersections.length) {
-            if (bottomToTop) {
-              currentPath.add(intersections[j]);
-              currentPath.add(intersections[j + 1]);
-            } else {
-              currentPath.add(intersections[j + 1]);
-              currentPath.add(intersections[j]);
+        if (shouldBridgeGaps) {
+          // Efficient path - bridge gaps
+          if (bottomToTop) {
+            currentPath.add(intersections.first);
+            currentPath.add(intersections.last);
+          } else {
+            currentPath.add(intersections.last);
+            currentPath.add(intersections.first);
+          }
+        } else {
+          // Strictly follow contour
+          for (int j = 0; j < intersections.length - 1; j += 2) {
+            if (j + 1 < intersections.length) {
+              if (bottomToTop) {
+                currentPath.add(intersections[j]);
+                currentPath.add(intersections[j + 1]);
+              } else {
+                currentPath.add(intersections[j + 1]);
+                currentPath.add(intersections[j]);
+              }
             }
           }
         }
@@ -215,7 +243,6 @@ class GcodeGenerator {
       }
     }
     
-    // Return the generated toolpaths
     return toolpaths;
   }
 
@@ -386,144 +413,109 @@ class GcodeGenerator {
     return uniqueIntersections;
   }
   
-  /// Write surfacing toolpath commands
+  /// Write surfacing toolpath commands with multiple depth passes
   void _writeSurfacingToolpath(
-  StringBuffer buffer, 
-  List<List<CoordinatePointXY>> toolpaths, 
-  Map<String, double> boundingBox,
-  List<CoordinatePointXY> contour
-) {
-  if (toolpaths.isEmpty) {
-    buffer.writeln("(No valid toolpath generated)");
-    return;
-  }
-  
-  // Get direction information for debug output
-  final width = boundingBox['width']!;
-  final height = boundingBox['height']!;
-  final isHorizontal = forceHorizontal || width >= height;
-  
-  // Add debug info
-  buffer.writeln("(Toolpath: ${isHorizontal ? 'Horizontal' : 'Vertical'} pattern with ${toolpaths.length} passes)");
-  buffer.writeln("(Bounding box: X=${boundingBox['minX']!.toStringAsFixed(2)} to ${boundingBox['maxX']!.toStringAsFixed(2)}, Y=${boundingBox['minY']!.toStringAsFixed(2)} to ${boundingBox['maxY']!.toStringAsFixed(2)})");
-  buffer.writeln("(Optimized to only cut within contour + ${margin}mm margin)");
-  buffer.writeln("(Keeping tool down when connecting passes)");
-  
-  // Move to safe height first
-  buffer.writeln("G0 Z${safetyHeight.toStringAsFixed(4)}");
-  
-  // Calculate pass depth increment if multiple passes are needed
-  final passDepthIncrement = cuttingDepth / depthPasses;
-  buffer.writeln("(Total cutting depth: ${cuttingDepth}mm in $depthPasses passes)");
-  
-  // For each depth pass
-  for (int depthPass = 1; depthPass <= depthPasses; depthPass++) {
-    final currentDepth = passDepthIncrement * depthPass;
-    // Handle negative values properly by formatting after calculation
-    final depthString = (currentDepth > 0 ? "-" : "") + currentDepth.abs().toStringAsFixed(4);
-    
-    buffer.writeln("");
-    buffer.writeln("(Depth pass $depthPass of $depthPasses - depth: ${depthString}mm)");
-    
-    // Process each path
-    CoordinatePointXY? lastEndPoint;
-    
-    for (int i = 0; i < toolpaths.length; i++) {
-      final path = toolpaths[i];
-      
-      if (path.isEmpty || path.length < 2) {
-        buffer.writeln("(Skipping empty path ${i})");
-        continue;
-      }
-      
-      buffer.writeln("(Path ${i} - ${path.length} points)");
-      
-      // First point of this path
-      final startPoint = path[0];
-      
-      if (lastEndPoint == null || i == 0) {
-        // First path or after a skipped path - move to position and plunge
-        buffer.writeln("G0 X${startPoint.x.toStringAsFixed(4)} Y${startPoint.y.toStringAsFixed(4)}");
-        
-        if (i == 0) {
-          // First path of depth pass
-          buffer.writeln("G1 Z0 F${plungeRate.toStringAsFixed(1)}");  // Move to surface level first
-          buffer.writeln("Z${depthString} F${plungeRate.toStringAsFixed(1)}");  // Plunge to current depth
-        } else {
-          // Subsequent path but no previous valid end point
-          buffer.writeln("G1 Z${depthString} F${plungeRate.toStringAsFixed(1)}");
-        }
-      } else {
-        // Connect to the start of this path with a direct line move
-        buffer.writeln("G1 X${startPoint.x.toStringAsFixed(4)} Y${startPoint.y.toStringAsFixed(4)} F${feedRate.toStringAsFixed(1)}");
-      }
-      
-      // Cut along the path
-      for (int j = 1; j < path.length; j++) {
-        final point = path[j];
-        buffer.writeln("G1 X${point.x.toStringAsFixed(4)} Y${point.y.toStringAsFixed(4)} F${feedRate.toStringAsFixed(1)}");
-      }
-      
-      // Remember the last point of this path
-      lastEndPoint = path.last;
-    }
-    
-    // At the end of each depth pass (except the last), move to safety height
-    if (depthPass < depthPasses) {
-      buffer.writeln("G0 Z${safetyHeight.toStringAsFixed(4)}");
-    }
-  }
-}
-
-  /// Write an arc move between two points
-  void _writeArcMove(StringBuffer buffer, CoordinatePointXY from, CoordinatePointXY to, String depthString) {
-    // Calculate midpoint for arc center
-    final midX = (from.x + to.x) / 2;
-    final midY = (from.y + to.y) / 2;
-    
-    // Calculate distance between points
-    final dx = to.x - from.x;
-    final dy = to.y - from.y;
-    final distance = math.sqrt(dx * dx + dy * dy);
-    
-    // Skip arc move if points are very close
-    if (distance < toolDiameter / 2) {
-      // Just use a linear move if points are close
-      buffer.writeln("G1 X${to.x.toStringAsFixed(4)} Y${to.y.toStringAsFixed(4)} F${feedRate.toStringAsFixed(1)}");
+    StringBuffer buffer, 
+    List<List<CoordinatePointXY>> toolpaths, 
+    Map<String, double> boundingBox,
+    List<CoordinatePointXY> contour
+  ) {
+    if (toolpaths.isEmpty) {
+      buffer.writeln("(No valid toolpath generated)");
       return;
     }
     
-    // Use adaptive radius based on distance
-    final arcHeight = math.min(distance / 2, toolDiameter);
+    // Get direction information for debug output
+    final width = boundingBox['width']!;
+    final height = boundingBox['height']!;
+    final isHorizontal = forceHorizontal || width >= height;
     
-    // Calculate the normal vector to the line
-    final length = math.sqrt(dx * dx + dy * dy);
-    final nx = -dy / length;
-    final ny = dx / length;
+    // Add debug info
+    buffer.writeln("(Toolpath: ${isHorizontal ? 'Horizontal' : 'Vertical'} pattern with ${toolpaths.length} passes)");
+    buffer.writeln("(Bounding box: X=${boundingBox['minX']!.toStringAsFixed(2)} to ${boundingBox['maxX']!.toStringAsFixed(2)}, Y=${boundingBox['minY']!.toStringAsFixed(2)} to ${boundingBox['maxY']!.toStringAsFixed(2)})");
+    buffer.writeln("(Optimized to only cut within contour + ${margin}mm margin)");
+    buffer.writeln("(Keeping tool down when connecting passes)");
     
-    // Calculate a slight offset normal to the line for the arc center
-    final centerX = midX + nx * arcHeight;
-    final centerY = midY + ny * arcHeight;
+    // Move to safe height first
+    buffer.writeln("G0 Z${safetyHeight.toStringAsFixed(4)}");
     
-    // Calculate I and J offsets (from start point to center)
-    final i = centerX - from.x;
-    final j = centerY - from.y;
+    // Calculate pass depth increment if multiple passes are needed
+    final passDepthIncrement = cuttingDepth / depthPasses;
+    buffer.writeln("(Total cutting depth: ${cuttingDepth}mm in $depthPasses passes)");
     
-    // Write G-code for arc move (G2 = clockwise arc)
-    buffer.writeln("G2 X${to.x.toStringAsFixed(4)} Y${to.y.toStringAsFixed(4)} I${i.toStringAsFixed(4)} J${j.toStringAsFixed(4)} F${feedRate.toStringAsFixed(1)}");
+    // For each depth pass
+    for (int depthPass = 1; depthPass <= depthPasses; depthPass++) {
+      final currentDepth = passDepthIncrement * depthPass;
+      // Handle negative values properly by formatting after calculation
+      final depthString = (currentDepth > 0 ? "-" : "") + currentDepth.abs().toStringAsFixed(4);
+      
+      buffer.writeln("");
+      buffer.writeln("(Depth pass $depthPass of $depthPasses - depth: ${depthString}mm)");
+      
+      // Process each path
+      CoordinatePointXY? lastEndPoint;
+      
+      for (int i = 0; i < toolpaths.length; i++) {
+        final path = toolpaths[i];
+        
+        if (path.isEmpty || path.length < 2) {
+          buffer.writeln("(Skipping empty path ${i})");
+          continue;
+        }
+        
+        buffer.writeln("(Path ${i} - ${path.length} points)");
+        
+        // First point of this path
+        final startPoint = path[0];
+        
+        if (lastEndPoint == null || i == 0) {
+          // First path or after a skipped path - move to position and plunge
+          buffer.writeln("G0 X${startPoint.x.toStringAsFixed(4)} Y${startPoint.y.toStringAsFixed(4)}");
+          
+          if (i == 0) {
+            // First path of depth pass
+            buffer.writeln("G1 Z0 F${plungeRate.toStringAsFixed(1)}");  // Move to surface level first
+            buffer.writeln("Z${depthString} F${plungeRate.toStringAsFixed(1)}");  // Plunge to current depth
+          } else {
+            // Subsequent path but no previous valid end point
+            buffer.writeln("G1 Z${depthString} F${plungeRate.toStringAsFixed(1)}");
+          }
+        } else {
+          // Connect to the start of this path with a direct line move
+          buffer.writeln("G1 X${startPoint.x.toStringAsFixed(4)} Y${startPoint.y.toStringAsFixed(4)} F${feedRate.toStringAsFixed(1)}");
+        }
+        
+        // Cut along the path
+        for (int j = 1; j < path.length; j++) {
+          final point = path[j];
+          buffer.writeln("G1 X${point.x.toStringAsFixed(4)} Y${point.y.toStringAsFixed(4)} F${feedRate.toStringAsFixed(1)}");
+        }
+        
+        // Remember the last point of this path
+        lastEndPoint = path.last;
+      }
+      
+      // At the end of each depth pass (except the last), move to safety height
+      if (depthPass < depthPasses) {
+        buffer.writeln("G0 Z${safetyHeight.toStringAsFixed(4)}");
+      }
+    }
   }
-
   
   /// Write G-code footer with end program commands
   void _writeFooter(StringBuffer buffer) {
     buffer.writeln("");
     buffer.writeln("(End operation)");
     buffer.writeln("G0 Z${safetyHeight.toStringAsFixed(4)}"); // Retract to safe height
-    buffer.writeln("G0 X0 Y0"); // Return to home position
+    
+    // Optionally return to home position
+    if (returnToHome) {
+      buffer.writeln("G0 X0 Y0"); // Return to home position
+    }
+    
     buffer.writeln("M5"); // Spindle off
     buffer.writeln("M30"); // End program
   }
-
 
 
   /// Legacy methods for backward compatibility

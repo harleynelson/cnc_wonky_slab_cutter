@@ -12,6 +12,7 @@ import '../providers/processing_provider.dart';
 import '../services/gcode/gcode_generator.dart';
 import '../utils/general/constants.dart';
 import '../utils/general/machine_coordinates.dart';
+import '../utils/general/time_formatter.dart';
 import '../widgets/settings_fields.dart';
 import '../widgets/contour_overlay.dart';
 import '../widgets/marker_overlay.dart';
@@ -38,18 +39,18 @@ class _GcodeGeneratorScreenState extends State<GcodeGeneratorScreen> {
   double _estimatedTime = 0.0;
   String _errorMessage = '';
   bool _forceHorizontalPaths = true;
+  bool _returnToHome = true; // return to home option
   late TextEditingController _filenameController;
   String _fileExtension = '.gcode';
-  
-  // Add slabMargin for adjusting the contour size
   double _slabMargin = 50.0; // Default 5mm margin
   List<CoordinatePointXY>? _adjustedContour;
-
-  @override
+  
+@override
 void initState() {
   super.initState();
   _settings = widget.settings.copy();
   _forceHorizontalPaths = _settings.forceHorizontalPaths;
+  _returnToHome = _settings.returnToHome; // Initialize from settings
   _slabMargin = 50.0; // Default to 50mm
   _calculateStats();
   _updateAdjustedContour();
@@ -257,67 +258,68 @@ double _crossProduct(CoordinatePointXY a, CoordinatePointXY b, CoordinatePointXY
   }
 
   Future<void> _generateGcode() async {
-  setState(() {
-    _isGenerating = true;
-    _errorMessage = '';
-  });
+    setState(() {
+      _isGenerating = true;
+      _errorMessage = '';
+    });
 
-  try {
-    final provider = Provider.of<ProcessingProvider>(context, listen: false);
-    final flowManager = provider.flowManager;
-    
-    if (flowManager == null || flowManager.result.contourResult == null) {
-      throw Exception('No contour data available');
+    try {
+      final provider = Provider.of<ProcessingProvider>(context, listen: false);
+      final flowManager = provider.flowManager;
+      
+      if (flowManager == null || flowManager.result.contourResult == null) {
+        throw Exception('No contour data available');
+      }
+      
+      // Use the adjusted contour or fall back to the original contour
+      final contour = _adjustedContour ?? flowManager.result.contourResult!.machineContour;
+      
+      // Generate G-code using our improved surfacing operation
+      final gcodeGenerator = GcodeGenerator(
+        safetyHeight: _settings.safetyHeight,
+        feedRate: _settings.feedRate,
+        plungeRate: _settings.plungeRate,
+        cuttingDepth: _settings.cuttingDepth,
+        stepover: _settings.stepover,
+        toolDiameter: _settings.toolDiameter,
+        spindleSpeed: _settings.spindleSpeed,
+        depthPasses: _settings.depthPasses,
+        margin: _slabMargin,
+        forceHorizontal: _forceHorizontalPaths,
+        returnToHome: _returnToHome, // Pass the new option to the generator
+      );
+      
+      // Generate surfacing G-code
+      final filenameWithoutExt = _filenameController.text;
+      final gcode = gcodeGenerator.generateSurfacingGcode(
+        contour, 
+        filename: '$filenameWithoutExt$_fileExtension'
+      );
+      
+      // Create a custom filename using the user input and selected extension
+      final filename = '${_filenameController.text}${_fileExtension}';
+      
+      // Save G-code to file
+      final tempDir = await Directory.systemTemp.createTemp('gcode_');
+      final gcodeFile = File('${tempDir.path}/${filename}');
+      await gcodeFile.writeAsString(gcode);
+      
+      setState(() {
+        _isGenerating = false;
+        _isGenerated = true;
+        _gcodePath = gcodeFile.path;
+      });
+      
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('G-code generated successfully as $filename!')),
+      );
+    } catch (e) {
+      setState(() {
+        _isGenerating = false;
+        _errorMessage = 'Error generating G-code: ${e.toString()}';
+      });
     }
-    
-    // Use the adjusted contour or fall back to the original contour
-    final contour = _adjustedContour ?? flowManager.result.contourResult!.machineContour;
-    
-    // Generate G-code using our improved surfacing operation
-    final gcodeGenerator = GcodeGenerator(
-      safetyHeight: _settings.safetyHeight,
-      feedRate: _settings.feedRate,
-      plungeRate: _settings.plungeRate,
-      cuttingDepth: _settings.cuttingDepth,
-      stepover: _settings.stepover,
-      toolDiameter: _settings.toolDiameter,
-      spindleSpeed: _settings.spindleSpeed,
-      depthPasses: _settings.depthPasses,
-      margin: _slabMargin,
-      forceHorizontal: _forceHorizontalPaths,
-    );
-    
-    // Generate surfacing G-code
-    final filenameWithoutExt = _filenameController.text;
-    final gcode = gcodeGenerator.generateSurfacingGcode(
-    contour, 
-    filename: '$filenameWithoutExt$_fileExtension'
-    );
-    
-    // Create a custom filename using the user input and selected extension
-    final filename = '${_filenameController.text}${_fileExtension}';
-    
-    // Save G-code to file
-    final tempDir = await Directory.systemTemp.createTemp('gcode_');
-    final gcodeFile = File('${tempDir.path}/${filename}');
-    await gcodeFile.writeAsString(gcode);
-    
-    setState(() {
-      _isGenerating = false;
-      _isGenerated = true;
-      _gcodePath = gcodeFile.path;
-    });
-    
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('G-code generated successfully as $filename!')),
-    );
-  } catch (e) {
-    setState(() {
-      _isGenerating = false;
-      _errorMessage = 'Error generating G-code: ${e.toString()}';
-    });
   }
-}
 
   Future<void> _shareGcode() async {
     if (_gcodePath == null) {
@@ -397,47 +399,102 @@ Widget build(BuildContext context) {
     appBar: AppBar(
       title: Text('G-code Generator'),
     ),
-    body: Column(
-      children: [
-        // Image preview with overlays
-        _buildImagePreview(),
-        
-        // Stats and settings in a scrollable list
-        Expanded(
-          child: SingleChildScrollView(
+    body: SingleChildScrollView(
+      child: Column(
+        children: [
+          // Image preview with overlays
+          Container(
+            height: 250,
+            child: _buildImagePreview(),
+          ),
+          
+          // Stats and settings
+          Padding(
             padding: EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildStatisticsCard(),
                 SizedBox(height: 16),
-                _buildPathSettings(), // New combined settings widget
-                SizedBox(height: 16),
-                _buildFilenameInput(),
+                _buildPathSettings(),
                 SizedBox(height: 16),
                 _buildMachineSettingsCard(),
                 SizedBox(height: 16),
                 _buildToolSettingsCard(),
                 SizedBox(height: 16),
                 _buildFeedSettingsCard(),
+                SizedBox(height: 16),
+                _buildFilenameInput(),
+                SizedBox(height: 16),
+                _buildActionButtons(),
               ],
             ),
           ),
+        ],
+      ),
+    ),
+  );
+}
+
+Widget _buildActionButtons() {
+  return Column(
+    crossAxisAlignment: CrossAxisAlignment.stretch,
+    children: [
+      if (_errorMessage.isNotEmpty)
+        Container(
+          padding: EdgeInsets.all(8),
+          color: Colors.red.shade50,
+          width: double.infinity,
+          child: Text(
+            _errorMessage,
+            style: TextStyle(color: Colors.red.shade900),
+            textAlign: TextAlign.center,
+          ),
         ),
-        if (_errorMessage.isNotEmpty)
-          Container(
-            padding: EdgeInsets.all(8),
-            color: Colors.red.shade50,
-            width: double.infinity,
-            child: Text(
-              _errorMessage,
-              style: TextStyle(color: Colors.red.shade900),
-              textAlign: TextAlign.center,
+      
+      // Generate G-code button
+      ElevatedButton.icon(
+        icon: Icon(_isGenerated ? Icons.refresh : Icons.code),
+        label: Text(_isGenerated ? 'Regenerate G-code' : 'Generate G-code'),
+        onPressed: _isGenerating ? null : _generateGcode,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.blue,
+          minimumSize: Size(double.infinity, 48),
+        ),
+      ),
+      
+      SizedBox(height: 12),
+      
+      // Visualize and Share buttons
+      Row(
+        children: [
+          Expanded(
+            child: ElevatedButton.icon(
+              icon: Icon(Icons.visibility),
+              label: Text('Visualize Path'),
+              onPressed: _isGenerating || !_isGenerated ? null : _visualizeGcode,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange,
+              ),
             ),
           ),
-        _buildBottomButtons(),
-      ],
-    ),
+          SizedBox(width: 12),
+          Expanded(
+            child: ElevatedButton.icon(
+              icon: Icon(Icons.share),
+              label: Text('Share G-code'),
+              onPressed: _isGenerating || !_isGenerated ? null : _shareGcode,
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+              ),
+            ),
+          ),
+        ],
+      ),
+      
+      // Bottom padding to ensure everything is visible
+      SizedBox(height: 30),
+    ],
   );
 }
 
@@ -552,7 +609,7 @@ Widget build(BuildContext context) {
           
           // Margin Slider
           Text(
-            'Slab Margin: ${_slabMargin.toStringAsFixed(1)} mm',
+            'Slab Margin: ${_slabMargin.toStringAsFixed(0)} mm',
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           Text(
@@ -568,7 +625,7 @@ Widget build(BuildContext context) {
                   min: 0,
                   max: 100,
                   divisions: 50,
-                  label: '${_slabMargin.toStringAsFixed(1)} mm',
+                  label: '${_slabMargin.toStringAsFixed(0)} mm',
                   onChanged: (value) {
                     setState(() {
                       _slabMargin = value;
@@ -626,6 +683,36 @@ Widget build(BuildContext context) {
                 ),
               ],
             ),
+          ),
+          
+          SizedBox(height: 16),
+          
+          // Return to home option
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Return to Home Position',
+                    style: TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'Move to X0 Y0 after completion',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                ],
+              ),
+              Switch(
+                value: _returnToHome,
+                onChanged: (bool value) {
+                  setState(() {
+                    _returnToHome = value;
+                  });
+                },
+              ),
+            ],
           ),
         ],
       ),
@@ -694,7 +781,7 @@ Widget build(BuildContext context) {
         
         // Margin slider (unchanged)
         Text(
-          'Slab Margin: ${_slabMargin.toStringAsFixed(1)} mm',
+          'Slab Margin: ${_slabMargin.toStringAsFixed(0)} mm',
           style: TextStyle(fontWeight: FontWeight.bold),
         ),
         Row(
@@ -706,7 +793,7 @@ Widget build(BuildContext context) {
                 min: 0,
                 max: 50,
                 divisions: 50,
-                label: '${_slabMargin.toStringAsFixed(1)} mm',
+                label: '${_slabMargin.toStringAsFixed(0)} mm',
                 onChanged: (value) {
                   setState(() {
                     _slabMargin = value;
@@ -751,7 +838,7 @@ Widget build(BuildContext context) {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text('Estimated Time:'),
-                Text('${_estimatedTime.toStringAsFixed(2)} min'),
+                Text(TimeFormatter.formatMinutesAndSeconds(_estimatedTime)),
               ],
             ),
             if (_slabMargin > 0) ...[
@@ -760,7 +847,7 @@ Widget build(BuildContext context) {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text('Safety Margin:'),
-                  Text('${_slabMargin.toStringAsFixed(1)} mm all around'),
+                  Text('${_slabMargin.toStringAsFixed(0)} mm all around'),
                 ],
               ),
             ],
@@ -787,12 +874,14 @@ Widget build(BuildContext context) {
               value: _settings.cncWidth,
               onChanged: (value) => setState(() => _settings.cncWidth = value),
               icon: Icons.width_normal,
+              isInteger: true, // Set this to true for integer-only display
             ),
             SettingsTextField(
               label: 'CNC Work Area Height (mm)',
               value: _settings.cncHeight,
               onChanged: (value) => setState(() => _settings.cncHeight = value),
               icon: Icons.height,
+              isInteger: true, // Set this to true for integer-only display
             ),
           ],
         ),
@@ -847,6 +936,7 @@ Widget build(BuildContext context) {
             helperText: 'Number of passes to reach full depth',
             min: 1,
             max: 10,
+            isInteger: true, // Set this to true for integer-only display
           ),
         ],
       ),
@@ -872,6 +962,7 @@ Widget build(BuildContext context) {
               onChanged: (value) => setState(() => _settings.feedRate = value),
               icon: Icons.speed,
               helperText: 'Speed for cutting movements',
+              isInteger: true, // Set this to true for integer-only display
             ),
             SettingsTextField(
               label: 'Plunge Rate (mm/min)',
@@ -879,68 +970,13 @@ Widget build(BuildContext context) {
               onChanged: (value) => setState(() => _settings.plungeRate = value),
               icon: Icons.vertical_align_bottom,
               helperText: 'Speed for vertical plunging movements',
+              isInteger: true, // Set this to true for integer-only display
             ),
           ],
         ),
       ),
     );
   }
-
-  Widget _buildBottomButtons() {
-  return Container(
-    padding: EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.white,
-      boxShadow: [
-        BoxShadow(
-          color: Colors.black12,
-          blurRadius: 4,
-          offset: Offset(0, -2),
-        ),
-      ],
-    ),
-    child: Column(
-      mainAxisSize: MainAxisSize.min,
-      children: [
-        ElevatedButton.icon(
-          icon: Icon(_isGenerated ? Icons.refresh : Icons.code),
-          label: Text(_isGenerated ? 'Regenerate G-code' : 'Generate G-code'),
-          onPressed: _isGenerating ? null : _generateGcode,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: Colors.blue,
-            minimumSize: Size(double.infinity, 48),
-          ),
-        ),
-        SizedBox(height: 12),
-        Row(
-          children: [
-            Expanded(
-              child: ElevatedButton.icon(
-                icon: Icon(Icons.visibility),
-                label: Text('Visualize Path'),
-                onPressed: _isGenerating || !_isGenerated ? null : _visualizeGcode,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                ),
-              ),
-            ),
-            SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton.icon(
-                icon: Icon(Icons.share),
-                label: Text('Share G-code'),
-                onPressed: _isGenerating || !_isGenerated ? null : _shareGcode,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                ),
-              ),
-            ),
-          ],
-        ),
-      ],
-    ),
-  );
-}
 
 void _visualizeGcode() {
   if (_gcodePath == null) {

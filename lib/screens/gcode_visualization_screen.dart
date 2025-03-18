@@ -2,9 +2,8 @@
 // Fixed visualization for G-code toolpaths on the slab image
 
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import 'package:image/image.dart' as img;
 import '../utils/general/machine_coordinates.dart';
 import '../utils/general/constants.dart';
 import '../models/settings_model.dart';
@@ -468,6 +467,20 @@ class ToolpathPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.5
       ..strokeCap = StrokeCap.round;
+      
+    // Special paint for return-to-home movement
+    final homePaint = Paint()
+      ..color = Colors.purple
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
+      
+    // Create dashed pattern for return-to-home
+    final homeDashPaint = Paint()
+      ..color = Colors.purple
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0
+      ..strokeCap = StrokeCap.round;
 
     final pointPaint = Paint()
       ..color = Colors.orange
@@ -642,19 +655,107 @@ class ToolpathPainter extends CustomPainter {
           3.0,
           Paint()..color = Colors.orange..style = PaintingStyle.fill
         );
+        
+        // Add return-to-home visualization if it's the last toolpath
+        if (i == toolpaths.length - 1 && settings.returnToHome) {
+          // Draw the return-to-home path
+          final lastPoint = path.last;
+          final homePoint = CoordinatePointXY(0, 0);
+          
+          // Convert to display coordinates
+          final lastPixel = coordSystem.machineToPixelCoords(lastPoint);
+          final homePixel = coordSystem.machineToPixelCoords(homePoint);
+          
+          final lastDisplay = MachineCoordinateSystem.imageToDisplayCoordinates(
+            lastPixel, imageSize, size);
+          final homeDisplay = MachineCoordinateSystem.imageToDisplayCoordinates(
+            homePixel, imageSize, size);
+          
+          // Draw dashed return-to-home line
+          _drawDashedLine(
+            canvas,
+            Offset(lastDisplay.x, lastDisplay.y),
+            Offset(homeDisplay.x, homeDisplay.y),
+            homeDashPaint,
+            dashLength: 5,
+            spaceLength: 5
+          );
+          
+          // Add "Return Home" label
+          final textPainter = TextPainter(
+            text: TextSpan(
+              text: 'Return Home',
+              style: TextStyle(
+                color: Colors.purple,
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+                backgroundColor: Colors.white.withOpacity(0.7),
+              ),
+            ),
+            textDirection: TextDirection.ltr,
+          );
+          textPainter.layout();
+          
+          // Calculate midpoint of return-to-home line for label placement
+          final midX = (lastDisplay.x + homeDisplay.x) / 2;
+          final midY = (lastDisplay.y + homeDisplay.y) / 2;
+          
+          textPainter.paint(canvas, Offset(midX, midY - 15));
+        }
       }
     }
   }
 
-  double _distance(CoordinatePointXY a, CoordinatePointXY b) {
-    final dx = a.x - b.x;
-    final dy = a.y - b.y;
-    return (dx * dx + dy * dy).toDouble();
+
+  // Helper method to draw a dashed line
+  void _drawDashedLine(
+    Canvas canvas, 
+    Offset start, 
+    Offset end, 
+    Paint paint, 
+    {double dashLength = 5, double spaceLength = 5}
+  ) {
+    // Calculate the delta values and the total distance
+    double dx = end.dx - start.dx;
+    double dy = end.dy - start.dy;
+    double distance = math.sqrt(dx * dx + dy * dy);
+    
+    // Normalize the direction vector
+    double nx = dx / distance;
+    double ny = dy / distance;
+    
+    // Pattern: dash, space, dash, space, ...
+    double drawn = 0;
+    bool isDash = true;
+    
+    while (drawn < distance) {
+      double segmentLength = isDash ? dashLength : spaceLength;
+      if (drawn + segmentLength > distance) {
+        segmentLength = distance - drawn;
+      }
+      
+      if (isDash) {
+        double startX = start.dx + drawn * nx;
+        double startY = start.dy + drawn * ny;
+        double endX = start.dx + (drawn + segmentLength) * nx;
+        double endY = start.dy + (drawn + segmentLength) * ny;
+        
+        canvas.drawLine(
+          Offset(startX, startY),
+          Offset(endX, endY),
+          paint
+        );
+      }
+      
+      drawn += segmentLength;
+      isDash = !isDash;
+    }
   }
 
   @override
   bool shouldRepaint(ToolpathPainter oldDelegate) {
     return toolpaths != oldDelegate.toolpaths ||
-           imageSize != oldDelegate.imageSize;
+           imageSize != oldDelegate.imageSize ||
+           settings != oldDelegate.settings;
   }
 }
