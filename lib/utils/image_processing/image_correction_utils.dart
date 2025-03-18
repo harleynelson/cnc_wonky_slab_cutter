@@ -9,6 +9,7 @@ import 'image_utils.dart';
 /// Utilities for image perspective correction
 class ImageCorrectionUtils {
   /// Correct perspective distortion of an image based on four marker positions
+/// Correct perspective distortion of an image based on four marker positions
 static Future<img.Image> correctPerspective(
   img.Image sourceImage,
   CoordinatePointXY originMarker,
@@ -18,11 +19,6 @@ static Future<img.Image> correctPerspective(
   double markerXDistance,
   double markerYDistance
 ) async {
-  print('MARKER DEBUG: Origin (${originMarker.x.round()}, ${originMarker.y.round()})');
-  print('MARKER DEBUG: X-Axis (${xAxisMarker.x.round()}, ${xAxisMarker.y.round()})');
-  print('MARKER DEBUG: Y-Axis (${yAxisMarker.x.round()}, ${yAxisMarker.y.round()})');
-  print('MARKER DEBUG: Top-Right (${topRightMarker.x.round()}, ${topRightMarker.y.round()})');
-  
   // Original corners of the quadrilateral in the source image
   final List<CoordinatePointXY> sourcePts = [
     originMarker,       // Bottom-left
@@ -31,22 +27,18 @@ static Future<img.Image> correctPerspective(
     yAxisMarker,        // Top-left
   ];
   
-  // Calculate destination points for a perfect rectangle with 90-degree corners
-  // We'll use the real-world measurements to ensure proper aspect ratio
+  // Destination points - a perfect rectangle with the specified dimensions
   final List<CoordinatePointXY> destPts = [
-    CoordinatePointXY(0, markerYDistance),                            // Bottom-left
-    CoordinatePointXY(markerXDistance, markerYDistance),              // Bottom-right
-    CoordinatePointXY(markerXDistance, 0),                            // Top-right
-    CoordinatePointXY(0, 0),                                          // Top-left
+    CoordinatePointXY(0, markerYDistance),                        // Bottom-left
+    CoordinatePointXY(markerXDistance, markerYDistance),          // Bottom-right
+    CoordinatePointXY(markerXDistance, 0),                        // Top-right
+    CoordinatePointXY(0, 0),                                      // Top-left
   ];
   
-  print('SOURCE QUAD: ${sourcePts.map((p) => "(${p.x.round()},${p.y.round()})").join(", ")}');
-  print('DEST QUAD: ${destPts.map((p) => "(${p.x.round()},${p.y.round()})").join(", ")}');
-  
   // Create destination image with dimensions based on marker distances
-  // Add slight padding to ensure we don't cut off any edges
-  final int outputWidth = (markerXDistance * 1.1).round();
-  final int outputHeight = (markerYDistance * 1.1).round();
+  // Add padding to ensure we don't cut off any edges
+  final int outputWidth = (markerXDistance * 1.2).round();
+  final int outputHeight = (markerYDistance * 1.2).round();
   
   // Create destination image
   final img.Image destImage = img.Image(width: outputWidth, height: outputHeight);
@@ -58,15 +50,8 @@ static Future<img.Image> correctPerspective(
     }
   }
   
-  // Check if points form a valid quadrilateral
-  if (!_isValidQuadrilateral(sourcePts[0], sourcePts[1], sourcePts[2], sourcePts[3])) {
-    // Draw error indication on the destination image
-    _drawErrorIndicator(destImage, "Invalid marker placement");
-    return destImage;
-  }
-  
   try {
-    // Calculate the perspective transform matrix
+    // Calculate the perspective transform matrix from source to destination
     final perspectiveMatrix = _computeHomography(sourcePts, destPts);
     
     // Apply the perspective transformation
@@ -87,7 +72,6 @@ static Future<img.Image> correctPerspective(
     print('DEBUG TRANSFORM: Perspective transform completed successfully');
   } catch (e) {
     print('ERROR: Perspective correction failed: $e');
-    // Draw error indication on the destination image
     _drawErrorIndicator(destImage, "Perspective correction failed: $e");
   }
   
@@ -128,23 +112,42 @@ static bool _isValidQuadrilateral(
   CoordinatePointXY p3,
   CoordinatePointXY p4
 ) {
-  // Ensure the points don't form a degenerate quad (e.g., three points in a line)
-  // First check distances
-  double minDist = 10.0; // Minimum distance in pixels
+  // First check distances between points
+  double minDist = 20.0; // Minimum distance in pixels
   
   double d12 = _distance(p1, p2);
   double d23 = _distance(p2, p3);
   double d34 = _distance(p3, p4);
   double d41 = _distance(p4, p1);
-  double d13 = _distance(p1, p3); // Diagonal
-  double d24 = _distance(p2, p4); // Diagonal
   
   if (d12 < minDist || d23 < minDist || d34 < minDist || d41 < minDist) {
     print('ERROR: Points too close together: $d12, $d23, $d34, $d41');
     return false;
   }
   
-  // Check for proper winding (should be convex)
+  // Check if the points have a reasonable arrangement for a quadrilateral
+  // Check vertical and horizontal spans for each pair of edges
+  double verticalDiff1 = (p1.y - p4.y).abs();
+  double verticalDiff2 = (p2.y - p3.y).abs();
+  double horizontalDiff1 = (p1.x - p2.x).abs();
+  double horizontalDiff2 = (p4.x - p3.x).abs();
+  
+  // Ensure there's a significant difference between top and bottom
+  double minVerticalSpan = 50.0;
+  if (verticalDiff1 < minVerticalSpan || verticalDiff2 < minVerticalSpan) {
+    print('ERROR: Insufficient vertical span between top and bottom: $verticalDiff1, $verticalDiff2');
+    return false;
+  }
+  
+  // Ensure there's a significant difference between left and right
+  double minHorizontalSpan = 50.0;
+  if (horizontalDiff1 < minHorizontalSpan || horizontalDiff2 < minHorizontalSpan) {
+    print('ERROR: Insufficient horizontal span between left and right: $horizontalDiff1, $horizontalDiff2');
+    return false;
+  }
+  
+  // Check that the points create a reasonable quadrilateral (not too distorted)
+  // Compute the cross products to ensure the quadrilateral is convex
   double crossProduct1 = _crossProduct(p1, p2, p3);
   double crossProduct2 = _crossProduct(p2, p3, p4);
   double crossProduct3 = _crossProduct(p3, p4, p1);
@@ -158,13 +161,7 @@ static bool _isValidQuadrilateral(
   
   if (!allPositive && !allNegative) {
     print('ERROR: Points do not form a convex quadrilateral');
-    return false;
-  }
-  
-  // Check if aspect ratio is reasonable (not too extreme)
-  final double aspectRatio = math.max(d12, d34) / math.max(d23, d41);
-  if (aspectRatio > 10.0 || aspectRatio < 0.1) {
-    print('ERROR: Extreme aspect ratio: $aspectRatio');
+    print('Cross products: $crossProduct1, $crossProduct2, $crossProduct3, $crossProduct4');
     return false;
   }
   
@@ -349,17 +346,30 @@ static void _applyPerspectiveTransform(
     }
     
     // For each pixel in the destination image, find the corresponding source pixel
-    for (int y = 0; y < destImage.height; y++) {
-      for (int x = 0; x < destImage.width; x++) {
-        // Apply inverse homography to get source coordinates
-        // [xs, ys, w] = H^(-1) * [x, y, 1]
-        final double w = h31 * x + h32 * y + h33;
-        
-        // Skip if denominator is too small
-        if (w.abs() < 1e-10) continue;
-        
-        final double srcX = (h11 * x + h12 * y + h13) / w;
-        final double srcY = (h21 * x + h22 * y + h23) / w;
+for (int y = 0; y < destImage.height; y++) {
+  for (int x = 0; x < destImage.width; x++) {
+    // The homography maps source to destination
+    // For backward mapping, we need to invert the transform
+    // But rather than explicitly computing the inverse, we can solve:
+    // [h11 h12 h13] [srcX]   [x]
+    // [h21 h22 h23] [srcY] = [y]
+    // [h31 h32 h33] [1   ]   [1]
+    
+    // This gives us:
+    // srcX = (h22*h33 - h23*h32)*x + (h13*h32 - h12*h33)*y + (h12*h23 - h13*h22)
+    //      / (h31*h22 - h32*h21)*x + (h32*h11 - h31*h12)*y + (h21*h12 - h22*h11)
+    
+    // srcY = (h23*h31 - h21*h33)*x + (h11*h33 - h13*h31)*y + (h13*h21 - h11*h23)
+    //      / (h31*h22 - h32*h21)*x + (h32*h11 - h31*h12)*y + (h21*h12 - h22*h11)
+    
+    // For performance, we can compute this directly with:
+    final double denominator = h31 * x + h32 * y + h33;
+    
+    // Skip if denominator is too small
+    if (denominator.abs() < 1e-10) continue;
+    
+    final double srcX = (h11 * x + h12 * y + h13) / denominator;
+    final double srcY = (h21 * x + h22 * y + h23) / denominator;
         
         // Skip if source coordinates are outside the image bounds with a small margin
         if (srcX < -0.5 || srcX >= sourceImage.width - 0.5 || 
