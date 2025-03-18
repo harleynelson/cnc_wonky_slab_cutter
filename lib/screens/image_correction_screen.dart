@@ -10,6 +10,7 @@ import 'package:image/image.dart' as img;
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
 import '../services/flow/processing_flow_manager.dart';
+import '../utils/general/coordinate_utils.dart';
 import '../utils/image_processing/image_correction_utils.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../services/detection/marker_detector.dart';
@@ -92,8 +93,14 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
     // Log raw tap position for debugging
     print('DEBUG: Raw tap at (${tapPosition.dx}, ${tapPosition.dy})');
     
-    // Calculate actual image coordinates from tap position
-    final imagePoint = _calculateImagePoint(tapPosition);
+    // Calculate actual image coordinates from tap position using the standard utility
+    final containerSize = CoordinateUtils.getEffectiveContainerSize(context);
+    final imagePoint = CoordinateUtils.tapPositionToImageCoordinates(
+      tapPosition, 
+      _imageSize!, 
+      containerSize,
+      debug: true
+    );
     
     print('DEBUG: Calculated image point: (${imagePoint.x}, ${imagePoint.y})');
     
@@ -130,6 +137,14 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
     });
     
     try {
+      // Validate points are within image bounds
+      if (_isPointOutOfBounds(_originMarkerPoint!) || 
+          _isPointOutOfBounds(_xAxisMarkerPoint!) ||
+          _isPointOutOfBounds(_yAxisMarkerPoint!) ||
+          _isPointOutOfBounds(_topRightMarkerPoint!)) {
+        throw Exception('One or more markers are outside the image bounds');
+      }
+      
       // Create marker points from tap positions
       final originMarker = MarkerPoint(
         _originMarkerPoint!.x.toInt(), 
@@ -201,8 +216,8 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
       await correctedImageFile.writeAsBytes(correctedImageBytes);
       
       // Calculate pixel to mm ratio for corrected image
-      final pixelToMmRatioX = widget.settings.markerXDistance / (_xAxisMarkerPoint!.x - _originMarkerPoint!.x).abs();
-      final pixelToMmRatioY = widget.settings.markerYDistance / (_yAxisMarkerPoint!.y - _originMarkerPoint!.y).abs();
+      final pixelToMmRatioX = widget.settings.markerXDistance / (xAxisMarker.x - originMarker.x).abs();
+      final pixelToMmRatioY = widget.settings.markerYDistance / (scaleMarker.y - originMarker.y).abs();
       final pixelToMmRatio = (pixelToMmRatioX + pixelToMmRatioY) / 2;
       
       // Create marker result
@@ -234,77 +249,59 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
     }
   }
   
+  // Helper method to check if a point is outside image bounds
+  bool _isPointOutOfBounds(CoordinatePointXY point) {
+    if (_imageSize == null) return true;
+    
+    return point.x < 0 || 
+           point.x >= _imageSize!.width || 
+           point.y < 0 || 
+           point.y >= _imageSize!.height;
+  }
+  
   CoordinatePointXY _calculateImagePoint(Offset tapPosition) {
     if (_imageSize == null) {
       return CoordinatePointXY(0, 0);
     }
     
+    // Get the container size
     final RenderBox box = context.findRenderObject() as RenderBox;
-    final Size boxSize = box.size;
+    final containerSize = Size(box.size.width, box.size.height);
     
-    // Calculate image display size and position within container
-    final double imageAspect = _imageSize!.width / _imageSize!.height;
-    final double boxAspect = boxSize.width / boxSize.height;
+    // Use the standard utility method for coordinate transformation
+    final displayPoint = CoordinatePointXY(tapPosition.dx, tapPosition.dy);
+    final imagePoint = MachineCoordinateSystem.displayToImageCoordinates(
+      displayPoint, 
+      _imageSize!, 
+      containerSize
+    );
     
-    double scaledWidth, scaledHeight;
-    double offsetX = 0, offsetY = 0;
+    // Ensure point is within image bounds
+    final clampedX = imagePoint.x.clamp(0.0, _imageSize!.width - 1);
+    final clampedY = imagePoint.y.clamp(0.0, _imageSize!.height - 1);
     
-    if (imageAspect > boxAspect) {
-      // Image is wider than box - fills width, centers vertically
-      scaledWidth = boxSize.width;
-      scaledHeight = boxSize.width / imageAspect;
-      offsetY = (boxSize.height - scaledHeight) / 2;
-    } else {
-      // Image is taller than box - fills height, centers horizontally
-      scaledHeight = boxSize.height;
-      scaledWidth = boxSize.height * imageAspect;
-      offsetX = (boxSize.width - scaledWidth) / 2;
-    }
-    
-    // Check if tap is inside image bounds
-    if (tapPosition.dx < offsetX || tapPosition.dx > offsetX + scaledWidth ||
-        tapPosition.dy < offsetY || tapPosition.dy > offsetY + scaledHeight) {
-      print("Warning: Tap outside image bounds");
-    }
-    
-    // Convert tap position to image coordinates
-    final imageX = ((tapPosition.dx - offsetX) / scaledWidth) * _imageSize!.width;
-    final imageY = ((tapPosition.dy - offsetY) / scaledHeight) * _imageSize!.height;
-    
-    return CoordinatePointXY(imageX, imageY);
+    return CoordinatePointXY(clampedX, clampedY);
   }
   
   Widget _buildSamplePointIndicator(CoordinatePointXY point, Color color, String label) {
-    final RenderBox box = context.findRenderObject() as RenderBox;
-    final Size boxSize = box.size;
+    if (_imageSize == null) return Container();
     
-    // Calculate image display size and position
-    final double imageAspect = _imageSize!.width / _imageSize!.height;
-    final double boxAspect = boxSize.width / boxSize.height;
+    // Get effective container size
+    final containerSize = CoordinateUtils.getEffectiveContainerSize(context);
     
-    double scaledWidth, scaledHeight;
-    double offsetX = 0, offsetY = 0;
-    
-    if (imageAspect > boxAspect) {
-      scaledWidth = boxSize.width;
-      scaledHeight = boxSize.width / imageAspect;
-      offsetY = (boxSize.height - scaledHeight) / 2;
-    } else {
-      scaledHeight = boxSize.height;
-      scaledWidth = boxSize.height * imageAspect;
-      offsetX = (boxSize.width - scaledWidth) / 2;
-    }
-    
-    // Convert image to screen coordinates
-    final screenX = (point.x / _imageSize!.width) * scaledWidth + offsetX;
-    final screenY = (point.y / _imageSize!.height) * scaledHeight + offsetY;
-    
-    print('DEBUG INDICATOR: Image point (${point.x}, ${point.y}) -> Display point (${screenX}, ${screenY})');
+    // Convert image coordinates to display position using the standard utility
+    final displayPosition = CoordinateUtils.imageCoordinatesToDisplayPosition(
+      point, 
+      _imageSize!, 
+      containerSize,
+      debug: true
+    );
     
     return Positioned(
-      left: screenX - 10,
-      top: screenY - 10,
+      left: displayPosition.dx - 10,
+      top: displayPosition.dy - 10,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 20,
@@ -597,6 +594,11 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
             Text(
               'The app will correct the image to match the real-world coordinates for accurate CNC processing. Make sure your markers form a true rectangle with 90-degree corners.',
               style: TextStyle(fontStyle: FontStyle.italic),
+            ),
+            SizedBox(height: 12),
+            Text(
+              'Why four markers? Using all four corners allows for precise perspective correction, which is essential for accurate CNC measurements and operations.',
+              style: TextStyle(fontSize: 12),
             ),
           ],
         ),

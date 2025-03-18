@@ -9,6 +9,8 @@ import 'package:image/image.dart' as img;
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
 import '../services/flow/processing_flow_manager.dart';
+import '../utils/general/constants.dart';
+import '../utils/general/coordinate_utils.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../utils/image_processing/multi_tap_detection_utils.dart';
 import '../services/detection/slab_contour_result.dart';
@@ -95,18 +97,16 @@ class _SlabDetectionScreenState extends State<SlabDetectionScreen> {
     // Log raw tap position for debugging
     print('DEBUG: Raw tap at (${tapPosition.dx}, ${tapPosition.dy})');
     
-    // Verify tap is within a reasonable range for the image container
-    final RenderBox imageContainer = context.findRenderObject() as RenderBox;
-    final containerSize = imageContainer.size;
+    // Get effective container size
+    final containerSize = CoordinateUtils.getEffectiveContainerSize(context);
     
-    if (tapPosition.dx < 0 || tapPosition.dx > containerSize.width || 
-        tapPosition.dy < 0 || tapPosition.dy > 438.0) { // Using fixed height of 438
-      print('DEBUG: Tap outside of image container bounds');
-      return;
-    }
-    
-    // Calculate actual image coordinates from tap position
-    final imagePoint = _calculateImagePoint(tapPosition);
+    // Calculate actual image coordinates from tap position - using common utility
+    final imagePoint = CoordinateUtils.tapPositionToImageCoordinates(
+      tapPosition, 
+      _imageSize!, 
+      containerSize,
+      debug: true
+    );
     
     print('DEBUG: Calculated image point: (${imagePoint.x}, ${imagePoint.y})');
     
@@ -279,26 +279,22 @@ class _SlabDetectionScreenState extends State<SlabDetectionScreen> {
   Widget _buildSamplePointIndicator(CoordinatePointXY point, Color color, String label) {
     if (_imageSize == null) return Container();
     
-    // Get container size with fixed height for consistency
-    final containerSize = Size(
-      (context.findRenderObject() as RenderBox).size.width,
-      438.0 // Fixed height to match combined_detector_screen
-    );
+    // Get effective container size
+    final containerSize = CoordinateUtils.getEffectiveContainerSize(context);
     
-    // Use standard method for coordinate transformation
-    final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
+    // Convert to display coordinates
+    final displayPosition = CoordinateUtils.imageCoordinatesToDisplayPosition(
       point,
       _imageSize!,
-      containerSize
+      containerSize,
+      debug: true
     );
     
-    // Add debug logs
-    print('DEBUG INDICATOR: Image point (${point.x}, ${point.y}) -> Display point (${displayPoint.x}, ${displayPoint.y})');
-    
     return Positioned(
-      left: displayPoint.x - 10,
-      top: displayPoint.y - 10,
+      left: displayPosition.dx - 10,
+      top: displayPosition.dy - 10,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 20,
@@ -332,23 +328,20 @@ class _SlabDetectionScreenState extends State<SlabDetectionScreen> {
   
   Widget _buildImageDisplay() {
     if (_flowManager.result.correctedImage != null) {
-      if (_contourDetected && _flowManager.result.contourResult?.debugImage != null) {
-        // Display visualization with contour
-        return Center(
-          child: Image.memory(
-            Uint8List.fromList(img.encodePng(_flowManager.result.contourResult!.debugImage!)),
-            fit: BoxFit.contain,
-          ),
-        );
-      } else {
-        // Show the corrected image if no contour detected yet
-        return Center(
-          child: Image.file(
-            _flowManager.result.correctedImage!,
-            fit: BoxFit.contain,
-          ),
-        );
-      }
+      return Container(
+        constraints: BoxConstraints(
+          minHeight: imageContainerMinHeight,
+        ),
+        child: _contourDetected && _flowManager.result.contourResult?.debugImage != null
+          ? Image.memory(
+              Uint8List.fromList(img.encodePng(_flowManager.result.contourResult!.debugImage!)),
+              fit: BoxFit.contain,
+            )
+          : Image.file(
+              _flowManager.result.correctedImage!,
+              fit: BoxFit.contain,
+            ),
+      );
     } else {
       return Center(child: Text('Corrected image not available'));
     }

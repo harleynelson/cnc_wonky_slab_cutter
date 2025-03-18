@@ -57,213 +57,371 @@ class ImageCorrectionUtils {
       }
     }
     
-    // Apply perspective transformation
-    final perspectiveMatrix = _calculatePerspectiveTransform(sourcePts, destPts);
-    _applyPerspectiveTransform(sourceImage, destImage, perspectiveMatrix);
+    // Check if points form a valid quadrilateral
+    if (!_isValidQuadrilateral(sourcePts[0], sourcePts[1], sourcePts[2], sourcePts[3])) {
+      // Draw error indication on the destination image
+      _drawErrorIndicator(destImage, "Invalid marker placement");
+      return destImage;
+    }
     
-    // Draw calibration grid
-    final gridSpacing = (markerXDistance / 10).round();
-    _drawCalibrationGrid(
-      destImage,
-      0, 
-      0, 
-      outputWidth, 
-      outputHeight, 
-      gridSpacing,
-      img.ColorRgba8(0, 100, 255, 80)
-    );
+    try {
+      // Calculate the perspective transform matrix
+      final perspectiveMatrix = _computeHomography(sourcePts, destPts);
+      
+      // Apply the perspective transformation
+      _applyPerspectiveTransform(sourceImage, destImage, perspectiveMatrix);
+      
+      // Draw calibration grid
+      final gridSpacing = (markerXDistance / 10).round();
+      _drawCalibrationGrid(
+        destImage,
+        0, 
+        0, 
+        outputWidth, 
+        outputHeight, 
+        gridSpacing,
+        img.ColorRgba8(0, 100, 255, 80)
+      );
+    } catch (e) {
+      print('ERROR: Perspective correction failed: $e');
+      // Draw error indication on the destination image
+      _drawErrorIndicator(destImage, "Perspective correction failed: $e");
+    }
     
     return destImage;
   }
   
-  /// Calculate perspective transform matrix
-  static List<double> _calculatePerspectiveTransform(
+  /// Draw error indicator on image
+  static void _drawErrorIndicator(img.Image image, String errorMessage) {
+    // Draw a red X across the image
+    ImageUtils.drawLine(
+      image, 
+      0, 0, 
+      image.width - 1, image.height - 1, 
+      ImageUtils.colorRed
+    );
+    
+    ImageUtils.drawLine(
+      image, 
+      0, image.height - 1, 
+      image.width - 1, 0, 
+      ImageUtils.colorRed
+    );
+    
+    // Draw error message
+    ImageUtils.drawText(
+      image,
+      errorMessage,
+      20,
+      image.height ~/ 2,
+      ImageUtils.colorRed
+    );
+  }
+  
+  /// Check for valid quadrilateral before attempting perspective correction
+  static bool _isValidQuadrilateral(
+    CoordinatePointXY p1,
+    CoordinatePointXY p2,
+    CoordinatePointXY p3,
+    CoordinatePointXY p4
+  ) {
+    // Ensure the points don't form a degenerate quad (e.g., three points in a line)
+    // First check distances
+    double minDist = 10.0; // Minimum distance in pixels
+    
+    double d12 = _distance(p1, p2);
+    double d23 = _distance(p2, p3);
+    double d34 = _distance(p3, p4);
+    double d41 = _distance(p4, p1);
+    double d13 = _distance(p1, p3);
+    double d24 = _distance(p2, p4);
+    
+    if (d12 < minDist || d23 < minDist || d34 < minDist || d41 < minDist) {
+      print('ERROR: Points too close together: $d12, $d23, $d34, $d41');
+      return false;
+    }
+    
+    // Check for proper winding (should be convex)
+    double crossProduct1 = _crossProduct(p1, p2, p3);
+    double crossProduct2 = _crossProduct(p2, p3, p4);
+    double crossProduct3 = _crossProduct(p3, p4, p1);
+    double crossProduct4 = _crossProduct(p4, p1, p2);
+    
+    // All cross products should have the same sign for a convex polygon
+    bool allPositive = crossProduct1 > 0 && crossProduct2 > 0 && 
+                      crossProduct3 > 0 && crossProduct4 > 0;
+    bool allNegative = crossProduct1 < 0 && crossProduct2 < 0 && 
+                      crossProduct3 < 0 && crossProduct4 < 0;
+    
+    if (!allPositive && !allNegative) {
+      print('ERROR: Points do not form a convex quadrilateral');
+      return false;
+    }
+    
+    return true;
+  }
+  
+  /// Helper method to calculate the cross product of vectors AB and AC
+  static double _crossProduct(CoordinatePointXY a, CoordinatePointXY b, CoordinatePointXY c) {
+    return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
+  }
+  
+  /// Helper method to calculate distance between two points
+  static double _distance(CoordinatePointXY p1, CoordinatePointXY p2) {
+    double dx = p2.x - p1.x;
+    double dy = p2.y - p1.y;
+    return math.sqrt(dx * dx + dy * dy);
+  }
+
+  /// Compute the homography matrix for perspective transformation
+  static List<double> _computeHomography(
     List<CoordinatePointXY> sourcePts, 
     List<CoordinatePointXY> destPts
   ) {
-    // We need to solve for the 8 parameters of the perspective transform
-    // [ a b c ]   [x]   [X]
-    // [ d e f ] * [y] = [Y]
-    // [ g h 1 ]   [1]   [W]
-    // Where X = x' * W, Y = y' * W
+    if (sourcePts.length != 4 || destPts.length != 4) {
+      throw Exception('Four source and destination points are required');
+    }
     
-    // This is a simplified implementation - in production, you'd use a more robust library
+    // Validate the source points form a proper quadrilateral
+    if (!_isValidQuadrilateral(
+        sourcePts[0], sourcePts[1], sourcePts[2], sourcePts[3])) {
+      throw Exception('Source points do not form a valid quadrilateral');
+    }
     
-    final matrix = List<double>.filled(9, 0.0);
+    // Set up the equation system: Ah = b
+    // For each corresponding point pair, we get two equations
+    final List<List<double>> A = List.generate(8, (_) => List<double>.filled(8, 0.0));
+    final List<double> b = List<double>.filled(8, 0.0);
     
-    // Calculate the matrix for the forward mapping
-    _computeProjectiveMatrix(
-      sourcePts[0].x, sourcePts[0].y, destPts[0].x, destPts[0].y,
-      sourcePts[1].x, sourcePts[1].y, destPts[1].x, destPts[1].y,
-      sourcePts[2].x, sourcePts[2].y, destPts[2].x, destPts[2].y,
-      sourcePts[3].x, sourcePts[3].y, destPts[3].x, destPts[3].y,
-      matrix
-    );
+    // Log source and destination points
+    print('DEBUG HOMOG: Source points: ' + 
+          sourcePts.map((p) => '(${p.x.toStringAsFixed(2)}, ${p.y.toStringAsFixed(2)})').join(', '));
+    print('DEBUG HOMOG: Dest points: ' + 
+          destPts.map((p) => '(${p.x.toStringAsFixed(2)}, ${p.y.toStringAsFixed(2)})').join(', '));
     
-    return matrix;
+    for (int i = 0; i < 4; i++) {
+      final double x = sourcePts[i].x;
+      final double y = sourcePts[i].y;
+      final double X = destPts[i].x; 
+      final double Y = destPts[i].y;
+      
+      // Equations for the x-coordinate
+      int idx = i * 2;
+      A[idx][0] = x;
+      A[idx][1] = y;
+      A[idx][2] = 1;
+      A[idx][3] = 0;
+      A[idx][4] = 0;
+      A[idx][5] = 0;
+      A[idx][6] = -X * x;
+      A[idx][7] = -X * y;
+      b[idx] = X;
+      
+      // Equations for the y-coordinate
+      idx = i * 2 + 1;
+      A[idx][0] = 0;
+      A[idx][1] = 0;
+      A[idx][2] = 0;
+      A[idx][3] = x;
+      A[idx][4] = y;
+      A[idx][5] = 1;
+      A[idx][6] = -Y * x;
+      A[idx][7] = -Y * y;
+      b[idx] = Y;
+    }
+    
+    try {
+      // Solve the system using Gaussian elimination with partial pivoting
+      final List<double> h = _solveLinearSystem(A, b);
+      
+      // Create a new mutable list for the result
+      List<double> result = List<double>.from(h);
+      // Add the last element h[8] = 1 to complete the homography matrix
+      result.add(1.0);
+      
+      print('DEBUG HOMOG: Computed homography matrix: ' + result.map((v) => v.toStringAsFixed(4)).join(', '));
+      
+      return result;
+    } catch (e) {
+      print('ERROR HOMOG: Failed to compute homography: $e');
+      throw Exception('Failed to compute perspective transformation: $e');
+    }
   }
   
-  /// Compute the projective matrix for perspective transform
-  static void _computeProjectiveMatrix(
-    double x0, double y0, double X0, double Y0,
-    double x1, double y1, double X1, double Y1,
-    double x2, double y2, double X2, double Y2,
-    double x3, double y3, double X3, double Y3,
-    List<double> matrix
-  ) {
-    // Build the coefficient matrix
-    final List<List<double>> coeffs = [
-      [x0, y0, 1, 0, 0, 0, -X0*x0, -X0*y0],
-      [0, 0, 0, x0, y0, 1, -Y0*x0, -Y0*y0],
-      [x1, y1, 1, 0, 0, 0, -X1*x1, -X1*y1],
-      [0, 0, 0, x1, y1, 1, -Y1*x1, -Y1*y1],
-      [x2, y2, 1, 0, 0, 0, -X2*x2, -X2*y2],
-      [0, 0, 0, x2, y2, 1, -Y2*x2, -Y2*y2],
-      [x3, y3, 1, 0, 0, 0, -X3*x3, -X3*y3],
-      [0, 0, 0, x3, y3, 1, -Y3*x3, -Y3*y3]
-    ];
+  /// Solve a system of linear equations using Gaussian elimination with partial pivoting
+  static List<double> _solveLinearSystem(List<List<double>> A, List<double> b) {
+    final int n = b.length;
     
-    // Build the right-hand side
-    final List<double> rhs = [X0, Y0, X1, Y1, X2, Y2, X3, Y3];
-    
-    // Solve the system using Gaussian elimination
-    _solveLinearSystem(coeffs, rhs, 8);
-    
-    // Extract the solution
-    matrix[0] = rhs[0]; // a
-    matrix[1] = rhs[1]; // b
-    matrix[2] = rhs[2]; // c
-    matrix[3] = rhs[3]; // d
-    matrix[4] = rhs[4]; // e
-    matrix[5] = rhs[5]; // f
-    matrix[6] = rhs[6]; // g
-    matrix[7] = rhs[7]; // h
-    matrix[8] = 1.0;    // i = 1
-  }
-  
-  /// Solve a system of linear equations using Gaussian elimination
-  static void _solveLinearSystem(List<List<double>> coeffs, List<double> rhs, int n) {
-    // Perform Gaussian elimination
+    // Perform Gaussian elimination with partial pivoting
     for (int i = 0; i < n; i++) {
-      // Find pivot
-      double max = coeffs[i][i].abs();
+      // Find the pivot (maximum absolute value in the current column)
       int maxRow = i;
+      double maxVal = A[i][i].abs();
+      
       for (int j = i + 1; j < n; j++) {
-        if (coeffs[j][i].abs() > max) {
-          max = coeffs[j][i].abs();
+        if (A[j][i].abs() > maxVal) {
+          maxVal = A[j][i].abs();
           maxRow = j;
         }
       }
       
       // Swap rows if needed
       if (maxRow != i) {
+        // Swap rows in A
         for (int j = i; j < n; j++) {
-          final temp = coeffs[i][j];
-          coeffs[i][j] = coeffs[maxRow][j];
-          coeffs[maxRow][j] = temp;
+          final temp = A[i][j];
+          A[i][j] = A[maxRow][j];
+          A[maxRow][j] = temp;
         }
-        final temp = rhs[i];
-        rhs[i] = rhs[maxRow];
-        rhs[maxRow] = temp;
+        
+        // Swap corresponding element in b
+        final temp = b[i];
+        b[i] = b[maxRow];
+        b[maxRow] = temp;
       }
       
-      // Eliminate below
+      // Check if matrix is singular
+      if (A[i][i].abs() < 1e-10) {
+        throw Exception('Matrix is singular or nearly singular');
+      }
+      
+      // Eliminate elements below the pivot
       for (int j = i + 1; j < n; j++) {
-        final factor = coeffs[j][i] / coeffs[i][i];
-        rhs[j] -= factor * rhs[i];
+        final factor = A[j][i] / A[i][i];
+        
+        // Update b
+        b[j] -= factor * b[i];
+        
+        // Update A
         for (int k = i; k < n; k++) {
-          coeffs[j][k] -= factor * coeffs[i][k];
+          A[j][k] -= factor * A[i][k];
         }
       }
     }
-  
+    
     // Back-substitution
+    final List<double> x = List<double>.filled(n, 0.0);
     for (int i = n - 1; i >= 0; i--) {
       double sum = 0.0;
       for (int j = i + 1; j < n; j++) {
-        sum += coeffs[i][j] * rhs[j];
+        sum += A[i][j] * x[j];
       }
-      rhs[i] = (rhs[i] - sum) / coeffs[i][i];
+      x[i] = (b[i] - sum) / A[i][i];
     }
+    
+    return x;
   }
   
-  /// Apply perspective transform to an image
+  /// Apply the perspective transform with extra error handling
   static void _applyPerspectiveTransform(
     img.Image sourceImage, 
     img.Image destImage, 
-    List<double> matrix
+    List<double> homography
   ) {
-    // Extract matrix components
-    final double a = matrix[0];
-    final double b = matrix[1];
-    final double c = matrix[2];
-    final double d = matrix[3];
-    final double e = matrix[4];
-    final double f = matrix[5];
-    final double g = matrix[6];
-    final double h = matrix[7];
-    
-    // For each pixel in the destination image, find the source pixel
-    for (int y = 0; y < destImage.height; y++) {
-      for (int x = 0; x < destImage.width; x++) {
-        // Apply inverse transform to find source coordinates
-        final double denominator = g * x + h * y + 1.0;
-        if (denominator.abs() < 1e-10) continue; // Avoid division by zero
-        
-        final double srcX = (a * x + b * y + c) / denominator;
-        final double srcY = (d * x + e * y + f) / denominator;
-        
-        // Check if source coordinates are within bounds
-        if (srcX >= 0 && srcX < sourceImage.width - 1 && 
-            srcY >= 0 && srcY < sourceImage.height - 1) {
-          try {
-            // Use bilinear interpolation for better quality
-            final int x0 = srcX.floor();
-            final int y0 = srcY.floor();
-            final int x1 = x0 + 1;
-            final int y1 = y0 + 1;
-            
-            // Add additional bounds checking here
-            if (x0 < 0 || x0 >= sourceImage.width || 
-                y0 < 0 || y0 >= sourceImage.height ||
-                x1 < 0 || x1 >= sourceImage.width || 
-                y1 < 0 || y1 >= sourceImage.height) {
-              continue;
-            }
-            
-            final double dx = srcX - x0;
-            final double dy = srcY - y0;
-            
-            final p00 = sourceImage.getPixel(x0, y0);
-            final p01 = sourceImage.getPixel(x0, y1);
-            final p10 = sourceImage.getPixel(x1, y0);
-            final p11 = sourceImage.getPixel(x1, y1);
-            
-            // Bilinear interpolation for each channel
-            final int r = _interpolate(p00.r.toInt(), p10.r.toInt(), p01.r.toInt(), p11.r.toInt(), dx, dy);
-            final int g = _interpolate(p00.g.toInt(), p10.g.toInt(), p01.g.toInt(), p11.g.toInt(), dx, dy);
-            final int b = _interpolate(p00.b.toInt(), p10.b.toInt(), p01.b.toInt(), p11.b.toInt(), dx, dy);
-            final int a = _interpolate(p00.a.toInt(), p10.a.toInt(), p01.a.toInt(), p11.a.toInt(), dx, dy);
-            
-            destImage.setPixel(x, y, img.ColorRgba8(r, g, b, a));
-          } catch (e) {
-            // Log the error and continue
-            print('Error at pixel ($x,$y) using source (${srcX.toStringAsFixed(2)},${srcY.toStringAsFixed(2)}): $e');
+    try {
+      // Extract homography matrix elements
+      final double h11 = homography[0];
+      final double h12 = homography[1];
+      final double h13 = homography[2];
+      final double h21 = homography[3];
+      final double h22 = homography[4];
+      final double h23 = homography[5];
+      final double h31 = homography[6];
+      final double h32 = homography[7];
+      final double h33 = homography[8];
+      
+      print('DEBUG TRANSFORM: Applying homography to image ${sourceImage.width}x${sourceImage.height} → ${destImage.width}x${destImage.height}');
+      
+      // If homography values are too extreme, the transformation might fail
+      double maxValue = homography.reduce((a, b) => a.abs() > b.abs() ? a : b).abs();
+      if (maxValue > 1000) {
+        print('WARNING TRANSFORM: Homography has extreme values (max: $maxValue)');
+      }
+      
+      // For each pixel in the destination image, find the corresponding source pixel
+      for (int y = 0; y < destImage.height; y++) {
+        for (int x = 0; x < destImage.width; x++) {
+          // Apply inverse homography to get source coordinates
+          // [xs, ys, w] = H^(-1) * [x, y, 1]
+          double w = h31 * x + h32 * y + h33;
+          
+          // Skip if denominator is too small
+          if (w.abs() < 1e-10) continue;
+          
+          double srcX = (h11 * x + h12 * y + h13) / w;
+          double srcY = (h21 * x + h22 * y + h23) / w;
+          
+          // Skip if source coordinates are outside the image bounds with a small margin
+          if (srcX < -0.5 || srcX >= sourceImage.width - 0.5 || 
+              srcY < -0.5 || srcY >= sourceImage.height - 0.5) {
             continue;
           }
+          
+          // Bilinear interpolation for better quality
+          int x0 = srcX.floor();
+          int y0 = srcY.floor();
+          int x1 = x0 + 1;
+          int y1 = y0 + 1;
+          
+          // Ensure neighbor pixels are within image bounds
+          x0 = x0.clamp(0, sourceImage.width - 1);
+          y0 = y0.clamp(0, sourceImage.height - 1);
+          x1 = x1.clamp(0, sourceImage.width - 1);
+          y1 = y1.clamp(0, sourceImage.height - 1);
+          
+          // Calculate interpolation weights
+          double dx = srcX - x0;
+          double dy = srcY - y0;
+          
+          // Get pixel values with bounds checking
+          final p00 = sourceImage.getPixel(x0, y0);
+          final p01 = sourceImage.getPixel(x0, y1);
+          final p10 = sourceImage.getPixel(x1, y0);
+          final p11 = sourceImage.getPixel(x1, y1);
+          
+          // Bilinear interpolation for each channel
+          final int r = _interpolate(p00.r, p10.r, p01.r, p11.r, dx, dy);
+          final int g = _interpolate(p00.g, p10.g, p01.g, p11.g, dx, dy);
+          final int b = _interpolate(p00.b, p10.b, p01.b, p11.b, dx, dy);
+          final int a = _interpolate(p00.a, p10.a, p01.a, p11.a, dx, dy);
+          
+          // Set the pixel in the destination image
+          destImage.setPixel(x, y, img.ColorRgba8(r, g, b, a));
         }
+      }
+      
+      print('DEBUG TRANSFORM: Perspective transform completed successfully');
+      
+    } catch (e) {
+      print('ERROR TRANSFORM: $e');
+      // Fill destination with an error pattern in case of failure
+      _fillWithErrorPattern(destImage);
+    }
+  }
+  
+  /// Fill the destination image with an error pattern if transformation fails
+  static void _fillWithErrorPattern(img.Image image) {
+    final redColor = img.ColorRgba8(255, 100, 100, 255);
+    final blackColor = img.ColorRgba8(0, 0, 0, 255);
+    
+    for (int y = 0; y < image.height; y++) {
+      for (int x = 0; x < image.width; x++) {
+        // Create a checkerboard pattern
+        bool isRed = (x ~/ 20 + y ~/ 20) % 2 == 0;
+        image.setPixel(x, y, isRed ? redColor : blackColor);
       }
     }
   }
   
-  /// Bilinear interpolation helper
-  static int _interpolate(int p00, int p10, int p01, int p11, double dx, double dy) {
-    final double result = 
-        p00 * (1 - dx) * (1 - dy) +
-        p10 * dx * (1 - dy) +
-        p01 * (1 - dx) * dy +
-        p11 * dx * dy;
-    return result.round().clamp(0, 255);
+  /// Bilinear interpolation helper for pixel values
+  static int _interpolate(num p00, num p10, num p01, num p11, double dx, double dy) {
+    final double interpVal = 
+      p00.toDouble() * (1 - dx) * (1 - dy) +
+      p10.toDouble() * dx * (1 - dy) +
+      p01.toDouble() * (1 - dx) * dy +
+      p11.toDouble() * dx * dy;
+    
+    return interpVal.round().clamp(0, 255);
   }
   
   /// Draw a calibration grid on the image

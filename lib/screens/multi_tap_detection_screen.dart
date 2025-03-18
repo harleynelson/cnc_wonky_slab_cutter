@@ -13,6 +13,8 @@ import '../providers/processing_provider.dart';
 import '../services/detection/marker_detector.dart';
 import '../services/detection/slab_contour_result.dart';
 import '../services/flow/processing_flow_manager.dart';
+import '../utils/general/constants.dart';
+import '../utils/general/coordinate_utils.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../utils/image_processing/image_utils.dart';
 import '../utils/image_processing/multi_tap_detection_utils.dart';
@@ -449,49 +451,21 @@ class _MultiTapDetectionScreenState extends State<MultiTapDetectionScreen> {
   }
   
   CoordinatePointXY _calculateImagePoint(Offset tapPosition) {
-  if (_imageSize == null) {
-    return CoordinatePointXY(0, 0);
+    if (_imageSize == null) {
+      return CoordinatePointXY(0, 0);
+    }
+    
+    // Get the effective container size
+    final containerSize = CoordinateUtils.getEffectiveContainerSize(context);
+    
+    // Use the standardized utility for coordinate transformation
+    return CoordinateUtils.tapPositionToImageCoordinates(
+      tapPosition, 
+      _imageSize!, 
+      containerSize,
+      debug: true
+    );
   }
-  
-  // Get the direct parent render object of the image
-  final RenderBox imageContainer = context.findRenderObject() as RenderBox;
-  
-  // Get the overlay's container size - using the same fixed height as in combined_detector_screen
-  final markerOverlaySize = Size(imageContainer.size.width, 438.0); // Match overlay's canvas size
-  
-  print('DEBUG: Tap position: ${tapPosition.dx}x${tapPosition.dy}');
-  print('DEBUG: Using overlay size: ${markerOverlaySize.width}x${markerOverlaySize.height}');
-  
-  // Use the same logic as in imageToDisplayCoordinates but in reverse
-  final imageAspect = _imageSize!.width / _imageSize!.height;
-  final displayAspect = markerOverlaySize.width / markerOverlaySize.height;
-  
-  double displayWidth, displayHeight, offsetX = 0, offsetY = 0;
-  
-  if (imageAspect > displayAspect) {
-    displayWidth = markerOverlaySize.width;
-    displayHeight = displayWidth / imageAspect;
-    offsetY = (markerOverlaySize.height - displayHeight) / 2;
-  } else {
-    displayHeight = markerOverlaySize.height;
-    displayWidth = displayHeight * imageAspect;
-    offsetX = (markerOverlaySize.width - displayWidth) / 2;
-  }
-  
-  // Scale factors
-  final scaleX = _imageSize!.width / displayWidth;
-  final scaleY = _imageSize!.height / displayHeight;
-  
-  // Convert tap position to image coordinates
-  final imageX = (tapPosition.dx - offsetX) * scaleX;
-  final imageY = (tapPosition.dy - offsetY) * scaleY;
-  
-  print('DEBUG: Display size: ${displayWidth}x${displayHeight} with offset (${offsetX},${offsetY})');
-  print('DEBUG: Scale factors: ${scaleX}x${scaleY}');
-  print('DEBUG: Tap at (${tapPosition.dx},${tapPosition.dy}) → Image (${imageX},${imageY})');
-  
-  return CoordinatePointXY(imageX, imageY);
-}
   
   @override
 Widget build(BuildContext context) {
@@ -624,19 +598,22 @@ Widget build(BuildContext context) {
   Widget _buildSamplePointIndicator(CoordinatePointXY point, Color color, String label) {
     if (_imageSize == null) return Container();
     
-    final imageContainer = context.findRenderObject() as RenderBox;
-    final containerSize = Size(imageContainer.size.width, imageContainer.size.height);
+    // Get effective container size
+    final containerSize = CoordinateUtils.getEffectiveContainerSize(context);
     
-    final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
-      point,
-      _imageSize!,
-      containerSize
+    // Convert image coordinates to display position using the standard utility
+    final displayPosition = CoordinateUtils.imageCoordinatesToDisplayPosition(
+      point, 
+      _imageSize!, 
+      containerSize,
+      debug: true
     );
     
     return Positioned(
-      left: displayPoint.x - 10,
-      top: displayPoint.y - 10,
+      left: displayPosition.dx - 10,
+      top: displayPosition.dy - 10,
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 20,
@@ -668,11 +645,13 @@ Widget build(BuildContext context) {
     );
   }
   
+  // Update the image container to use constraints instead of fixed height
   Widget _buildImageDisplay() {
-  if (_flowManager.result.originalImage != null) {
-    return Container(
-      height: 438.0, // Set fixed height to match combined_detector_screen 
-      child: Center(
+    if (_flowManager.result.originalImage != null) {
+      return Container(
+        constraints: BoxConstraints(
+          minHeight: imageContainerMinHeight,
+        ),
         child: _contourPoints != null && _flowManager.result.contourResult?.debugImage != null
           ? Image.memory(
               Uint8List.fromList(img.encodePng(_flowManager.result.contourResult!.debugImage!)),
@@ -682,12 +661,11 @@ Widget build(BuildContext context) {
               _flowManager.result.originalImage!,
               fit: BoxFit.contain,
             ),
-      ),
-    );
-  } else {
-    return Center(child: Text('Image not available'));
+      );
+    } else {
+      return Center(child: Text('Image not available'));
+    }
   }
-}
   
   Widget _buildControlButtons() {
     return Container(

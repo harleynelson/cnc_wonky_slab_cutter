@@ -241,8 +241,8 @@ class MarkerDetector {
     }).toList();
   }
 
-  /// Identify marker roles based on their relative positions
-  List<MarkerPoint> _identifyMarkerRoles(List<MarkerPoint> candidates, int imageWidth, int imageHeight) {
+  // Identify marker roles based on their relative positions
+  static List<MarkerPoint> _identifyMarkerRoles(List<MarkerPoint> candidates, int imageWidth, int imageHeight) {
     if (candidates.length < 4) {
       return _fallbackMarkerDetection(imageWidth, imageHeight);
     }
@@ -264,7 +264,7 @@ class MarkerDetector {
       // Assign roles
       final originMarker = bottomMarkers.first;  // Bottom-left
       final xAxisMarker = bottomMarkers.last;    // Bottom-right
-      final scaleMarker = topMarkers.first;      // Top-left
+      final scaleMarker = topMarkers.first;      // Top-left (Y-axis)
       final topRightMarker = topMarkers.last;    // Top-right
       
       return [
@@ -281,14 +281,14 @@ class MarkerDetector {
     return _fallbackMarkerDetection(imageWidth, imageHeight);
   }
 
-  /// Fallback detection to ensure we always get some markers
-  List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
+  /// Fallback detection to ensure we always get markers
+  static List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
     print('Using fallback marker detection');
     return [
       // Use wider spread for reliable placement
       MarkerPoint((width * 0.2).round(), (height * 0.8).round(), MarkerRole.origin, confidence: 0.5),   // Bottom left
       MarkerPoint((width * 0.8).round(), (height * 0.8).round(), MarkerRole.xAxis, confidence: 0.5),    // Bottom right
-      MarkerPoint((width * 0.2).round(), (height * 0.2).round(), MarkerRole.scale, confidence: 0.5),    // Top left
+      MarkerPoint((width * 0.2).round(), (height * 0.2).round(), MarkerRole.scale, confidence: 0.5),    // Top left (Y-axis)
       MarkerPoint((width * 0.8).round(), (height * 0.2).round(), MarkerRole.topRight, confidence: 0.5), // Top right
     ];
   }

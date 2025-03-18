@@ -1,6 +1,7 @@
 // lib/widgets/contour_overlay.dart
 import 'package:flutter/material.dart';
 import '../utils/general/machine_coordinates.dart';
+import '../utils/general/coordinate_utils.dart';
 
 class ContourOverlay extends StatelessWidget {
   final List<CoordinatePointXY> contourPoints;
@@ -54,82 +55,82 @@ class ContourPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-  if (contourPoints.isEmpty) return;
+    if (contourPoints.isEmpty) return;
   
-  print('DEBUG CONTOUR: Painting contour on canvas size: ${size.width}x${size.height}');
-  print('DEBUG CONTOUR: Image size: ${imageSize.width}x${imageSize.height}');
+    print('DEBUG CONTOUR: Painting contour on canvas size: ${size.width}x${size.height}');
+    print('DEBUG CONTOUR: Image size: ${imageSize.width}x${imageSize.height}');
   
-  // Create paints
-  final pathPaint = Paint()
-    ..color = color
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = strokeWidth
-    ..strokeJoin = StrokeJoin.round;
-  
-  final glowPaint = Paint()
-    ..color = color.withOpacity(0.3)
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = strokeWidth + 4
-    ..strokeJoin = StrokeJoin.round
-    ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3);
-  
-  // Create path with the standardized transformation logic
-  final path = Path();
-  bool isFirst = true;
-  
-  for (final point in contourPoints) {
-    // Use the standard utility method
-    final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
-      point,
-      imageSize,
-      size
-    );
-    
-    final x = displayPoint.x;
-    final y = displayPoint.y;
-    
-    if (isFirst) {
-      path.moveTo(x, y);
-      isFirst = false;
-    } else {
-      path.lineTo(x, y);
-    }
-  }
-  
-  // Close the contour if needed
-  if (contourPoints.length > 2 && 
-      (contourPoints.first.x != contourPoints.last.x || 
-       contourPoints.first.y != contourPoints.last.y)) {
-    path.close();
-  }
-  
-  // Draw the contour with glow effect
-  canvas.drawPath(path, glowPaint);
-  canvas.drawPath(path, pathPaint);
-  
-  // Draw points if requested
-  if (showPoints) {
-    final pointPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-    
-    final outlinePaint = Paint()
+    // Create paints
+    final pathPaint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-    
+      ..strokeWidth = strokeWidth
+      ..strokeJoin = StrokeJoin.round;
+  
+    final glowPaint = Paint()
+      ..color = color.withOpacity(0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth + 4
+      ..strokeJoin = StrokeJoin.round
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3);
+  
+    // Create path with standardized transformation
+    final path = Path();
+    bool isFirst = true;
+  
     for (final point in contourPoints) {
-      final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
+      // Use the standardized utility for coordinate transformation
+      final displayPosition = CoordinateUtils.imageCoordinatesToDisplayPosition(
         point,
         imageSize,
         size
       );
       
-      // Draw point
-      canvas.drawCircle(Offset(displayPoint.x, displayPoint.y), 3, pointPaint);
-      canvas.drawCircle(Offset(displayPoint.x, displayPoint.y), 3, outlinePaint);
+      final x = displayPosition.dx;
+      final y = displayPosition.dy;
+      
+      if (isFirst) {
+        path.moveTo(x, y);
+        isFirst = false;
+      } else {
+        path.lineTo(x, y);
+      }
     }
-  }
+  
+    // Close the contour if needed
+    if (contourPoints.length > 2 && 
+        (contourPoints.first.x != contourPoints.last.x || 
+         contourPoints.first.y != contourPoints.last.y)) {
+      path.close();
+    }
+  
+    // Draw the contour with glow effect
+    canvas.drawPath(path, glowPaint);
+    canvas.drawPath(path, pathPaint);
+  
+    // Draw points if requested
+    if (showPoints) {
+      final pointPaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill;
+      
+      final outlinePaint = Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0;
+      
+      for (final point in contourPoints) {
+        final displayPosition = CoordinateUtils.imageCoordinatesToDisplayPosition(
+          point,
+          imageSize,
+          size
+        );
+        
+        // Draw point
+        canvas.drawCircle(Offset(displayPosition.dx, displayPosition.dy), 3, pointPaint);
+        canvas.drawCircle(Offset(displayPosition.dx, displayPosition.dy), 3, outlinePaint);
+      }
+    }
     
     // Calculate and show area
     if (contourPoints.length > 2) {
@@ -141,9 +142,16 @@ class ContourPainter extends CustomPainter {
         sumY += point.y;
       }
       
-      // Get center in normalized coordinates
-      final centerX = (sumX / contourPoints.length) / imageSize.width * size.width;
-      final centerY = (sumY / contourPoints.length) / imageSize.height * size.height;
+      final centerPoint = CoordinatePointXY(
+        sumX / contourPoints.length,
+        sumY / contourPoints.length
+      );
+      
+      final displayCenter = CoordinateUtils.imageCoordinatesToDisplayPosition(
+        centerPoint,
+        imageSize,
+        size
+      );
       
       // Calculate area (in sq mm if converting from image to world coordinates)
       double area = 0;
@@ -184,7 +192,7 @@ class ContourPainter extends CustomPainter {
       
       // Draw background
       final bgRect = Rect.fromCenter(
-        center: Offset(centerX, centerY),
+        center: Offset(displayCenter.dx, displayCenter.dy),
         width: textPainter.width + 16,
         height: textPainter.height + 8,
       );
@@ -198,8 +206,8 @@ class ContourPainter extends CustomPainter {
       textPainter.paint(
         canvas,
         Offset(
-          centerX - textPainter.width / 2,
-          centerY - textPainter.height / 2,
+          displayCenter.dx - textPainter.width / 2,
+          displayCenter.dy - textPainter.height / 2,
         ),
       );
     }

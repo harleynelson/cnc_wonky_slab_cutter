@@ -32,6 +32,8 @@ const double smallPadding = 8.0;
 const double largePadding = 24.0;
 const double borderRadius = 8.0;
 const double cardElevation = 2.0;
+const double statusBarHeight = 24.0; // Approximate
+const double imageContainerMinHeight = 400.0; // Minimum height for image container
 
 // Animation Durations
 const Duration shortAnimationDuration = Duration(milliseconds: 200);

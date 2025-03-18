@@ -11,6 +11,8 @@ import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
 import '../services/detection/contour_algorithms/contour_algorithm_registry.dart';
 import '../services/detection/contour_algorithms/edge_contour_algorithm.dart';
+import '../utils/general/constants.dart';
+import '../utils/general/coordinate_utils.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../services/flow/processing_flow_manager.dart';
 import '../widgets/marker_overlay.dart';
@@ -253,49 +255,21 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   }
   
   CoordinatePointXY _calculateImagePoint(Offset tapPosition) {
-  if (_imageSize == null) {
-    return CoordinatePointXY(0, 0);
+    if (_imageSize == null) {
+      return CoordinatePointXY(0, 0);
+    }
+    
+    // Get the effective container size
+    final containerSize = CoordinateUtils.getEffectiveContainerSize(context);
+    
+    // Use the standardized utility for coordinate transformation
+    return CoordinateUtils.tapPositionToImageCoordinates(
+      tapPosition, 
+      _imageSize!, 
+      containerSize,
+      debug: true
+    );
   }
-  
-  // Get the direct parent render object of the image
-  final RenderBox imageContainer = context.findRenderObject() as RenderBox;
-  
-  // Get the overlay's container size - this is crucial
-  final markerOverlaySize = Size(imageContainer.size.width, 438.0); // Match overlay's canvas size
-  
-  print('DEBUG: Tap position: ${tapPosition.dx}x${tapPosition.dy}');
-  print('DEBUG: Using overlay size: ${markerOverlaySize.width}x${markerOverlaySize.height}');
-  
-  // Use the same logic as in imageToDisplayCoordinates but in reverse
-  final imageAspect = _imageSize!.width / _imageSize!.height;
-  final displayAspect = markerOverlaySize.width / markerOverlaySize.height;
-  
-  double displayWidth, displayHeight, offsetX = 0, offsetY = 0;
-  
-  if (imageAspect > displayAspect) {
-    displayWidth = markerOverlaySize.width;
-    displayHeight = displayWidth / imageAspect;
-    offsetY = (markerOverlaySize.height - displayHeight) / 2;
-  } else {
-    displayHeight = markerOverlaySize.height;
-    displayWidth = displayHeight * imageAspect;
-    offsetX = (markerOverlaySize.width - displayWidth) / 2;
-  }
-  
-  // Scale factors
-  final scaleX = _imageSize!.width / displayWidth;
-  final scaleY = _imageSize!.height / displayHeight;
-  
-  // Convert tap position to image coordinates
-  final imageX = (tapPosition.dx - offsetX) * scaleX;
-  final imageY = (tapPosition.dy - offsetY) * scaleY;
-  
-  print('DEBUG: Display size: ${displayWidth}x${displayHeight} with offset (${offsetX},${offsetY})');
-  print('DEBUG: Scale factors: ${scaleX}x${scaleY}');
-  print('DEBUG: Tap at (${tapPosition.dx},${tapPosition.dy}) → Image (${imageX},${imageY})');
-  
-  return CoordinatePointXY(imageX, imageY);
-}
   
   @override
 Widget build(BuildContext context) {
@@ -402,29 +376,28 @@ Widget build(BuildContext context) {
   );
 }
   
+  // Update the _buildImageDisplay method to use dynamic height
   Widget _buildImageDisplay() {
-  if (_flowManager.result.originalImage != null) {
-    if (_contourDetected && _flowManager.result.contourResult?.debugImage != null) {
-      // Use Image.memory to display the debug image if contour was detected
-      return Center(
-        child: Image.memory(
-          Uint8List.fromList(img.encodePng(_flowManager.result.contourResult!.debugImage!)),
-          fit: BoxFit.contain,
+    if (_flowManager.result.originalImage != null) {
+      // Use Container with constraints instead of fixed height
+      return Container(
+        constraints: BoxConstraints(
+          minHeight: imageContainerMinHeight,
         ),
+        child: _contourDetected && _flowManager.result.contourResult?.debugImage != null
+          ? Image.memory(
+              Uint8List.fromList(img.encodePng(_flowManager.result.contourResult!.debugImage!)),
+              fit: BoxFit.contain,
+            )
+          : Image.file(
+              _flowManager.result.originalImage!,
+              fit: BoxFit.contain,
+            ),
       );
     } else {
-      // Show the original image if no contour detected yet
-      return Center(
-        child: Image.file(
-          _flowManager.result.originalImage!,
-          fit: BoxFit.contain,
-        ),
-      );
+      return Center(child: Text('Image not available'));
     }
-  } else {
-    return Center(child: Text('Image not available'));
   }
-}
   
   Widget _buildControlButtons() {
   return Container(
