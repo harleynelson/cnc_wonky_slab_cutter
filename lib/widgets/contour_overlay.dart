@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../utils/general/machine_coordinates.dart';
 
 class ContourOverlay extends StatelessWidget {
-  final List<Point> contourPoints;
+  final List<CoordinatePointXY> contourPoints;
   final Size imageSize;
   final Color color;
   final double strokeWidth;
@@ -38,7 +38,7 @@ class ContourOverlay extends StatelessWidget {
 }
 
 class ContourPainter extends CustomPainter {
-  final List<Point> contourPoints;
+  final List<CoordinatePointXY> contourPoints;
   final Size imageSize;
   final Color color;
   final double strokeWidth;

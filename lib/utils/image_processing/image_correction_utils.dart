@@ -12,9 +12,9 @@ class ImageCorrectionUtils {
   /// Correct perspective distortion of an image based on marker positions
 static Future<img.Image> correctPerspective(
   img.Image sourceImage,
-  Point originMarker,
-  Point xAxisMarker,
-  Point scaleMarker,
+  CoordinatePointXY originMarker,
+  CoordinatePointXY xAxisMarker,
+  CoordinatePointXY scaleMarker,
   double markerXDistance,
   double markerYDistance
 ) async {
@@ -33,7 +33,7 @@ static Future<img.Image> correctPerspective(
   final double sideLength = math.sqrt(sideVectorX * sideVectorX + sideVectorY * sideVectorY);
   
   // Calculate the top-right corner from our three markers
-  final Point topRightCorner = Point(
+  final CoordinatePointXY topRightCorner = CoordinatePointXY(
     xAxisMarker.x + sideVectorX,
     xAxisMarker.y + sideVectorY
   );
@@ -49,7 +49,7 @@ static Future<img.Image> correctPerspective(
   final double bottomExtensionFactor = 1.5; // Adjust as needed
   
   // Original corners of the quadrilateral in the source image
-  final List<Point> sourcePts = [
+  final List<CoordinatePointXY> sourcePts = [
     originMarker,       // Bottom-left
     xAxisMarker,        // Bottom-right
     topRightCorner,     // Top-right
@@ -64,12 +64,12 @@ static Future<img.Image> correctPerspective(
   final double extensionAmount = (baseLength * (bottomExtensionFactor - 1)) / 2;
   
   // Calculate destination points with BOTTOM edge extended
-  final List<Point> destPts = [
-    Point(                                          // Extended bottom-left
+  final List<CoordinatePointXY> destPts = [
+    CoordinatePointXY(                                          // Extended bottom-left
       originMarker.x - extensionAmount, 
       originMarker.y
     ),
-    Point(                                          // Extended bottom-right
+    CoordinatePointXY(                                          // Extended bottom-right
       xAxisMarker.x + extensionAmount, 
       xAxisMarker.y
     ),
@@ -250,9 +250,9 @@ static img.Image createDebugImage(
 /// Crop the image to create a rectangle based on the narrowest width of the trapezoid
 static img.Image _cropToRectangle(
   img.Image image, 
-  List<Point> destPts,
-  Point originPoint,
-  Point xAxisPoint
+  List<CoordinatePointXY> destPts,
+  CoordinatePointXY originPoint,
+  CoordinatePointXY xAxisPoint
 ) {
   const int margin = 10;
   
@@ -307,8 +307,8 @@ static img.Image _cropToRectangle(
   
   /// Calculate perspective transform matrix
   static List<double> _calculatePerspectiveTransform(
-    List<Point> sourcePts, 
-    List<Point> destPts
+    List<CoordinatePointXY> sourcePts, 
+    List<CoordinatePointXY> destPts
   ) {
     // We need to solve for the 8 parameters of the perspective transform
     // [ a b c ]   [x]   [X]

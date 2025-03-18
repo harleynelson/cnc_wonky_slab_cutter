@@ -2,14 +2,14 @@ import 'dart:math' as math;
 import 'dart:ui';
 
 /// Represents a point in 2D space
-class Point {
+class CoordinatePointXY {
   final double x;
   final double y;
   
-  Point(this.x, this.y);
+  CoordinatePointXY(this.x, this.y);
   
   /// Calculate the distance to another point
-  double distanceTo(Point other) {
+  double distanceTo(CoordinatePointXY other) {
     final dx = x - other.x;
     final dy = y - other.y;
     return math.sqrt(dx * dx + dy * dy);
@@ -21,7 +21,7 @@ class Point {
 
 /// Represents a machine coordinate system calibrated from image pixels
 class MachineCoordinateSystem {
-  final Point originPx;
+  final CoordinatePointXY originPx;
   final double orientationRad;
   final double pixelToMmRatio;
   
@@ -32,7 +32,7 @@ class MachineCoordinateSystem {
   });
 
   /// Convert a point from image coordinates to display (canvas) coordinates
-static Point imageToDisplayCoordinates(Point imagePoint, Size imageSize, Size displaySize) {
+static CoordinatePointXY imageToDisplayCoordinates(CoordinatePointXY imagePoint, Size imageSize, Size displaySize) {
   final imageAspect = imageSize.width / imageSize.height;
   final displayAspect = displaySize.width / displaySize.height;
   
@@ -55,11 +55,11 @@ static Point imageToDisplayCoordinates(Point imagePoint, Size imageSize, Size di
   final displayX = normalizedX * displayWidth + offsetX;
   final displayY = normalizedY * displayHeight + offsetY;
   
-  return Point(displayX, displayY);
+  return CoordinatePointXY(displayX, displayY);
 }
 
 /// Convert a point from display (canvas) coordinates to image coordinates
-static Point displayToImageCoordinates(Point displayPoint, Size imageSize, Size displaySize) {
+static CoordinatePointXY displayToImageCoordinates(CoordinatePointXY displayPoint, Size imageSize, Size displaySize) {
   // Calculate scale and offset - maintain aspect ratio
   final imageAspect = imageSize.width / imageSize.height;
   final displayAspect = displaySize.width / displaySize.height;
@@ -89,11 +89,11 @@ static Point displayToImageCoordinates(Point displayPoint, Size imageSize, Size 
   final imageX = normalizedX * imageSize.width;
   final imageY = normalizedY * imageSize.height;
   
-  return Point(imageX, imageY);
+  return CoordinatePointXY(imageX, imageY);
 }
   
   /// Convert a point from pixel coordinates to machine (mm) coordinates
-  Point pixelToMachineCoords(Point pixelPoint) {
+  CoordinatePointXY pixelToMachineCoords(CoordinatePointXY pixelPoint) {
     // Translate to origin
     final px = pixelPoint.x - originPx.x;
     final py = pixelPoint.y - originPx.y;
@@ -107,11 +107,11 @@ static Point displayToImageCoordinates(Point displayPoint, Size imageSize, Size 
     final xMm = pxRot * pixelToMmRatio;
     final yMm = pyRot * pixelToMmRatio;
     
-    return Point(xMm, yMm);
+    return CoordinatePointXY(xMm, yMm);
   }
   
   /// Convert a point from machine (mm) coordinates to pixel coordinates
-  Point machineToPixelCoords(Point machinePoint) {
+  CoordinatePointXY machineToPixelCoords(CoordinatePointXY machinePoint) {
     // Scale to pixels
     final pxRot = machinePoint.x / pixelToMmRatio;
     final pyRot = machinePoint.y / pixelToMmRatio;
@@ -125,24 +125,24 @@ static Point displayToImageCoordinates(Point displayPoint, Size imageSize, Size 
     final xPx = px + originPx.x;
     final yPx = py + originPx.y;
     
-    return Point(xPx, yPx);
+    return CoordinatePointXY(xPx, yPx);
   }
   
   /// Convert a list of points from pixel to machine coordinates
-  List<Point> convertPointListToMachineCoords(List<Point> pixelPoints) {
+  List<CoordinatePointXY> convertPointListToMachineCoords(List<CoordinatePointXY> pixelPoints) {
     return pixelPoints.map((p) => pixelToMachineCoords(p)).toList();
   }
   
   /// Convert a list of points from machine to pixel coordinates
-  List<Point> convertPointListToPixelCoords(List<Point> machinePoints) {
+  List<CoordinatePointXY> convertPointListToPixelCoords(List<CoordinatePointXY> machinePoints) {
     return machinePoints.map((p) => machineToPixelCoords(p)).toList();
   }
   
   /// Create a coordinate system from three marker points with separate X and Y distances
 static MachineCoordinateSystem fromMarkerPointsWithDistances(
-  Point originMarker, 
-  Point xAxisMarker, 
-  Point scaleMarker,
+  CoordinatePointXY originMarker, 
+  CoordinatePointXY xAxisMarker, 
+  CoordinatePointXY scaleMarker,
   double markerXDistanceMm,
   double markerYDistanceMm,
 ) {
@@ -174,9 +174,9 @@ static MachineCoordinateSystem fromMarkerPointsWithDistances(
 
 // Backward compatibility method that uses a single distance value
 static MachineCoordinateSystem fromMarkerPoints(
-  Point originMarker, 
-  Point xAxisMarker, 
-  Point scaleMarker,
+  CoordinatePointXY originMarker, 
+  CoordinatePointXY xAxisMarker, 
+  CoordinatePointXY scaleMarker,
   double markerRealDistanceMm,
 ) {
   return fromMarkerPointsWithDistances(
