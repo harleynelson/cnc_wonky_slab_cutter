@@ -1,86 +1,24 @@
 
-generate gcode
-    - still janky
-        - this is our output from our L shaped slab with no margin...
-            (CNC Slab Scanner - Surfacing Operation)
-            (Generated on 2025-03-14 10:30:23.280889)
-            (Tool Diameter: 25.4mm)
-            (Stepover: 18.0mm)
-            (Cutting Depth: 2.0mm)
-            (Feed Rate: 1000.0mm/min)
-            (Plunge Rate: 500.0mm/min)
+gcode generation
+    - Have some sort of option to strictly stay within confines of slab + margin OR create efficient box
+        - Let's say we have a U shaped piece of wood, it would be less efficient to have to go all the way up and back down it
+            - we should cross the gap
+    - Stepover calculation based on tool diameter
+    - Checkmark Option for: Return to home position at the end
+    - Depth passes can be an int
+    - the popups at the bottom hide our buttons, can we move it to the middle?
 
-            G90 G94
-            G17
-            G21
+gcode visualization
+    - appears to be on a slope even though gcode is horizontal
 
-            (Start operation)
-            S18000 M3
-            G54
+App wide:
+    - How do we go about implementing metric vs standard without screwing up our code
+    - Consider moving device-specific or display-dependent constants to a dynamic configuration
+    - crashes when minimized sometimes?
 
-            G0 Z10.0000
-            G0 X283.7330 Y513.7024
-            G1 Z10.0000 F1000.0
-            Z0 F500.0
-            Z2.0000 F500.0
-            G1 X283.7330 Y513.7024 F1000.0
-
-            (End operation)
-            G0 Z10.0000
-            G0 X0 Y0
-            M5
-            M30
-    Goals for gcode:
-        Properly initializes the CNC machine
-        Safely approaches the work area
-        Cuts the entire slab surface using an efficient zigzag pattern
-        Uses appropriate feed rates for both cutting and plunging
-        Returns safely to the home position when complete
-        Adaptive zigzag pattern based on slab shape (horizontal or vertical depending on which dimension is larger)
-        Proper intersection detection with the slab contour
-        Stepover calculation based on tool diameter
-        Safe retracts between passes
-        Return to home position at the end
-        Implemented intelligent path generation that follows the shape of the contour
-        Added header/footer with proper machine initialization commands
-        Added proper safe height movements between passes
-        Included appropriate comments in the generated G-code
-        Maintained backward compatibility with previous methods
-        allow for multiple passes on depths
-            ie you know you need to eventually chop down 10 mms, but 2 at a time...
-
-crashes when minimized
-
-
-Our post processing of contour points should probably be a parameter we should save/edit:
-    contour_detection_utils.dart:
-        // Post-process contour points
-        // Higher the number, more circle'ee... ie 10 = blocky, 100 = smooth as a baby's bottom
-            if (contourPoints.length < 40 || _calculateArea(contourPoints) < minSlabSize) {
-                return createFallbackContour(width, height, seedX, seedY);
-            }
-
-
-Fix Hard coded things...
-    In lib/screens/combined_detector_screen.dart:
-        containerSize.height - 100 calculation for accounting for status/buttons
-        Seed point indicator width/height hardcoded as 20x20
-        Fixed padding values in various UI elements
-
-    In lib/camera_screen_with_overlay.dart:
-        Hardcoded marker positions using relative coordinates like size.width * 0.2
-
-    In lib/widgets/contour_overlay.dart:
-        Fixed stroke widths for drawing contours
-        Hardcoded showPoints parameters
-
-    In lib/utils/image_processing/contour_detection_utils.dart:
-        Several magic numbers in algorithms like _createFallbackContour which uses width * 0.3
-        Fixed values for gap handling and continuation thresholds
-
-    In lib/widgets/camera_overlay.dart:
-        Hardcoded marker positions and sizes
-
-    In lib/utils/general/constants.dart:
-        Consider moving device-specific or display-dependent constants to a dynamic configuration
-        
+Edge detection:
+    - have a tap for the slab and a tap for the spillboard bor better detection
+        - since slab and mdf spillboard will look too similar
+Marker Detection:
+    - have the user tap the general area where the markers are and then perform the blob search there to detect.
+    - should we have a separate marker for the origin of the machine?
