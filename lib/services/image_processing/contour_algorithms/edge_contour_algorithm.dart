@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 
+import '../../../utils/general/constants.dart';
 import '../../../utils/general/machine_coordinates.dart';
 import '../../../utils/image_processing/contour_detection_utils.dart';
 import '../../../utils/image_processing/filter_utils.dart';
@@ -32,18 +33,20 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
  final int gapAllowedMin;
  final int gapAllowedMax;
  final int continueSearchDistance;
+ final int contourPostProcessPoints; // Added parameter
 
  EdgeContourAlgorithm({
    this.generateDebugImage = true,
-   this.edgeThreshold = 50.0,
-   this.useConvexHull = true,
-   this.simplificationEpsilon = 5.0,
-   this.smoothingWindowSize = 5,
-   this.blurRadius = 3,
-   this.minSlabSize = 1000,
-   this.gapAllowedMin = 5,
-   this.gapAllowedMax = 20,
-   this.continueSearchDistance = 30,
+   this.edgeThreshold = defaultEdgeThreshold,
+   this.useConvexHull = defaultUseConvexHull,
+   this.simplificationEpsilon = defaultSimplificationEpsilon,
+   this.smoothingWindowSize = defaultSmoothingWindowSize,
+   this.blurRadius = defaultBlurRadius,
+   this.minSlabSize = minSlabSizeDefault,
+   this.gapAllowedMin = gapAllowedMinDefault,
+   this.gapAllowedMax = gapAllowedMaxDefault,
+   this.continueSearchDistance = continueSearchDistanceDefault,
+   this.contourPostProcessPoints = defaultContourPostProcessPoints,
  });
 
  @override
@@ -82,37 +85,38 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
       }
     }
     
-    // 4. Find contour using ray casting
-final contourPoints = ContourDetectionUtils.findContourByRayCasting(
-  binaryEdges, 
-  seedX, 
-  seedY,
-  minSlabSize: minSlabSize,
-  gapAllowedMin: gapAllowedMin,
-  gapAllowedMax: gapAllowedMax,
-  continueSearchDistance: continueSearchDistance * 3, // Increase search distance
-  angularStep: 1.0  // Use finer angular resolution
-);
+    // 4. Find contour using ray casting - pass all parameters including contourPostProcessPoints
+    final contourPoints = ContourDetectionUtils.findContourByRayCasting(
+      binaryEdges, 
+      seedX, 
+      seedY,
+      minSlabSize: minSlabSize,
+      gapAllowedMin: gapAllowedMin,
+      gapAllowedMax: gapAllowedMax,
+      continueSearchDistance: continueSearchDistance * 3, // Increase search distance
+      angularStep: 1.0,  // Use finer angular resolution
+      postProcessPoints: contourPostProcessPoints  // Pass the parameter
+    );
     
-     // 5. Apply convex hull only if specified AND if there are no sharp corners
-  List<Point> processedContour = contourPoints;
-  if (useConvexHull && contourPoints.length >= 3) {
-    // Check for sharp corners before applying convex hull
-    final corners = ContourDetectionUtils.detectCorners(contourPoints);
-    final hasSharpCorners = corners.length >= 2;
-    
-    if (!hasSharpCorners) {
-      processedContour = GeometryUtils.convexHull(contourPoints);
+    // 5. Apply convex hull only if specified AND if there are no sharp corners
+    List<Point> processedContour = contourPoints;
+    if (useConvexHull && contourPoints.length >= 3) {
+      // Check for sharp corners before applying convex hull
+      final corners = ContourDetectionUtils.detectCorners(contourPoints);
+      final hasSharpCorners = corners.length >= 2;
+      
+      if (!hasSharpCorners) {
+        processedContour = GeometryUtils.convexHull(contourPoints);
+      }
     }
-  }
     
     // 6. Simplify and smooth contour with corner preservation
-  final smoothContour = ContourDetectionUtils.smoothAndSimplifyContour(
-    processedContour,
-    simplificationEpsilon,
-    windowSize: smoothingWindowSize,
-    preserveCorners: true
-  );
+    final smoothContour = ContourDetectionUtils.smoothAndSimplifyContour(
+      processedContour,
+      simplificationEpsilon,
+      windowSize: smoothingWindowSize,
+      preserveCorners: true
+    );
     
     // 7. Convert to machine coordinates
     final machineContour = coordSystem.convertPointListToMachineCoords(smoothContour);

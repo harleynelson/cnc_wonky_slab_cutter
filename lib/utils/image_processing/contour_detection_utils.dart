@@ -3,6 +3,7 @@
 
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
+import '../general/constants.dart';
 import '../general/machine_coordinates.dart';
 import 'geometry_utils.dart';
 import 'base_image_utils.dart';
@@ -162,21 +163,20 @@ static List<Point> findContourByRayCasting(
   int seedX, 
   int seedY,
   {
-    int minSlabSize = 1000, 
-    int gapAllowedMin = 5, 
-    int gapAllowedMax = 20,
-    int continueSearchDistance = 30,
+    int minSlabSize = minSlabSizeDefault, 
+    int gapAllowedMin = gapAllowedMinDefault, 
+    int gapAllowedMax = gapAllowedMaxDefault,
+    int continueSearchDistance = continueSearchDistanceDefault,
     double angularStep = 2.0,
     bool enableReseeding = true,
     int maxReseedPoints = 5,
     double curveThreshold = 45.0, // degrees
-    double gapThreshold = 20.0 // pixels
+    double gapThreshold = 20.0, // pixels
+    int postProcessPoints = defaultContourPostProcessPoints // Parameter for smoothness control
   }
 ) {
   final width = binaryImage.width;
   final height = binaryImage.height;
-
-  
   
   // PHASE 1: Initial ray casting from seed point
   var contourPoints = _castRaysFromPoint(
@@ -227,8 +227,6 @@ static List<Point> findContourByRayCasting(
     
     // Limit number of reseed points
     final limitedReseedPoints = reseedPoints.take(maxReseedPoints).toList();
-
-    
     
     // PHASE 3: Perform additional ray casting from strategic points
     if (limitedReseedPoints.isNotEmpty) {
@@ -242,20 +240,21 @@ static List<Point> findContourByRayCasting(
         int reseedY = reseedPoint.y.round();
 
         if (isPixelInBounds(binaryImage, reseedX, reseedY)) {
-  // Cast rays from the reseed point
-  final additionalPoints = _castRaysFromEdge(
-    binaryImage,
-    reseedX,
-    reseedY,
-    angularStep * 2,
-    gapAllowedMin,
-    gapAllowedMax,
-    continueSearchDistance,
-    seedX,
-    seedY
-  );
-  newPoints.addAll(additionalPoints);
-}}
+          // Cast rays from the reseed point
+          final additionalPoints = _castRaysFromEdge(
+            binaryImage,
+            reseedX,
+            reseedY,
+            angularStep * 2,
+            gapAllowedMin,
+            gapAllowedMax,
+            continueSearchDistance,
+            seedX,
+            seedY
+          );
+          newPoints.addAll(additionalPoints);
+        }
+      }
       
       // PHASE 4: Merge original and new points
       contourPoints.addAll(newPoints);
@@ -267,8 +266,8 @@ static List<Point> findContourByRayCasting(
     }
   }
   
-  // Final check for minimum size
-  if (contourPoints.length < 40 || _calculateArea(contourPoints) < minSlabSize) {
+  // Final check for minimum size - use the parameterized value
+  if (contourPoints.length < postProcessPoints || _calculateArea(contourPoints) < minSlabSize) {
     return createFallbackContour(width, height, seedX, seedY);
   }
   

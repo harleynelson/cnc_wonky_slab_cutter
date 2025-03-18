@@ -3,18 +3,15 @@
 
 import 'dart:io';
 import 'dart:math' as math;
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:image/image.dart' as img;
 
 import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
 import '../services/gcode/gcode_generator.dart';
+import '../utils/general/constants.dart';
 import '../utils/general/machine_coordinates.dart';
-import '../utils/image_processing/contour_detection_utils.dart';
-import '../utils/image_processing/drawing_utils.dart';
 import '../widgets/settings_fields.dart';
 import '../widgets/contour_overlay.dart';
 import '../widgets/marker_overlay.dart';
@@ -40,14 +37,18 @@ class _GcodeGeneratorScreenState extends State<GcodeGeneratorScreen> {
   double _estimatedTime = 0.0;
   String _errorMessage = '';
   
+  bool _forceHorizontalPaths = true;
+  
   // Add slabMargin for adjusting the contour size
-  double _slabMargin = 5.0; // Default 5mm margin
+  double _slabMargin = 50.0; // Default 5mm margin
   List<Point>? _adjustedContour;
 
   @override
   void initState() {
     super.initState();
     _settings = widget.settings.copy();
+    _forceHorizontalPaths = _settings.forceHorizontalPaths;
+    _slabMargin = 50.0; // Default to 50mm
     _calculateStats();
     _updateAdjustedContour();
   }
@@ -261,22 +262,26 @@ double _crossProduct(Point a, Point b, Point c) {
     // Use the adjusted contour or fall back to the original contour
     final contour = _adjustedContour ?? flowManager.result.contourResult!.machineContour;
     
-    // Generate G-code using our new surfacing operation
+    // Generate G-code using our improved surfacing operation
     final gcodeGenerator = GcodeGenerator(
       safetyHeight: _settings.safetyHeight,
       feedRate: _settings.feedRate,
       plungeRate: _settings.plungeRate,
       cuttingDepth: _settings.cuttingDepth,
-      stepover: _settings.stepover / _settings.toolDiameter, // Convert to percentage of tool diameter
+      stepover: _settings.stepover,
       toolDiameter: _settings.toolDiameter,
+      spindleSpeed: _settings.spindleSpeed,
+      depthPasses: _settings.depthPasses,
+      margin: _slabMargin,
+      forceHorizontal: _forceHorizontalPaths, // Pass the direction parameter
     );
     
-    // Generate surfacing G-code instead of just contour G-code
+    // Generate surfacing G-code
     final gcode = gcodeGenerator.generateSurfacingGcode(contour);
     
     // Save G-code to file
     final tempDir = await Directory.systemTemp.createTemp('gcode_');
-    final gcodeFile = File('${tempDir.path}/slab_surfacing.gcode');
+    final gcodeFile = File('${tempDir.path}/${gcodeTempFileName}');
     await gcodeFile.writeAsString(gcode);
     
     setState(() {
@@ -315,53 +320,52 @@ double _crossProduct(Point a, Point b, Point c) {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('G-code Generator'),
-      ),
-      body: Column(
-        children: [
-          // Image preview with overlays
-          _buildImagePreview(),
-          
-          // Margin slider
-          _buildMarginSlider(),
-          
-          // Stats and settings
-          Expanded(
-            child: SingleChildScrollView(
-              padding: EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildStatisticsCard(),
-                  SizedBox(height: 16),
-                  _buildMachineSettingsCard(),
-                  SizedBox(height: 16),
-                  _buildToolSettingsCard(),
-                  SizedBox(height: 16),
-                  _buildFeedSettingsCard(),
-                ],
-              ),
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      title: Text('G-code Generator'),
+    ),
+    body: Column(
+      children: [
+        // Image preview with overlays
+        _buildImagePreview(),
+        
+        // Stats and settings in a scrollable list
+        Expanded(
+          child: SingleChildScrollView(
+            padding: EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                _buildStatisticsCard(),
+                SizedBox(height: 16),
+                _buildPathSettings(), // New combined settings widget
+                SizedBox(height: 16),
+                _buildMachineSettingsCard(),
+                SizedBox(height: 16),
+                _buildToolSettingsCard(),
+                SizedBox(height: 16),
+                _buildFeedSettingsCard(),
+              ],
             ),
           ),
-          if (_errorMessage.isNotEmpty)
-            Container(
-              padding: EdgeInsets.all(8),
-              color: Colors.red.shade50,
-              width: double.infinity,
-              child: Text(
-                _errorMessage,
-                style: TextStyle(color: Colors.red.shade900),
-                textAlign: TextAlign.center,
-              ),
+        ),
+        if (_errorMessage.isNotEmpty)
+          Container(
+            padding: EdgeInsets.all(8),
+            color: Colors.red.shade50,
+            width: double.infinity,
+            child: Text(
+              _errorMessage,
+              style: TextStyle(color: Colors.red.shade900),
+              textAlign: TextAlign.center,
             ),
-          _buildBottomButtons(),
-        ],
-      ),
-    );
-  }
+          ),
+        _buildBottomButtons(),
+      ],
+    ),
+  );
+}
 
   Widget _buildImagePreview() {
   final provider = Provider.of<ProcessingProvider>(context, listen: false);
@@ -459,15 +463,27 @@ double _crossProduct(Point a, Point b, Point c) {
     return Size(image.width.toDouble(), image.height.toDouble());
   }
 
-  Widget _buildMarginSlider() {
-    return Padding(
-      padding: const EdgeInsets.all(16.0),
+  Widget _buildPathSettings() {
+  return Card(
+    child: Padding(
+      padding: EdgeInsets.all(padding),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
+            'Path Settings',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          Divider(),
+          
+          // Margin Slider
+          Text(
             'Slab Margin: ${_slabMargin.toStringAsFixed(1)} mm',
             style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          Text(
+            'Add a safety margin around the detected slab for CNC cutting',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
           Row(
             children: [
@@ -476,7 +492,7 @@ double _crossProduct(Point a, Point b, Point c) {
                 child: Slider(
                   value: _slabMargin,
                   min: 0,
-                  max: 50,
+                  max: 100,
                   divisions: 50,
                   label: '${_slabMargin.toStringAsFixed(1)} mm',
                   onChanged: (value) {
@@ -487,17 +503,155 @@ double _crossProduct(Point a, Point b, Point c) {
                   },
                 ),
               ),
-              Text('50 mm'),
+              Text('100 mm'),
             ],
           ),
+          
+          SizedBox(height: 16),
+          
+          // Direction toggle
           Text(
-            'Add a safety margin around the detected slab for CNC cutting',
+            'Path Direction',
+            style: TextStyle(fontWeight: FontWeight.bold),
+          ),
+          Text(
+            'Set cutting path direction',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          SizedBox(height: 8),
+          Center(
+            child: ToggleButtons(
+              isSelected: [_forceHorizontalPaths, !_forceHorizontalPaths],
+              onPressed: (int index) {
+                setState(() {
+                  _forceHorizontalPaths = index == 0;
+                  _settings.forceHorizontalPaths = _forceHorizontalPaths;
+                  _settings.save(); // Save to persistent storage
+                });
+              },
+              children: [
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.swap_horiz),
+                      SizedBox(width: 4),
+                      Text('Horizontal')
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.swap_vert),
+                      SizedBox(width: 4),
+                      Text('Vertical')
+                    ],
+                  ),
+                ),
+              ],
+            ),
           ),
         ],
       ),
-    );
-  }
+    ),
+  );
+}
+  // deprecated, replaced by _buildPathSettings()
+  Widget _buildMarginSlider() {
+  return Padding(
+    padding: const EdgeInsets.all(padding),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        // Direction toggle
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'Path Direction',
+                  style: TextStyle(fontWeight: FontWeight.bold),
+                ),
+                Text(
+                  'Set cutting path direction',
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                ),
+              ],
+            ),
+            ToggleButtons(
+              isSelected: [_forceHorizontalPaths, !_forceHorizontalPaths],
+              onPressed: (int index) {
+                setState(() {
+                  _forceHorizontalPaths = index == 0;
+                  _settings.forceHorizontalPaths = _forceHorizontalPaths;
+                  _settings.save(); // Save to persistent storage
+                });
+              },
+              children: [
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.swap_horiz),
+                      SizedBox(width: 4),
+                      Text('Horizontal')
+                    ],
+                  ),
+                ),
+                Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      Icon(Icons.swap_vert),
+                      SizedBox(width: 4),
+                      Text('Vertical')
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+        SizedBox(height: 16),
+        
+        // Margin slider (unchanged)
+        Text(
+          'Slab Margin: ${_slabMargin.toStringAsFixed(1)} mm',
+          style: TextStyle(fontWeight: FontWeight.bold),
+        ),
+        Row(
+          children: [
+            Text('0 mm'),
+            Expanded(
+              child: Slider(
+                value: _slabMargin,
+                min: 0,
+                max: 50,
+                divisions: 50,
+                label: '${_slabMargin.toStringAsFixed(1)} mm',
+                onChanged: (value) {
+                  setState(() {
+                    _slabMargin = value;
+                    _updateAdjustedContour();
+                  });
+                },
+              ),
+            ),
+            Text('50 mm'),
+          ],
+        ),
+        Text(
+          'Add a safety margin around the detected slab for CNC cutting',
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildStatisticsCard() {
     return Card(
@@ -573,49 +727,58 @@ double _crossProduct(Point a, Point b, Point c) {
   }
 
   Widget _buildToolSettingsCard() {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Tool Settings',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            Divider(),
-            SettingsTextField(
-              label: 'Tool Diameter (mm)',
-              value: _settings.toolDiameter,
-              onChanged: (value) => setState(() => _settings.toolDiameter = value),
-              icon: Icons.circle_outlined,
-            ),
-            SettingsTextField(
-              label: 'Stepover Distance (mm)',
-              value: _settings.stepover,
-              onChanged: (value) => setState(() => _settings.stepover = value),
-              icon: Icons.compare_arrows,
-              helperText: 'Distance between parallel toolpaths',
-            ),
-            SettingsTextField(
-              label: 'Safety Height (mm)',
-              value: _settings.safetyHeight,
-              onChanged: (value) => setState(() => _settings.safetyHeight = value),
-              icon: Icons.arrow_upward,
-              helperText: 'Height for rapid movements',
-            ),
-            SettingsTextField(
-              label: 'Cutting Depth (mm)',
-              value: _settings.cuttingDepth,
-              onChanged: (value) => setState(() => _settings.cuttingDepth = value),
-              icon: Icons.arrow_downward,
-              helperText: 'Z-height for cutting (usually 0 or negative)',
-            ),
-          ],
-        ),
+  return Card(
+    child: Padding(
+      padding: EdgeInsets.all(padding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Tool Settings',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          Divider(),
+          SettingsTextField(
+            label: 'Tool Diameter (mm)',
+            value: _settings.toolDiameter,
+            onChanged: (value) => setState(() => _settings.toolDiameter = value),
+            icon: Icons.circle_outlined,
+          ),
+          SettingsTextField(
+            label: 'Stepover Distance (mm)',
+            value: _settings.stepover,
+            onChanged: (value) => setState(() => _settings.stepover = value),
+            icon: Icons.compare_arrows,
+            helperText: 'Distance between parallel toolpaths',
+          ),
+          SettingsTextField(
+            label: 'Safety Height (mm)',
+            value: _settings.safetyHeight,
+            onChanged: (value) => setState(() => _settings.safetyHeight = value),
+            icon: Icons.arrow_upward,
+            helperText: 'Height for rapid movements',
+          ),
+          SettingsTextField(
+            label: 'Cutting Depth (mm)',
+            value: _settings.cuttingDepth,
+            onChanged: (value) => setState(() => _settings.cuttingDepth = value),
+            icon: Icons.arrow_downward,
+            helperText: 'Total cutting depth (will be divided into passes)',
+          ),
+          SettingsTextField(
+            label: 'Depth Passes',
+            value: _settings.depthPasses.toDouble(),
+            onChanged: (value) => setState(() => _settings.depthPasses = value.round()),
+            icon: Icons.layers,
+            helperText: 'Number of passes to reach full depth',
+            min: 1,
+            max: 10,
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildFeedSettingsCard() {
     return Card(

@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../services/image_processing/marker_detector.dart';
+import '../utils/general/constants.dart';
 
 class MarkerOverlay extends StatelessWidget {
   final List<MarkerPoint> markers;
@@ -46,7 +47,7 @@ void paint(Canvas canvas, Size size) {
   
   final paint = Paint()
     ..style = PaintingStyle.stroke
-    ..strokeWidth = 3.0;
+    ..strokeWidth = markerLineStrokeWidth;
 
   // Draw each marker using standardized coordinate functions
   for (final marker in markers) {
@@ -86,20 +87,20 @@ void paint(Canvas canvas, Size size) {
     paint.color = color;
     
     // Draw outer circle
-    canvas.drawCircle(Offset(x, y), 20, paint);
+    canvas.drawCircle(Offset(x, y), markerCircleRadius, paint);
     
     // Draw inner filled circle
     final fillPaint = Paint()
       ..style = PaintingStyle.fill
       ..color = color.withOpacity(0.5);
-    canvas.drawCircle(Offset(x, y), 10, fillPaint);
+    canvas.drawCircle(Offset(x, y), markerInnerCircleRadius, fillPaint);
     
     // Draw label
     final textSpan = TextSpan(
       text: label,
       style: TextStyle(
         color: Colors.white,
-        fontSize: 14,
+        fontSize: markerLabelFontSize,
         fontWeight: FontWeight.bold,
       ),
     );
@@ -113,19 +114,19 @@ void paint(Canvas canvas, Size size) {
     
     // Background for text
     final bgRect = Rect.fromLTWH(
-      x + 15, 
-      y - 10, 
-      textPainter.width + 10, 
-      textPainter.height + 6
+      x + markerLabelPadding, 
+      y - markerLabelPadding, 
+      textPainter.width + markerLabelPadding, 
+      textPainter.height + markerLabelPadding
     );
     
     canvas.drawRect(
       bgRect, 
-      Paint()..color = color.withOpacity(0.7)
+      Paint()..color = color.withOpacity(contourBackgroundOpacity)
     );
     
     // Text itself
-    textPainter.paint(canvas, Offset(x + 20, y - 7));
+    textPainter.paint(canvas, Offset(x + markerLabelXOffset, y + markerLabelYOffset));
   }
   
   // Draw connection lines if we have enough markers
@@ -156,8 +157,8 @@ void paint(Canvas canvas, Size size) {
       final scaleDisplay = MachineCoordinateSystem.imageToDisplayCoordinates(scalePoint, imageSize, size);
       
       final linePaint = Paint()
-        ..color = Colors.white.withOpacity(0.7)
-        ..strokeWidth = 2.0;
+        ..color = Colors.white.withOpacity(markerLineOpacity)
+        ..strokeWidth = markerLineStrokeWidth;
       
       canvas.drawLine(
         Offset(originDisplay.x, originDisplay.y), 

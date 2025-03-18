@@ -1,6 +1,7 @@
 // lib/widgets/contour_overlay.dart
 import 'package:flutter/material.dart';
 import '../utils/general/machine_coordinates.dart';
+import '../utils/general/constants.dart';
 
 class ContourOverlay extends StatelessWidget {
   final List<Point> contourPoints;
@@ -14,7 +15,7 @@ class ContourOverlay extends StatelessWidget {
     required this.contourPoints,
     required this.imageSize,
     this.color = Colors.green,
-    this.strokeWidth = 2.0,
+    this.strokeWidth = defaultContourStrokeWidth,
     this.showPoints = false,
   }) : super(key: key);
 
@@ -54,82 +55,82 @@ class ContourPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-  if (contourPoints.isEmpty) return;
+    if (contourPoints.isEmpty) return;
   
-  print('DEBUG CONTOUR: Painting contour on canvas size: ${size.width}x${size.height}');
-  print('DEBUG CONTOUR: Image size: ${imageSize.width}x${imageSize.height}');
+    print('DEBUG CONTOUR: Painting contour on canvas size: ${size.width}x${size.height}');
+    print('DEBUG CONTOUR: Image size: ${imageSize.width}x${imageSize.height}');
   
-  // Create paints
-  final pathPaint = Paint()
-    ..color = color
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = strokeWidth
-    ..strokeJoin = StrokeJoin.round;
-  
-  final glowPaint = Paint()
-    ..color = color.withOpacity(0.3)
-    ..style = PaintingStyle.stroke
-    ..strokeWidth = strokeWidth + 4
-    ..strokeJoin = StrokeJoin.round
-    ..maskFilter = MaskFilter.blur(BlurStyle.normal, 3);
-  
-  // Create path with the standardized transformation logic
-  final path = Path();
-  bool isFirst = true;
-  
-  for (final point in contourPoints) {
-    // Use the standard utility method
-    final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
-      point,
-      imageSize,
-      size
-    );
-    
-    final x = displayPoint.x;
-    final y = displayPoint.y;
-    
-    if (isFirst) {
-      path.moveTo(x, y);
-      isFirst = false;
-    } else {
-      path.lineTo(x, y);
-    }
-  }
-  
-  // Close the contour if needed
-  if (contourPoints.length > 2 && 
-      (contourPoints.first.x != contourPoints.last.x || 
-       contourPoints.first.y != contourPoints.last.y)) {
-    path.close();
-  }
-  
-  // Draw the contour with glow effect
-  canvas.drawPath(path, glowPaint);
-  canvas.drawPath(path, pathPaint);
-  
-  // Draw points if requested
-  if (showPoints) {
-    final pointPaint = Paint()
-      ..color = Colors.white
-      ..style = PaintingStyle.fill;
-    
-    final outlinePaint = Paint()
+    // Create paints
+    final pathPaint = Paint()
       ..color = color
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 1.0;
-    
+      ..strokeWidth = strokeWidth
+      ..strokeJoin = StrokeJoin.round;
+  
+    final glowPaint = Paint()
+      ..color = color.withOpacity(0.3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = strokeWidth + contourGlowStrokeWidth
+      ..strokeJoin = StrokeJoin.round
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, contourGlowBlurRadius);
+  
+    // Create path with the standardized transformation logic
+    final path = Path();
+    bool isFirst = true;
+  
     for (final point in contourPoints) {
+      // Use the standard utility method
       final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
         point,
         imageSize,
         size
       );
-      
-      // Draw point
-      canvas.drawCircle(Offset(displayPoint.x, displayPoint.y), 3, pointPaint);
-      canvas.drawCircle(Offset(displayPoint.x, displayPoint.y), 3, outlinePaint);
+    
+      final x = displayPoint.x;
+      final y = displayPoint.y;
+    
+      if (isFirst) {
+        path.moveTo(x, y);
+        isFirst = false;
+      } else {
+        path.lineTo(x, y);
+      }
     }
-  }
+  
+    // Close the contour if needed
+    if (contourPoints.length > 2 && 
+        (contourPoints.first.x != contourPoints.last.x || 
+         contourPoints.first.y != contourPoints.last.y)) {
+      path.close();
+    }
+  
+    // Draw the contour with glow effect
+    canvas.drawPath(path, glowPaint);
+    canvas.drawPath(path, pathPaint);
+  
+    // Draw points if requested
+    if (showPoints) {
+      final pointPaint = Paint()
+        ..color = Colors.white
+        ..style = PaintingStyle.fill;
+    
+      final outlinePaint = Paint()
+        ..color = color
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 1.0;
+    
+      for (final point in contourPoints) {
+        final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
+          point,
+          imageSize,
+          size
+        );
+      
+        // Draw point
+        canvas.drawCircle(Offset(displayPoint.x, displayPoint.y), contourPointRadius, pointPaint);
+        canvas.drawCircle(Offset(displayPoint.x, displayPoint.y), contourPointRadius, outlinePaint);
+      }
+    }
     
     // Calculate and show area
     if (contourPoints.length > 2) {
@@ -169,7 +170,7 @@ class ContourPainter extends CustomPainter {
         text: areaText,
         style: TextStyle(
           color: Colors.white,
-          fontSize: 12,
+          fontSize: contourTextFontSize,
           fontWeight: FontWeight.bold,
         ),
       );
@@ -185,13 +186,13 @@ class ContourPainter extends CustomPainter {
       // Draw background
       final bgRect = Rect.fromCenter(
         center: Offset(centerX, centerY),
-        width: textPainter.width + 16,
-        height: textPainter.height + 8,
+        width: textPainter.width + padding,
+        height: textPainter.height + smallPadding,
       );
       
       canvas.drawRect(
         bgRect, 
-        Paint()..color = color.withOpacity(0.7)
+        Paint()..color = color.withOpacity(contourBackgroundOpacity)
       );
       
       // Draw text

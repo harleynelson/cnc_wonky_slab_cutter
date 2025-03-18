@@ -14,139 +14,157 @@ class SettingsModel {
   double plungeRate;
   double cuttingDepth;
   int spindleSpeed;
+  int depthPasses;  // New property for multiple depth passes
   double edgeThreshold;
   double simplificationEpsilon;
   bool useConvexHull;
-  int blurRadius;           // New parameter
-  int smoothingWindowSize;  // New parameter
-  int minSlabSize;           // Minimum area to be considered a slab
-int gapAllowedMin;         // Minimum gap that can be bridged
-int gapAllowedMax;         // Maximum gap that can be bridged
-int continueSearchDistance;  // Distance to continue searching past first edge
+  int blurRadius;
+  int smoothingWindowSize;
+  int minSlabSize;
+  int gapAllowedMin;
+  int gapAllowedMax;
+  int continueSearchDistance;
+  int contourPostProcessPoints;  // New property for contour post-processing
+  bool forceHorizontalPaths; // for path direction preference
 
   SettingsModel({
-  required this.cncWidth,
-  required this.cncHeight,
-  required this.markerXDistance,
-  required this.markerYDistance,
-  required this.toolDiameter,
-  required this.stepover,
-  required this.safetyHeight,
-  required this.feedRate,
-  required this.plungeRate,
-  required this.cuttingDepth,
-  required this.spindleSpeed,
-  this.edgeThreshold = 65.0,
-  this.simplificationEpsilon = 5.0,
-  this.useConvexHull = true,
-  this.blurRadius = 6,          
-  this.smoothingWindowSize = 7,
-  this.minSlabSize = 1000,     // Add default value
-  this.gapAllowedMin = 5,      // Add default value
-  this.gapAllowedMax = 20,     // Add default value
-  this.continueSearchDistance = 30,  // Default value
-});
+    required this.cncWidth,
+    required this.cncHeight,
+    required this.markerXDistance,
+    required this.markerYDistance,
+    required this.toolDiameter,
+    required this.stepover,
+    required this.safetyHeight,
+    required this.feedRate,
+    required this.plungeRate,
+    required this.cuttingDepth,
+    required this.spindleSpeed,
+    this.depthPasses = 1,  // Default to 1 depth pass
+    this.edgeThreshold = defaultEdgeThreshold,
+    this.simplificationEpsilon = defaultSimplificationEpsilon,
+    this.useConvexHull = defaultUseConvexHull,
+    this.blurRadius = defaultBlurRadius,
+    this.smoothingWindowSize = defaultSmoothingWindowSize,
+    this.minSlabSize = minSlabSizeDefault,
+    this.gapAllowedMin = gapAllowedMinDefault,
+    this.gapAllowedMax = gapAllowedMaxDefault,
+    this.continueSearchDistance = continueSearchDistanceDefault,
+    this.contourPostProcessPoints = defaultContourPostProcessPoints,
+    this.forceHorizontalPaths = true, // Default to horizontal
+  });
   
   SettingsModel copy() {
-  return SettingsModel(
-    cncWidth: cncWidth,
-    cncHeight: cncHeight,
-    markerXDistance: markerXDistance,
-    markerYDistance: markerYDistance,
-    toolDiameter: toolDiameter,
-    stepover: stepover,
-    safetyHeight: safetyHeight,
-    feedRate: feedRate,
-    plungeRate: plungeRate,
-    cuttingDepth: cuttingDepth,
-    spindleSpeed: spindleSpeed,
-    edgeThreshold: edgeThreshold,
-    simplificationEpsilon: simplificationEpsilon,
-    useConvexHull: useConvexHull,
-    blurRadius: blurRadius,
-    smoothingWindowSize: smoothingWindowSize,
-    minSlabSize: minSlabSize,
-    gapAllowedMin: gapAllowedMin,
-    gapAllowedMax: gapAllowedMax,
-    continueSearchDistance: continueSearchDistance,
-  );
-}
+    return SettingsModel(
+      cncWidth: cncWidth,
+      cncHeight: cncHeight,
+      markerXDistance: markerXDistance,
+      markerYDistance: markerYDistance,
+      toolDiameter: toolDiameter,
+      stepover: stepover,
+      safetyHeight: safetyHeight,
+      feedRate: feedRate,
+      plungeRate: plungeRate,
+      cuttingDepth: cuttingDepth,
+      spindleSpeed: spindleSpeed,
+      depthPasses: depthPasses,
+      edgeThreshold: edgeThreshold,
+      simplificationEpsilon: simplificationEpsilon,
+      useConvexHull: useConvexHull,
+      blurRadius: blurRadius,
+      smoothingWindowSize: smoothingWindowSize,
+      minSlabSize: minSlabSize,
+      gapAllowedMin: gapAllowedMin,
+      gapAllowedMax: gapAllowedMax,
+      continueSearchDistance: continueSearchDistance,
+      contourPostProcessPoints: contourPostProcessPoints,
+    forceHorizontalPaths: forceHorizontalPaths,
+    );
+  }
 
   static SettingsModel defaults() {
-  return SettingsModel(
-    cncWidth: defaultCncWidth,
-    cncHeight: defaultCncHeight,
-    markerXDistance: defaultMarkerXDistance,
-    markerYDistance: defaultMarkerYDistance,
-    toolDiameter: defaultToolDiameter,
-    stepover: defaultStepover,
-    safetyHeight: defaultSafetyHeight,
-    feedRate: defaultFeedRate,
-    plungeRate: defaultPlungeRate,
-    cuttingDepth: defaultCuttingDepth,
-    spindleSpeed: defaultSpindleSpeed,
-    edgeThreshold: 65.0,
-    simplificationEpsilon: 5.0,
-    useConvexHull: true,
-    blurRadius: 6,
-    smoothingWindowSize: 7,
-    minSlabSize: 1000,
-    gapAllowedMin: 5, 
-    gapAllowedMax: 20,
-    continueSearchDistance: 30,
-  );
-}
+    return SettingsModel(
+      cncWidth: defaultCncWidth,
+      cncHeight: defaultCncHeight,
+      markerXDistance: defaultMarkerXDistance,
+      markerYDistance: defaultMarkerYDistance,
+      toolDiameter: defaultToolDiameter,
+      stepover: defaultStepover,
+      safetyHeight: defaultSafetyHeight,
+      feedRate: defaultFeedRate,
+      plungeRate: defaultPlungeRate,
+      cuttingDepth: defaultCuttingDepth,
+      spindleSpeed: defaultSpindleSpeed,
+      depthPasses: 1,  // Default to 1 depth pass
+      edgeThreshold: defaultEdgeThreshold,
+      simplificationEpsilon: defaultSimplificationEpsilon,
+      useConvexHull: defaultUseConvexHull,
+      blurRadius: defaultBlurRadius,
+      smoothingWindowSize: defaultSmoothingWindowSize,
+      minSlabSize: minSlabSizeDefault,
+      gapAllowedMin: gapAllowedMinDefault,
+      gapAllowedMax: gapAllowedMaxDefault,
+      continueSearchDistance: continueSearchDistanceDefault,
+      contourPostProcessPoints: defaultContourPostProcessPoints,
+      forceHorizontalPaths: true,
+    );
+  }
 
   // Update toJson method
   Map<String, dynamic> toJson() {
-  return {
-    'cncWidth': cncWidth,
-    'cncHeight': cncHeight,
-    'markerXDistance': markerXDistance,
-    'markerYDistance': markerYDistance,
-    'toolDiameter': toolDiameter,
-    'stepover': stepover,
-    'safetyHeight': safetyHeight,
-    'feedRate': feedRate,
-    'plungeRate': plungeRate,
-    'cuttingDepth': cuttingDepth,
-    'spindleSpeed': spindleSpeed,
-    'edgeThreshold': edgeThreshold,
-    'simplificationEpsilon': simplificationEpsilon,
-    'useConvexHull': useConvexHull,
-    'blurRadius': blurRadius,
-    'smoothingWindowSize': smoothingWindowSize,
-    'minSlabSize': minSlabSize,
-    'gapAllowedMin': gapAllowedMin,
-    'gapAllowedMax': gapAllowedMax,
-    'continueSearchDistance': continueSearchDistance,
-  };
-}
+    return {
+      'cncWidth': cncWidth,
+      'cncHeight': cncHeight,
+      'markerXDistance': markerXDistance,
+      'markerYDistance': markerYDistance,
+      'toolDiameter': toolDiameter,
+      'stepover': stepover,
+      'safetyHeight': safetyHeight,
+      'feedRate': feedRate,
+      'plungeRate': plungeRate,
+      'cuttingDepth': cuttingDepth,
+      'spindleSpeed': spindleSpeed,
+      'depthPasses': depthPasses,
+      'edgeThreshold': edgeThreshold,
+      'simplificationEpsilon': simplificationEpsilon,
+      'useConvexHull': useConvexHull,
+      'blurRadius': blurRadius,
+      'smoothingWindowSize': smoothingWindowSize,
+      'minSlabSize': minSlabSize,
+      'gapAllowedMin': gapAllowedMin,
+      'gapAllowedMax': gapAllowedMax,
+      'continueSearchDistance': continueSearchDistance,
+      'contourPostProcessPoints': contourPostProcessPoints,
+      'forceHorizontalPaths': forceHorizontalPaths,
+    };
+  }
 
   factory SettingsModel.fromJson(Map<String, dynamic> json) {
-  return SettingsModel(
-    cncWidth: json['cncWidth'] ?? defaultCncWidth,
-    cncHeight: json['cncHeight'] ?? defaultCncHeight,
-    markerXDistance: json['markerXDistance'] ?? defaultMarkerXDistance,
-    markerYDistance: json['markerYDistance'] ?? defaultMarkerYDistance,
-    toolDiameter: json['toolDiameter'] ?? defaultToolDiameter,
-    stepover: json['stepover'] ?? defaultStepover,
-    safetyHeight: json['safetyHeight'] ?? defaultSafetyHeight,
-    feedRate: json['feedRate'] ?? defaultFeedRate,
-    plungeRate: json['plungeRate'] ?? defaultPlungeRate,
-    cuttingDepth: json['cuttingDepth'] ?? defaultCuttingDepth,
-    spindleSpeed: json['spindleSpeed'] ?? defaultSpindleSpeed,
-    edgeThreshold: json['edgeThreshold'] ?? 50.0,
-    simplificationEpsilon: json['simplificationEpsilon'] ?? 5.0,
-    useConvexHull: json['useConvexHull'] ?? true,
-    blurRadius: json['blurRadius'] ?? 3,
-    smoothingWindowSize: json['smoothingWindowSize'] ?? 5,
-    minSlabSize: json['minSlabSize'] ?? 1000,
-    gapAllowedMin: json['gapAllowedMin'] ?? 5,
-    gapAllowedMax: json['gapAllowedMax'] ?? 20,
-    continueSearchDistance: json['continueSearchDistance'] ?? 30,
-  );
-}
+    return SettingsModel(
+      cncWidth: json['cncWidth'] ?? defaultCncWidth,
+      cncHeight: json['cncHeight'] ?? defaultCncHeight,
+      markerXDistance: json['markerXDistance'] ?? defaultMarkerXDistance,
+      markerYDistance: json['markerYDistance'] ?? defaultMarkerYDistance,
+      toolDiameter: json['toolDiameter'] ?? defaultToolDiameter,
+      stepover: json['stepover'] ?? defaultStepover,
+      safetyHeight: json['safetyHeight'] ?? defaultSafetyHeight,
+      feedRate: json['feedRate'] ?? defaultFeedRate,
+      plungeRate: json['plungeRate'] ?? defaultPlungeRate,
+      cuttingDepth: json['cuttingDepth'] ?? defaultCuttingDepth,
+      spindleSpeed: json['spindleSpeed'] ?? defaultSpindleSpeed,
+      depthPasses: json['depthPasses'] ?? 1,
+      edgeThreshold: json['edgeThreshold'] ?? defaultEdgeThreshold,
+      simplificationEpsilon: json['simplificationEpsilon'] ?? defaultSimplificationEpsilon,
+      useConvexHull: json['useConvexHull'] ?? defaultUseConvexHull,
+      blurRadius: json['blurRadius'] ?? defaultBlurRadius,
+      smoothingWindowSize: json['smoothingWindowSize'] ?? defaultSmoothingWindowSize,
+      minSlabSize: json['minSlabSize'] ?? minSlabSizeDefault,
+      gapAllowedMin: json['gapAllowedMin'] ?? gapAllowedMinDefault,
+      gapAllowedMax: json['gapAllowedMax'] ?? gapAllowedMaxDefault,
+      continueSearchDistance: json['continueSearchDistance'] ?? continueSearchDistanceDefault,
+      contourPostProcessPoints: json['contourPostProcessPoints'] ?? defaultContourPostProcessPoints,
+      forceHorizontalPaths: json['forceHorizontalPaths'] ?? true,
+    );
+  }
 
   // Load settings from SharedPreferences
   static Future<SettingsModel> load() async {

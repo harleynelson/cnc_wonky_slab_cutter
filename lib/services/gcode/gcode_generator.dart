@@ -13,6 +13,9 @@ class GcodeGenerator {
   final double stepover;
   final double toolDiameter;
   final int spindleSpeed;
+  final int depthPasses;
+  final double margin;
+  final bool forceHorizontal;
   
   GcodeGenerator({
     required this.safetyHeight,
@@ -22,6 +25,9 @@ class GcodeGenerator {
     required this.stepover,
     required this.toolDiameter,
     this.spindleSpeed = 18000,
+    this.depthPasses = 1,
+    this.margin = 5.0,
+    this.forceHorizontal = true, // Default to horizontal paths
   });
 
   /// Generate G-code for a surfacing operation within a contour
@@ -38,7 +44,7 @@ class GcodeGenerator {
     final toolpath = _generateSurfacingToolpath(contour, boundingBox);
     
     // Write the toolpath commands
-    _writeSurfacingToolpath(buffer, toolpath, boundingBox);
+    _writeSurfacingToolpath(buffer, toolpath, boundingBox, contour);
     
     // Add footer
     _writeFooter(buffer);
@@ -87,6 +93,12 @@ class GcodeGenerator {
       if (contour[i].y > maxY) maxY = contour[i].y;
     }
     
+    // Apply margin to the bounding box
+    minX -= margin;
+    minY -= margin;
+    maxX += margin;
+    maxY += margin;
+    
     final width = maxX - minX;
     final height = maxY - minY;
     final centerX = minX + width / 2;
@@ -100,118 +112,165 @@ class GcodeGenerator {
   
   /// Generate toolpath for zigzag surfacing pattern
   List<List<Point>> _generateSurfacingToolpath(List<Point> contour, Map<String, double> boundingBox) {
-    // Add a small safety margin to ensure we don't miss any intersections
-    final safetyMargin = 0.1;
-    final minX = boundingBox['minX']! - safetyMargin;
-    final maxX = boundingBox['maxX']! + safetyMargin;
-    final minY = boundingBox['minY']! - safetyMargin;
-    final maxY = boundingBox['maxY']! + safetyMargin;
-    final width = maxX - minX;
-    final height = maxY - minY;
+    // Get boundary values
+    final minX = boundingBox['minX']!;
+    final minY = boundingBox['minY']!;
+    final maxX = boundingBox['maxX']!;
+    final maxY = boundingBox['maxY']!;
+    final width = boundingBox['width']!;
+    final height = boundingBox['height']!;
     
-    // Determine the primary direction based on the shape's dimensions
-    final isHorizontal = width >= height;
+    // Determine the primary direction based on settings or shape dimensions
+    bool isHorizontal = forceHorizontal || width >= height;
     
-    // Calculate the number of passes needed
-    final double passDistance = stepover * toolDiameter;
+    // Calculate stepover distance
+    final double stepDistance = stepover;
+    
+    // Calculate number of passes
     final int numPasses = isHorizontal 
-        ? (height / passDistance).ceil() + 1
-        : (width / passDistance).ceil() + 1;
+        ? (height / stepDistance).ceil() + 1
+        : (width / stepDistance).ceil() + 1;
     
-    // Create paths for each pass
-    final List<List<Point>> allPaths = [];
+    // Create toolpaths array
+    final List<List<Point>> toolpaths = [];
     
-    // Ensure contour is closed
-    List<Point> workingContour = List<Point>.from(contour);
-    if (workingContour.isEmpty || 
-        (workingContour.first.x != workingContour.last.x || 
-         workingContour.first.y != workingContour.last.y)) {
-      if (workingContour.isNotEmpty) {
-        workingContour.add(workingContour.first);
-      }
-    }
-    
+    // Generate parallel toolpaths
     for (int i = 0; i < numPasses; i++) {
-      final List<Point> path = [];
+      List<Point> currentPath = [];
       
       if (isHorizontal) {
-        // Horizontal zigzag (constant y)
-        final y = minY + i * passDistance;
+        // Horizontal passes (fixed Y)
+        double y = minY + i * stepDistance;
         
-        // Skip if this y value is outside the bounding box
+        // Ensure we don't exceed the maximum Y
         if (y > maxY) continue;
         
-        // Calculate intersection points with the contour
-        final intersections = _findIntersectionsAtY(workingContour, y);
+        // Generate line segments that intersect with the contour
+        List<Point> intersections = _findLineContourIntersections(
+          minX, y, maxX, y, contour
+        );
         
-        // Need at least 2 intersections to create a path
-        if (intersections.length < 2) continue;
+        // Skip if no intersections found
+        if (intersections.isEmpty) continue;
         
-        // Sort the intersections by x-coordinate
+        // Sort intersections by X coordinate
         intersections.sort((a, b) => a.x.compareTo(b.x));
         
-        // For even passes go left-to-right, for odd passes go right-to-left
-        if (i % 2 != 0) {
-          intersections.reversed.toList();
-        }
+        // Determine direction (alternate for zig-zag)
+        bool leftToRight = (i % 2 == 0);
         
-        // Combine intersections into pairs
+        // For each pair of intersections, add a path segment
         for (int j = 0; j < intersections.length - 1; j += 2) {
           if (j + 1 < intersections.length) {
-            // Add this segment to the path
-            if (i % 2 == 0) {
-              // Left to right
-              path.add(Point(intersections[j].x, y));
-              path.add(Point(intersections[j + 1].x, y));
+            if (leftToRight) {
+              currentPath.add(intersections[j]);
+              currentPath.add(intersections[j + 1]);
             } else {
-              // Right to left
-              path.add(Point(intersections[j + 1].x, y));
-              path.add(Point(intersections[j].x, y));
+              currentPath.add(intersections[j + 1]);
+              currentPath.add(intersections[j]);
             }
           }
         }
       } else {
-        // Vertical zigzag (constant x)
-        final x = minX + i * passDistance;
+        // Vertical passes (fixed X)
+        double x = minX + i * stepDistance;
         
-        // Skip if this x value is outside the bounding box
+        // Ensure we don't exceed the maximum X
         if (x > maxX) continue;
         
-        // Calculate intersection points with the contour
-        final intersections = _findIntersectionsAtX(workingContour, x);
+        // Generate line segments that intersect with the contour
+        List<Point> intersections = _findLineContourIntersections(
+          x, minY, x, maxY, contour
+        );
         
-        // Need at least 2 intersections to create a path
-        if (intersections.length < 2) continue;
+        // Skip if no intersections found
+        if (intersections.isEmpty) continue;
         
-        // Sort the intersections by y-coordinate
+        // Sort intersections by Y coordinate
         intersections.sort((a, b) => a.y.compareTo(b.y));
         
-        // Create path depending on direction
-        if (i % 2 == 0) {
-          // Bottom to top - y coordinates in ascending order
-          for (int j = 0; j < intersections.length - 1; j += 2) {
-            if (j + 1 < intersections.length) {
-              path.add(Point(x, intersections[j].y));
-              path.add(Point(x, intersections[j + 1].y));
-            }
-          }
-        } else {
-          // Top to bottom - y coordinates in descending order
-          for (int j = intersections.length - 1; j > 0; j -= 2) {
-            if (j - 1 >= 0) {
-              path.add(Point(x, intersections[j].y));
-              path.add(Point(x, intersections[j - 1].y));
+        // Determine direction (alternate for zig-zag)
+        bool bottomToTop = (i % 2 == 0);
+        
+        // For each pair of intersections, add a path segment
+        for (int j = 0; j < intersections.length - 1; j += 2) {
+          if (j + 1 < intersections.length) {
+            if (bottomToTop) {
+              currentPath.add(intersections[j]);
+              currentPath.add(intersections[j + 1]);
+            } else {
+              currentPath.add(intersections[j + 1]);
+              currentPath.add(intersections[j]);
             }
           }
         }
       }
       
-      if (path.length >= 2) {
-        allPaths.add(path);
+      // Add path segments to toolpaths
+      if (currentPath.isNotEmpty) {
+        toolpaths.add(currentPath);
       }
     }
     
-    return allPaths;
+    // Return the generated toolpaths
+    return toolpaths;
+  }
+
+  /// Find intersections between a line and a contour
+  List<Point> _findLineContourIntersections(
+    double x1, double y1, double x2, double y2, List<Point> contour
+  ) {
+    final intersections = <Point>[];
+    
+    // Ensure contour is closed
+    if (contour.length < 3) return [];
+    
+    List<Point> closedContour = List.from(contour);
+    if (closedContour.first.x != closedContour.last.x || 
+        closedContour.first.y != closedContour.last.y) {
+      closedContour.add(closedContour.first);
+    }
+    
+    // Check for intersections with each segment of the contour
+    for (int i = 0; i < closedContour.length - 1; i++) {
+      final p3 = closedContour[i];
+      final p4 = closedContour[i + 1];
+      
+      final intersection = _lineIntersection(
+        x1, y1, x2, y2, p3.x, p3.y, p4.x, p4.y
+      );
+      
+      if (intersection != null) {
+        intersections.add(intersection);
+      }
+    }
+    
+    return intersections;
+  }
+
+  /// Calculate the intersection point between two line segments
+  Point? _lineIntersection(
+    double x1, double y1, double x2, double y2,
+    double x3, double y3, double x4, double y4
+  ) {
+    // Calculate denominators
+    double den = (y4 - y3) * (x2 - x1) - (x4 - x3) * (y2 - y1);
+    
+    // Lines are parallel if denominator is zero
+    if (den.abs() < 1e-10) return null;
+    
+    // Calculate ua and ub
+    double ua = ((x4 - x3) * (y1 - y3) - (y4 - y3) * (x1 - x3)) / den;
+    double ub = ((x2 - x1) * (y1 - y3) - (y2 - y1) * (x1 - x3)) / den;
+    
+    // Return intersection point if segments intersect
+    if (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1) {
+      double x = x1 + ua * (x2 - x1);
+      double y = y1 + ua * (y2 - y1);
+      return Point(x, y);
+    }
+    
+    return null;
   }
   
   /// Find all intersections of a horizontal line with a polygon at a specific y coordinate
@@ -325,19 +384,47 @@ class GcodeGenerator {
   }
   
   /// Write surfacing toolpath commands
-  void _writeSurfacingToolpath(StringBuffer buffer, List<List<Point>> toolpaths, Map<String, double> boundingBox) {
-    if (toolpaths.isEmpty) {
-      buffer.writeln("(No valid toolpath generated)");
-      return;
-    }
+  void _writeSurfacingToolpath(
+  StringBuffer buffer, 
+  List<List<Point>> toolpaths, 
+  Map<String, double> boundingBox,
+  List<Point> contour
+) {
+  if (toolpaths.isEmpty) {
+    buffer.writeln("(No valid toolpath generated)");
+    return;
+  }
+  
+  // Get direction information for debug output
+  final width = boundingBox['width']!;
+  final height = boundingBox['height']!;
+  final isHorizontal = forceHorizontal || width >= height;
+  
+  // Add debug info
+  buffer.writeln("(Toolpath: ${isHorizontal ? 'Horizontal' : 'Vertical'} pattern with ${toolpaths.length} passes)");
+  buffer.writeln("(Bounding box: X=${boundingBox['minX']!.toStringAsFixed(2)} to ${boundingBox['maxX']!.toStringAsFixed(2)}, Y=${boundingBox['minY']!.toStringAsFixed(2)} to ${boundingBox['maxY']!.toStringAsFixed(2)})");
+  buffer.writeln("(Optimized to only cut within contour + ${margin}mm margin)");
+  buffer.writeln("(Keeping tool down when connecting passes)");
+  
+  // Move to safe height first
+  buffer.writeln("G0 Z${safetyHeight.toStringAsFixed(4)}");
+  
+  // Calculate pass depth increment if multiple passes are needed
+  final passDepthIncrement = cuttingDepth / depthPasses;
+  buffer.writeln("(Total cutting depth: ${cuttingDepth}mm in $depthPasses passes)");
+  
+  // For each depth pass
+  for (int depthPass = 1; depthPass <= depthPasses; depthPass++) {
+    final currentDepth = passDepthIncrement * depthPass;
+    // Handle negative values properly by formatting after calculation
+    final depthString = (currentDepth > 0 ? "-" : "") + currentDepth.abs().toStringAsFixed(4);
     
-    // Move to safe height first
-    buffer.writeln("G0 Z${safetyHeight.toStringAsFixed(4)}");
-    
-    // Add debug info
-    buffer.writeln("(Generated ${toolpaths.length} toolpaths)");
+    buffer.writeln("");
+    buffer.writeln("(Depth pass $depthPass of $depthPasses - depth: ${depthString}mm)");
     
     // Process each path
+    Point? lastEndPoint;
+    
     for (int i = 0; i < toolpaths.length; i++) {
       final path = toolpaths[i];
       
@@ -348,16 +435,24 @@ class GcodeGenerator {
       
       buffer.writeln("(Path ${i} - ${path.length} points)");
       
-      // Move to the start of this path
-      buffer.writeln("G0 X${path[0].x.toStringAsFixed(4)} Y${path[0].y.toStringAsFixed(4)}");
+      // First point of this path
+      final startPoint = path[0];
       
-      // First point of first path: plunge to cutting depth
-      if (i == 0) {
-        buffer.writeln("G1 Z0 F${plungeRate.toStringAsFixed(1)}");  // Move to surface level first
-        buffer.writeln("Z${cuttingDepth.toStringAsFixed(4)} F${plungeRate.toStringAsFixed(1)}");  // Plunge to cutting depth
+      if (lastEndPoint == null || i == 0) {
+        // First path or after a skipped path - move to position and plunge
+        buffer.writeln("G0 X${startPoint.x.toStringAsFixed(4)} Y${startPoint.y.toStringAsFixed(4)}");
+        
+        if (i == 0) {
+          // First path of depth pass
+          buffer.writeln("G1 Z0 F${plungeRate.toStringAsFixed(1)}");  // Move to surface level first
+          buffer.writeln("Z${depthString} F${plungeRate.toStringAsFixed(1)}");  // Plunge to current depth
+        } else {
+          // Subsequent path but no previous valid end point
+          buffer.writeln("G1 Z${depthString} F${plungeRate.toStringAsFixed(1)}");
+        }
       } else {
-        // For subsequent paths, we're already at cutting depth
-        buffer.writeln("G1 Z${cuttingDepth.toStringAsFixed(4)} F${plungeRate.toStringAsFixed(1)}");
+        // Connect to the start of this path with a direct line move
+        buffer.writeln("G1 X${startPoint.x.toStringAsFixed(4)} Y${startPoint.y.toStringAsFixed(4)} F${feedRate.toStringAsFixed(1)}");
       }
       
       // Cut along the path
@@ -366,12 +461,55 @@ class GcodeGenerator {
         buffer.writeln("G1 X${point.x.toStringAsFixed(4)} Y${point.y.toStringAsFixed(4)} F${feedRate.toStringAsFixed(1)}");
       }
       
-      // If not the last path, move to safe height to avoid any protrusions
-      if (i < toolpaths.length - 1) {
-        buffer.writeln("G0 Z${safetyHeight.toStringAsFixed(4)}");
-      }
+      // Remember the last point of this path
+      lastEndPoint = path.last;
+    }
+    
+    // At the end of each depth pass (except the last), move to safety height
+    if (depthPass < depthPasses) {
+      buffer.writeln("G0 Z${safetyHeight.toStringAsFixed(4)}");
     }
   }
+}
+
+  /// Write an arc move between two points
+  void _writeArcMove(StringBuffer buffer, Point from, Point to, String depthString) {
+    // Calculate midpoint for arc center
+    final midX = (from.x + to.x) / 2;
+    final midY = (from.y + to.y) / 2;
+    
+    // Calculate distance between points
+    final dx = to.x - from.x;
+    final dy = to.y - from.y;
+    final distance = math.sqrt(dx * dx + dy * dy);
+    
+    // Skip arc move if points are very close
+    if (distance < toolDiameter / 2) {
+      // Just use a linear move if points are close
+      buffer.writeln("G1 X${to.x.toStringAsFixed(4)} Y${to.y.toStringAsFixed(4)} F${feedRate.toStringAsFixed(1)}");
+      return;
+    }
+    
+    // Use adaptive radius based on distance
+    final arcHeight = math.min(distance / 2, toolDiameter);
+    
+    // Calculate the normal vector to the line
+    final length = math.sqrt(dx * dx + dy * dy);
+    final nx = -dy / length;
+    final ny = dx / length;
+    
+    // Calculate a slight offset normal to the line for the arc center
+    final centerX = midX + nx * arcHeight;
+    final centerY = midY + ny * arcHeight;
+    
+    // Calculate I and J offsets (from start point to center)
+    final i = centerX - from.x;
+    final j = centerY - from.y;
+    
+    // Write G-code for arc move (G2 = clockwise arc)
+    buffer.writeln("G2 X${to.x.toStringAsFixed(4)} Y${to.y.toStringAsFixed(4)} I${i.toStringAsFixed(4)} J${j.toStringAsFixed(4)} F${feedRate.toStringAsFixed(1)}");
+  }
+
   
   /// Write G-code footer with end program commands
   void _writeFooter(StringBuffer buffer) {
@@ -382,6 +520,8 @@ class GcodeGenerator {
     buffer.writeln("M5"); // Spindle off
     buffer.writeln("M30"); // End program
   }
+
+
 
   /// Legacy methods for backward compatibility
 
@@ -409,7 +549,7 @@ class GcodeGenerator {
     
     // Plunge to cutting depth
     buffer.writeln("G1 Z0 F${plungeRate.toStringAsFixed(1)}"); // Go to surface
-    buffer.writeln("G1 Z${cuttingDepth.toStringAsFixed(4)} F${plungeRate.toStringAsFixed(1)}"); // Plunge to cutting depth
+    buffer.writeln("G1 Z${(-cuttingDepth).toStringAsFixed(4)} F${plungeRate.toStringAsFixed(1)}"); // Plunge to cutting depth
     
     // Process remaining points with feed moves
     for (int i = 1; i < toolpath.length; i++) {
@@ -432,7 +572,7 @@ class GcodeGenerator {
       
       // Plunge to cutting depth
       buffer.writeln("G1 Z0 F${plungeRate.toStringAsFixed(1)}"); // Go to surface
-      buffer.writeln("G1 Z${cuttingDepth.toStringAsFixed(4)} F${plungeRate.toStringAsFixed(1)}"); // Plunge to cutting depth
+      buffer.writeln("G1 Z${(-cuttingDepth).toStringAsFixed(4)} F${plungeRate.toStringAsFixed(1)}"); // Plunge to cutting depth
       
       // Follow the contour
       for (int i = 1; i < contour.length; i++) {

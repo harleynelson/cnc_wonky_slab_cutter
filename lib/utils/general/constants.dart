@@ -42,6 +42,7 @@ const Duration longAnimationDuration = Duration(milliseconds: 500);
 const double cameraCrosshairSize = 20.0;
 const double markerSize = 10.0;
 const double cameraBottomBarHeight = 100.0; // Camera control bar height
+const double cameraStatusBarHeight = 100.0; // Status bar height for camera screens
 
 // Marker Colors
 const int markerOriginColorHex = 0xFFFF0000; // Red
@@ -78,3 +79,33 @@ const int defaultProcessingTimeout = 10000; // Default timeout in milliseconds
 // G-code Constants
 const String gcodeHeader = "; G-code generated for CNC slab surfacing";
 const String gcodeFooter = "; End of G-code";
+const double defaultSlabMargin = 50.0; // Default margin for slab in mm
+const double maxSlabMargin = 100.0; // Maximum margin for slabs
+
+// Contour Display Constants
+const double detectorScreenOverlayHeight = 438.0; // Specific height for marker overlay in detector screen
+const double defaultContourStrokeWidth = 2.0;
+const double contourPointRadius = 3.0;
+const double contourGlowStrokeWidth = 6.0;
+const double contourGlowBlurRadius = 3.0;
+const double contourTextFontSize = 12.0;
+const double contourBackgroundOpacity = 0.7;
+const double contourCenterCrosshairSize = 5.0;
+
+// Marker Overlay Constants
+const double markerCircleRadius = 20.0;
+const double markerInnerCircleRadius = 10.0;
+const double markerLabelFontSize = 14.0;
+const double markerLabelPadding = 10.0;
+const double markerLabelXOffset = 20.0;
+const double markerLabelYOffset = -7.0;
+const double markerLineOpacity = 0.7;
+const double markerLineStrokeWidth = 2.0;
+
+// Seed Point Indicator Constants
+const double seedPointIndicatorSize = 20.0;
+const double seedPointIndicatorOpacity = 0.7;
+const double seedPointIndicatorBorderWidth = 2.0;
+
+// Button Width Constants
+const double minButtonWidth = 100.0;

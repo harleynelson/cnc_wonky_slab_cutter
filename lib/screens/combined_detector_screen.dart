@@ -11,6 +11,7 @@ import '../models/settings_model.dart';
 import '../providers/processing_provider.dart';
 import '../services/image_processing/contour_algorithms/contour_algorithm_registry.dart';
 import '../services/image_processing/contour_algorithms/edge_contour_algorithm.dart';
+import '../utils/general/constants.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../services/processing/processing_flow_manager.dart';
 import '../widgets/marker_overlay.dart';
@@ -22,6 +23,7 @@ class CombinedDetectorScreen extends StatefulWidget {
   final File imageFile;
   final SettingsModel settings;
   final Function(SettingsModel)? onSettingsChanged;
+  
 
   const CombinedDetectorScreen({
     Key? key,
@@ -215,8 +217,8 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   // Get the direct parent render object of the image
   final RenderBox imageContainer = context.findRenderObject() as RenderBox;
   
-  // Get the overlay's container size - this is crucial
-  final markerOverlaySize = Size(imageContainer.size.width, 438.0); // Match overlay's canvas size
+  // Use the specific constant value that is known to work
+  final markerOverlaySize = Size(imageContainer.size.width, detectorScreenOverlayHeight); 
   
   print('DEBUG: Tap position: ${tapPosition.dx}x${tapPosition.dy}');
   print('DEBUG: Using overlay size: ${markerOverlaySize.width}x${markerOverlaySize.height}');
@@ -293,21 +295,22 @@ Widget build(BuildContext context) {
                       contourPoints: _flowManager.result.contourResult!.pixelContour,
                       imageSize: _imageSize!,
                       color: Colors.green,
+                      strokeWidth: defaultContourStrokeWidth,
                     ),
                   ),
                   
                 // Seed point indicator
                 if (_selectedPoint != null && !_contourDetected)
                   Positioned(
-                    left: _selectedPoint!.dx - 10,
-                    top: _selectedPoint!.dy - 10,
+                    left: _selectedPoint!.dx - seedPointIndicatorSize / 2,
+                    top: _selectedPoint!.dy - seedPointIndicatorSize / 2,
                     child: Container(
-                      width: 20,
-                      height: 20,
+                      width: seedPointIndicatorSize,
+                      height: seedPointIndicatorSize,
                       decoration: BoxDecoration(
-                        color: Colors.yellow.withOpacity(0.7),
+                        color: Colors.yellow.withOpacity(seedPointIndicatorOpacity),
                         shape: BoxShape.circle,
-                        border: Border.all(color: Colors.orange, width: 2),
+                        border: Border.all(color: Colors.orange, width: seedPointIndicatorBorderWidth),
                       ),
                     ),
                   ),
@@ -321,7 +324,7 @@ Widget build(BuildContext context) {
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           CircularProgressIndicator(),
-                          SizedBox(height: 16),
+                          SizedBox(height: padding),
                           Text(
                             _statusMessage,
                             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
@@ -335,9 +338,9 @@ Widget build(BuildContext context) {
           ),
         ),
           
-        // Status bar - MOVED TO BOTTOM
+        // Status bar
         Container(
-          padding: EdgeInsets.all(8),
+          padding: EdgeInsets.all(smallPadding),
           color: _errorMessage.isEmpty ? Colors.blue.shade50 : Colors.red.shade50,
           width: double.infinity,
           child: Text(
