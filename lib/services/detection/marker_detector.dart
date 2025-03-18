@@ -18,13 +18,13 @@ class MarkerPoint {
 
   MarkerPoint(this.x, this.y, this.role, {this.confidence = 1.0});
   
-  Point toPoint() => Point(x.toDouble(), y.toDouble());
+  PointOfCoordinates toPoint() => PointOfCoordinates(x.toDouble(), y.toDouble());
 }
 
 class MarkerDetectionResult {
   final List<MarkerPoint> markers;
   final double pixelToMmRatio;
-  final Point origin;
+  final PointOfCoordinates origin;
   final double orientationAngle;
   final img.Image? debugImage;
 
@@ -575,7 +575,7 @@ Map<String, double> _calculateBlobProperties(List<int> blob) {
     return MarkerDetectionResult(
       markers: markers,
       pixelToMmRatio: pixelToMmRatio,
-      origin: Point(originMarker.x.toDouble(), originMarker.y.toDouble()),
+      origin: PointOfCoordinates(originMarker.x.toDouble(), originMarker.y.toDouble()),
       orientationAngle: orientationAngle,
       debugImage: debugImage,
     );
@@ -927,7 +927,7 @@ List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
     }
     
     // Create origin point
-    final origin = Point(originMarker.x.toDouble(), originMarker.y.toDouble());
+    final origin = PointOfCoordinates(originMarker.x.toDouble(), originMarker.y.toDouble());
     
     // Draw debug visualizations if needed
     if (debugImage != null) {

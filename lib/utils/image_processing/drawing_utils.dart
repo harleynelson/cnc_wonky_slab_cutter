@@ -441,7 +441,7 @@ class DrawingUtils {
   /// Visualize contour with seed point and algorithm info on debug image
 static void visualizeContourWithInfo(
   img.Image debugImage, 
-  List<Point> contour, 
+  List<PointOfCoordinates> contour, 
   int seedX, 
   int seedY,
   String algorithmName
@@ -558,7 +558,7 @@ static void visualizeContourWithInfo(
   /// Draw a polygon on an image
   static void drawPolygon(
     img.Image image,
-    List<Point> points,
+    List<PointOfCoordinates> points,
     img.Color color,
     {bool fill = false}
   ) {
@@ -584,7 +584,7 @@ static void visualizeContourWithInfo(
   }
   
   /// Fill a polygon using scan line algorithm
-  static void _fillPolygon(img.Image image, List<Point> points, img.Color color) {
+  static void _fillPolygon(img.Image image, List<PointOfCoordinates> points, img.Color color) {
     if (points.length < 3) return;
     
     // Find min and max y-coordinates
@@ -673,7 +673,7 @@ static void visualizeContourWithInfo(
   /// Draw an area measurement on the image
    static void drawAreaMeasurement(
     img.Image image,
-    List<Point> contour,
+    List<PointOfCoordinates> contour,
     double areaMm2,
     MachineCoordinateSystem coordSystem,
     {img.Color? color}
@@ -880,7 +880,7 @@ static void visualizeContourWithInfo(
   /// Draw a contour (list of connected points)
   static void drawContour(
     img.Image image,
-    List<Point> contour,
+    List<PointOfCoordinates> contour,
     img.Color color,
     {int thickness = 1}
   ) {
@@ -930,7 +930,7 @@ static void visualizeContourWithInfo(
   /// Draw multiple contours on an image
   static void drawContours(
     img.Image image,
-    List<List<Point>> contours,
+    List<List<PointOfCoordinates>> contours,
     img.Color color,
     {int thickness = 1}
   ) {
@@ -942,7 +942,7 @@ static void visualizeContourWithInfo(
   /// Draw a contour with a highlighted effect for better visibility
   static void drawHighlightedContour(
     img.Image image,
-    List<Point> contour,
+    List<PointOfCoordinates> contour,
     img.Color primaryColor,
     img.Color outlineColor,
     {int thickness = 3}
@@ -957,7 +957,7 @@ static void visualizeContourWithInfo(
   /// Draw a dashed contour
   static void drawDashedContour(
     img.Image image,
-    List<Point> contour,
+    List<PointOfCoordinates> contour,
     img.Color color,
     {int dashLength = 10, int gapLength = 5, int thickness = 1}
   ) {
@@ -1023,7 +1023,7 @@ static void visualizeContourWithInfo(
   /// Draw a contour with corner dots for enhanced visibility
   static void drawContourWithDots(
     img.Image image,
-    List<Point> contour,
+    List<PointOfCoordinates> contour,
     img.Color lineColor,
     img.Color dotColor,
     {int thickness = 1, int dotRadius = 3}
@@ -1047,7 +1047,7 @@ static void visualizeContourWithInfo(
   /// Draw a glow effect around a contour for high visibility
   static void drawGlowingContour(
     img.Image image,
-    List<Point> contour,
+    List<PointOfCoordinates> contour,
     img.Color glowColor,
     img.Color lineColor,
     {int glowSize = 5, int lineThickness = 2}

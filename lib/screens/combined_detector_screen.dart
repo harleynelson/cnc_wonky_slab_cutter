@@ -252,9 +252,9 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
     });
   }
   
-  Point _calculateImagePoint(Offset tapPosition) {
+  PointOfCoordinates _calculateImagePoint(Offset tapPosition) {
   if (_imageSize == null) {
-    return Point(0, 0);
+    return PointOfCoordinates(0, 0);
   }
   
   // Get the direct parent render object of the image
@@ -294,7 +294,7 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   print('DEBUG: Scale factors: ${scaleX}x${scaleY}');
   print('DEBUG: Tap at (${tapPosition.dx},${tapPosition.dy}) → Image (${imageX},${imageY})');
   
-  return Point(imageX, imageY);
+  return PointOfCoordinates(imageX, imageY);
 }
   
   @override

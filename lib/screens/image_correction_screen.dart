@@ -46,9 +46,9 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
   bool _markersDetected = false;
   
   // Marker positions
-  Point? _originMarkerPoint;
-  Point? _xAxisMarkerPoint;
-  Point? _yAxisMarkerPoint;
+  PointOfCoordinates? _originMarkerPoint;
+  PointOfCoordinates? _xAxisMarkerPoint;
+  PointOfCoordinates? _yAxisMarkerPoint;
   
   @override
   void initState() {
@@ -171,7 +171,7 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
     
     // Create marker detection result
     final markers = [originMarker, xAxisMarker, scaleMarker];
-    final origin = Point(originMarker.x.toDouble(), originMarker.y.toDouble());
+    final origin = PointOfCoordinates(originMarker.x.toDouble(), originMarker.y.toDouble());
     
     // Load the original image
     final imageBytes = await widget.imageFile.readAsBytes();
@@ -231,9 +231,9 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
   }
 }
   
-  Point _calculateImagePoint(Offset tapPosition) {
+  PointOfCoordinates _calculateImagePoint(Offset tapPosition) {
   if (_imageSize == null) {
-    return Point(0, 0);
+    return PointOfCoordinates(0, 0);
   }
   
   final RenderBox box = context.findRenderObject() as RenderBox;
@@ -268,10 +268,10 @@ class _ImageCorrectionScreenState extends State<ImageCorrectionScreen> {
   final imageX = ((tapPosition.dx - offsetX) / scaledWidth) * _imageSize!.width;
   final imageY = ((tapPosition.dy - offsetY) / scaledHeight) * _imageSize!.height;
   
-  return Point(imageX, imageY);
+  return PointOfCoordinates(imageX, imageY);
 }
   
-  Widget _buildSamplePointIndicator(Point point, Color color, String label) {
+  Widget _buildSamplePointIndicator(PointOfCoordinates point, Color color, String label) {
   final RenderBox box = context.findRenderObject() as RenderBox;
   final Size boxSize = box.size;
   

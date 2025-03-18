@@ -61,20 +61,20 @@ class _MultiTapDetectionScreenState extends State<MultiTapDetectionScreen> {
   MultiTapMode _currentMode = MultiTapMode.originMarkerSelection;
   
   // Sample points
-  Point? _slabSamplePoint;
-  Point? _spillboardSamplePoint;
+  PointOfCoordinates? _slabSamplePoint;
+  PointOfCoordinates? _spillboardSamplePoint;
   
   // Marker points
-  Point? _originMarkerPoint;
-  Point? _xAxisMarkerPoint;
-  Point? _scaleMarkerPoint;
+  PointOfCoordinates? _originMarkerPoint;
+  PointOfCoordinates? _xAxisMarkerPoint;
+  PointOfCoordinates? _scaleMarkerPoint;
   
   // Region samples with color information
   RegionSample? _slabSample;
   RegionSample? _spillboardSample;
   
   // Detection result
-  List<Point>? _contourPoints;
+  List<PointOfCoordinates>? _contourPoints;
   
   @override
   void initState() {
@@ -227,7 +227,7 @@ class _MultiTapDetectionScreenState extends State<MultiTapDetectionScreen> {
       
       // Create marker detection result
       final markers = [originMarker, xAxisMarker, scaleMarker];
-      final origin = Point(originMarker.x.toDouble(), originMarker.y.toDouble());
+      final origin = PointOfCoordinates(originMarker.x.toDouble(), originMarker.y.toDouble());
       
       // Load the original image for visualization
       final imageBytes = await widget.imageFile.readAsBytes();
@@ -448,9 +448,9 @@ class _MultiTapDetectionScreenState extends State<MultiTapDetectionScreen> {
     );
   }
   
-  Point _calculateImagePoint(Offset tapPosition) {
+  PointOfCoordinates _calculateImagePoint(Offset tapPosition) {
   if (_imageSize == null) {
-    return Point(0, 0);
+    return PointOfCoordinates(0, 0);
   }
   
   // Get the direct parent render object of the image
@@ -490,7 +490,7 @@ class _MultiTapDetectionScreenState extends State<MultiTapDetectionScreen> {
   print('DEBUG: Scale factors: ${scaleX}x${scaleY}');
   print('DEBUG: Tap at (${tapPosition.dx},${tapPosition.dy}) → Image (${imageX},${imageY})');
   
-  return Point(imageX, imageY);
+  return PointOfCoordinates(imageX, imageY);
 }
   
   @override
@@ -621,7 +621,7 @@ Widget build(BuildContext context) {
   );
 }
   
-  Widget _buildSamplePointIndicator(Point point, Color color, String label) {
+  Widget _buildSamplePointIndicator(PointOfCoordinates point, Color color, String label) {
     if (_imageSize == null) return Container();
     
     final imageContainer = context.findRenderObject() as RenderBox;

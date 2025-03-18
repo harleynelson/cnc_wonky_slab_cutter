@@ -95,7 +95,7 @@ final contourPoints = ContourDetectionUtils.findContourByRayCasting(
 );
     
      // 5. Apply convex hull only if specified AND if there are no sharp corners
-  List<Point> processedContour = contourPoints;
+  List<PointOfCoordinates> processedContour = contourPoints;
   if (useConvexHull && contourPoints.length >= 3) {
     // Check for sharp corners before applying convex hull
     final corners = ContourDetectionUtils.detectCorners(contourPoints);
@@ -149,7 +149,7 @@ final contourPoints = ContourDetectionUtils.findContourByRayCasting(
    int seedY
  ) {
    // Create a rectangular or circular contour around the seed point
-   final List<Point> contour = [];
+   final List<PointOfCoordinates> contour = [];
    
    // Determine size based on image dimensions, centered around seed point
    final width = image.width;
@@ -166,7 +166,7 @@ final contourPoints = ContourDetectionUtils.findContourByRayCasting(
    
    // Top edge with rounded corners
    for (double x = left + cornerRadius; x <= right - cornerRadius; x += 5) {
-     contour.add(Point(x, top));
+     contour.add(PointOfCoordinates(x, top));
    }
    
    // Top-right corner
@@ -174,12 +174,12 @@ final contourPoints = ContourDetectionUtils.findContourByRayCasting(
      final rads = angle * math.pi / 180;
      final x = right - cornerRadius + cornerRadius * math.cos(rads);
      final y = top + cornerRadius + cornerRadius * math.sin(rads);
-     contour.add(Point(x, y));
+     contour.add(PointOfCoordinates(x, y));
    }
    
    // Right edge
    for (double y = top + cornerRadius; y <= bottom - cornerRadius; y += 5) {
-     contour.add(Point(right, y));
+     contour.add(PointOfCoordinates(right, y));
    }
    
    // Bottom-right corner
@@ -187,12 +187,12 @@ final contourPoints = ContourDetectionUtils.findContourByRayCasting(
      final rads = angle * math.pi / 180;
      final x = right - cornerRadius + cornerRadius * math.cos(rads);
      final y = bottom - cornerRadius + cornerRadius * math.sin(rads);
-     contour.add(Point(x, y));
+     contour.add(PointOfCoordinates(x, y));
    }
    
    // Bottom edge
    for (double x = right - cornerRadius; x >= left + cornerRadius; x -= 5) {
-     contour.add(Point(x, bottom));
+     contour.add(PointOfCoordinates(x, bottom));
    }
    
    // Bottom-left corner
@@ -200,12 +200,12 @@ final contourPoints = ContourDetectionUtils.findContourByRayCasting(
      final rads = angle * math.pi / 180;
      final x = left + cornerRadius + cornerRadius * math.cos(rads);
      final y = bottom - cornerRadius + cornerRadius * math.sin(rads);
-     contour.add(Point(x, y));
+     contour.add(PointOfCoordinates(x, y));
    }
    
    // Left edge
    for (double y = bottom - cornerRadius; y >= top + cornerRadius; y -= 5) {
-     contour.add(Point(left, y));
+     contour.add(PointOfCoordinates(left, y));
    }
    
    // Top-left corner
@@ -213,7 +213,7 @@ final contourPoints = ContourDetectionUtils.findContourByRayCasting(
      final rads = angle * math.pi / 180;
      final x = left + cornerRadius + cornerRadius * math.cos(rads);
      final y = top + cornerRadius + cornerRadius * math.sin(rads);
-     contour.add(Point(x, y));
+     contour.add(PointOfCoordinates(x, y));
    }
    
    // Close the contour

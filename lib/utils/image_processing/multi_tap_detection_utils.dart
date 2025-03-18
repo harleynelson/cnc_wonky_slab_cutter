@@ -11,7 +11,7 @@ import 'contour_detection_utils.dart';
 
 /// Represents a region sample with position and color information
 class RegionSample {
-  final Point position;
+  final PointOfCoordinates position;
   final List<int> colorSample; // [r, g, b]
   final String label;
   
@@ -31,7 +31,7 @@ class RegionSample {
 class MultiTapDetectionUtils {
   
   /// Detect contour using region samples for wood slabs on similar backgrounds
-  static List<Point> findContourWithRegionSamples(
+  static List<PointOfCoordinates> findContourWithRegionSamples(
     img.Image image,
     RegionSample slabSample,
     RegionSample spillboardSample,
@@ -134,7 +134,7 @@ class MultiTapDetectionUtils {
   }
   
   /// Extract color samples from a region around a point
-  static List<List<int>> _extractRegionColors(img.Image image, Point center, int radius) {
+  static List<List<int>> _extractRegionColors(img.Image image, PointOfCoordinates center, int radius) {
     final colors = <List<int>>[];
     final cx = center.x.toInt();
     final cy = center.y.toInt();
@@ -243,7 +243,7 @@ class MultiTapDetectionUtils {
     img.Image original,
     RegionSample slabSample,
     RegionSample spillboardSample,
-    List<Point> contour
+    List<PointOfCoordinates> contour
   ) {
     // Create a copy of the original image
     final visualization = img.copyResize(original, width: original.width, height: original.height);

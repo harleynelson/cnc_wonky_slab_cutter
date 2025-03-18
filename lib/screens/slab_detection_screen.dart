@@ -40,15 +40,15 @@ class _SlabDetectionScreenState extends State<SlabDetectionScreen> {
   late ProcessingFlowManager _flowManager;
   
   // Sample points
-  Point? _slabSamplePoint;
-  Point? _spillboardSamplePoint;
+  PointOfCoordinates? _slabSamplePoint;
+  PointOfCoordinates? _spillboardSamplePoint;
   
   // Region samples with color information
   RegionSample? _slabSample;
   RegionSample? _spillboardSample;
   
   // Detection result
-  List<Point>? _contourPoints;
+  List<PointOfCoordinates>? _contourPoints;
   bool _contourDetected = false;
   
   @override
@@ -188,9 +188,9 @@ class _SlabDetectionScreenState extends State<SlabDetectionScreen> {
       // Convert to machine coordinates - note these should already be correct
       // since we're working with the corrected image
       final machineContour = MachineCoordinateSystem.fromMarkerPointsWithDistances(
-        Point(0, 0), // Origin at (0,0) in corrected image
-        Point(widget.settings.markerXDistance, 0), // X-axis at marker distance
-        Point(0, widget.settings.markerYDistance), // Y-axis at marker distance
+        PointOfCoordinates(0, 0), // Origin at (0,0) in corrected image
+        PointOfCoordinates(widget.settings.markerXDistance, 0), // X-axis at marker distance
+        PointOfCoordinates(0, widget.settings.markerYDistance), // Y-axis at marker distance
         widget.settings.markerXDistance,
         widget.settings.markerYDistance
       ).convertPointListToMachineCoords(_contourPoints!);
@@ -231,9 +231,9 @@ class _SlabDetectionScreenState extends State<SlabDetectionScreen> {
     }
   }
   
-  Point _calculateImagePoint(Offset tapPosition) {
+  PointOfCoordinates _calculateImagePoint(Offset tapPosition) {
     if (_imageSize == null) {
-      return Point(0, 0);
+      return PointOfCoordinates(0, 0);
     }
     
     // Get the direct parent render object of the image
@@ -273,10 +273,10 @@ class _SlabDetectionScreenState extends State<SlabDetectionScreen> {
     print('DEBUG: Scale factors: ${scaleX}x${scaleY}');
     print('DEBUG: Tap at (${tapPosition.dx},${tapPosition.dy}) → Image (${imageX},${imageY})');
     
-    return Point(imageX, imageY);
+    return PointOfCoordinates(imageX, imageY);
   }
   
-  Widget _buildSamplePointIndicator(Point point, Color color, String label) {
+  Widget _buildSamplePointIndicator(PointOfCoordinates point, Color color, String label) {
     if (_imageSize == null) return Container();
     
     // Get container size with fixed height for consistency

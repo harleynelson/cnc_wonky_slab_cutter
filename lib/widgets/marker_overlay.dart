@@ -51,7 +51,7 @@ void paint(Canvas canvas, Size size) {
   // Draw each marker using standardized coordinate functions
   for (final marker in markers) {
     // Use the standard utility method
-    final markerPoint = Point(marker.x.toDouble(), marker.y.toDouble());
+    final markerPoint = PointOfCoordinates(marker.x.toDouble(), marker.y.toDouble());
     final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
       markerPoint,
       imageSize,
@@ -146,9 +146,9 @@ void paint(Canvas canvas, Size size) {
       );
       
       // Create points from markers
-      final originPoint = Point(originMarker.x.toDouble(), originMarker.y.toDouble());
-      final xAxisPoint = Point(xAxisMarker.x.toDouble(), xAxisMarker.y.toDouble());
-      final scalePoint = Point(scaleMarker.x.toDouble(), scaleMarker.y.toDouble());
+      final originPoint = PointOfCoordinates(originMarker.x.toDouble(), originMarker.y.toDouble());
+      final xAxisPoint = PointOfCoordinates(xAxisMarker.x.toDouble(), xAxisMarker.y.toDouble());
+      final scalePoint = PointOfCoordinates(scaleMarker.x.toDouble(), scaleMarker.y.toDouble());
       
       // Convert to display coordinates using the same transformation as the markers
       final originDisplay = MachineCoordinateSystem.imageToDisplayCoordinates(originPoint, imageSize, size);
