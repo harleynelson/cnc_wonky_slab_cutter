@@ -31,7 +31,7 @@ class GcodeGenerator {
   });
 
   /// Generate G-code for a surfacing operation within a contour
-  String generateSurfacingGcode(List<Point> contour, {String filename = ''}) {
+  String generateSurfacingGcode(List<CoordinatePointXY> contour, {String filename = ''}) {
   final buffer = StringBuffer();
   
   // Write G-code header with initialization commands
@@ -76,7 +76,7 @@ class GcodeGenerator {
 }
 
   /// Calculate the bounding box of a contour
-  Map<String, double> _calculateBoundingBox(List<Point> contour) {
+  Map<String, double> _calculateBoundingBox(List<CoordinatePointXY> contour) {
     if (contour.isEmpty) {
       return {
         'minX': 0.0, 'minY': 0.0, 'maxX': 0.0, 'maxY': 0.0,
@@ -114,7 +114,7 @@ class GcodeGenerator {
   }
   
   /// Generate toolpath for zigzag surfacing pattern
-  List<List<Point>> _generateSurfacingToolpath(List<Point> contour, Map<String, double> boundingBox) {
+  List<List<CoordinatePointXY>> _generateSurfacingToolpath(List<CoordinatePointXY> contour, Map<String, double> boundingBox) {
     // Get boundary values
     final minX = boundingBox['minX']!;
     final minY = boundingBox['minY']!;
@@ -135,11 +135,11 @@ class GcodeGenerator {
         : (width / stepDistance).ceil() + 1;
     
     // Create toolpaths array
-    final List<List<Point>> toolpaths = [];
+    final List<List<CoordinatePointXY>> toolpaths = [];
     
     // Generate parallel toolpaths
     for (int i = 0; i < numPasses; i++) {
-      List<Point> currentPath = [];
+      List<CoordinatePointXY> currentPath = [];
       
       if (isHorizontal) {
         // Horizontal passes (fixed Y)
@@ -149,7 +149,7 @@ class GcodeGenerator {
         if (y > maxY) continue;
         
         // Generate line segments that intersect with the contour
-        List<Point> intersections = _findLineContourIntersections(
+        List<CoordinatePointXY> intersections = _findLineContourIntersections(
           minX, y, maxX, y, contour
         );
         
@@ -182,7 +182,7 @@ class GcodeGenerator {
         if (x > maxX) continue;
         
         // Generate line segments that intersect with the contour
-        List<Point> intersections = _findLineContourIntersections(
+        List<CoordinatePointXY> intersections = _findLineContourIntersections(
           x, minY, x, maxY, contour
         );
         
@@ -220,15 +220,15 @@ class GcodeGenerator {
   }
 
   /// Find intersections between a line and a contour
-  List<Point> _findLineContourIntersections(
-    double x1, double y1, double x2, double y2, List<Point> contour
+  List<CoordinatePointXY> _findLineContourIntersections(
+    double x1, double y1, double x2, double y2, List<CoordinatePointXY> contour
   ) {
-    final intersections = <Point>[];
+    final intersections = <CoordinatePointXY>[];
     
     // Ensure contour is closed
     if (contour.length < 3) return [];
     
-    List<Point> closedContour = List.from(contour);
+    List<CoordinatePointXY> closedContour = List.from(contour);
     if (closedContour.first.x != closedContour.last.x || 
         closedContour.first.y != closedContour.last.y) {
       closedContour.add(closedContour.first);
@@ -252,7 +252,7 @@ class GcodeGenerator {
   }
 
   /// Calculate the intersection point between two line segments
-  Point? _lineIntersection(
+  CoordinatePointXY? _lineIntersection(
     double x1, double y1, double x2, double y2,
     double x3, double y3, double x4, double y4
   ) {
@@ -270,15 +270,15 @@ class GcodeGenerator {
     if (ua >= 0 && ua <= 1 && ub >= 0 && ub <= 1) {
       double x = x1 + ua * (x2 - x1);
       double y = y1 + ua * (y2 - y1);
-      return Point(x, y);
+      return CoordinatePointXY(x, y);
     }
     
     return null;
   }
   
   /// Find all intersections of a horizontal line with a polygon at a specific y coordinate
-  List<Point> _findIntersectionsAtY(List<Point> polygon, double y) {
-    final intersections = <Point>[];
+  List<CoordinatePointXY> _findIntersectionsAtY(List<CoordinatePointXY> polygon, double y) {
+    final intersections = <CoordinatePointXY>[];
     final double epsilon = 1e-10; // Small value for floating point comparison
     
     for (int i = 0; i < polygon.length - 1; i++) {
@@ -290,8 +290,8 @@ class GcodeGenerator {
         // If the segment is at exactly the y value we're looking for,
         // add both endpoints as intersections
         if ((p1.y - y).abs() < epsilon) {
-          intersections.add(Point(p1.x, y));
-          intersections.add(Point(p2.x, y));
+          intersections.add(CoordinatePointXY(p1.x, y));
+          intersections.add(CoordinatePointXY(p2.x, y));
         }
         continue;
       }
@@ -307,13 +307,13 @@ class GcodeGenerator {
           final x = p1.x + t * (p2.x - p1.x);
           
           // Add the intersection point
-          intersections.add(Point(x, y));
+          intersections.add(CoordinatePointXY(x, y));
         }
       }
     }
     
     // Remove duplicates
-    final uniqueIntersections = <Point>[];
+    final uniqueIntersections = <CoordinatePointXY>[];
     for (var point in intersections) {
       bool isDuplicate = false;
       for (var unique in uniqueIntersections) {
@@ -332,8 +332,8 @@ class GcodeGenerator {
   }
   
   /// Find all intersections of a vertical line with a polygon at a specific x coordinate
-  List<Point> _findIntersectionsAtX(List<Point> polygon, double x) {
-    final intersections = <Point>[];
+  List<CoordinatePointXY> _findIntersectionsAtX(List<CoordinatePointXY> polygon, double x) {
+    final intersections = <CoordinatePointXY>[];
     final double epsilon = 1e-10; // Small value for floating point comparison
     
     for (int i = 0; i < polygon.length - 1; i++) {
@@ -345,8 +345,8 @@ class GcodeGenerator {
         // If the segment is at exactly the x value we're looking for,
         // add both endpoints as intersections
         if ((p1.x - x).abs() < epsilon) {
-          intersections.add(Point(x, p1.y));
-          intersections.add(Point(x, p2.y));
+          intersections.add(CoordinatePointXY(x, p1.y));
+          intersections.add(CoordinatePointXY(x, p2.y));
         }
         continue;
       }
@@ -362,13 +362,13 @@ class GcodeGenerator {
           final y = p1.y + t * (p2.y - p1.y);
           
           // Add the intersection point
-          intersections.add(Point(x, y));
+          intersections.add(CoordinatePointXY(x, y));
         }
       }
     }
     
     // Remove duplicates
-    final uniqueIntersections = <Point>[];
+    final uniqueIntersections = <CoordinatePointXY>[];
     for (var point in intersections) {
       bool isDuplicate = false;
       for (var unique in uniqueIntersections) {
@@ -389,9 +389,9 @@ class GcodeGenerator {
   /// Write surfacing toolpath commands
   void _writeSurfacingToolpath(
   StringBuffer buffer, 
-  List<List<Point>> toolpaths, 
+  List<List<CoordinatePointXY>> toolpaths, 
   Map<String, double> boundingBox,
-  List<Point> contour
+  List<CoordinatePointXY> contour
 ) {
   if (toolpaths.isEmpty) {
     buffer.writeln("(No valid toolpath generated)");
@@ -426,7 +426,7 @@ class GcodeGenerator {
     buffer.writeln("(Depth pass $depthPass of $depthPasses - depth: ${depthString}mm)");
     
     // Process each path
-    Point? lastEndPoint;
+    CoordinatePointXY? lastEndPoint;
     
     for (int i = 0; i < toolpaths.length; i++) {
       final path = toolpaths[i];
@@ -476,7 +476,7 @@ class GcodeGenerator {
 }
 
   /// Write an arc move between two points
-  void _writeArcMove(StringBuffer buffer, Point from, Point to, String depthString) {
+  void _writeArcMove(StringBuffer buffer, CoordinatePointXY from, CoordinatePointXY to, String depthString) {
     // Calculate midpoint for arc center
     final midX = (from.x + to.x) / 2;
     final midY = (from.y + to.y) / 2;
@@ -529,7 +529,7 @@ class GcodeGenerator {
   /// Legacy methods for backward compatibility
 
   /// Generate G-code from a toolpath
-  String generateGcode(List<Point> toolpath) {
+  String generateGcode(List<CoordinatePointXY> toolpath) {
     final buffer = StringBuffer();
     
     _writeHeader(buffer);
@@ -540,7 +540,7 @@ class GcodeGenerator {
   }
 
   /// Write toolpath movements (legacy method)
-  void _writeToolpath(StringBuffer buffer, List<Point> toolpath) {
+  void _writeToolpath(StringBuffer buffer, List<CoordinatePointXY> toolpath) {
     if (toolpath.isEmpty) {
       buffer.writeln("(Warning: Empty toolpath)");
       return;
@@ -562,7 +562,7 @@ class GcodeGenerator {
   }
 
   /// Generate G-code for a contour following operation (legacy method)
-  String generateContourGcode(List<Point> contour) {
+  String generateContourGcode(List<CoordinatePointXY> contour) {
     final buffer = StringBuffer();
     
     _writeHeader(buffer);

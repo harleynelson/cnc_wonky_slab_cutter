@@ -43,7 +43,7 @@ class _GcodeGeneratorScreenState extends State<GcodeGeneratorScreen> {
   
   // Add slabMargin for adjusting the contour size
   double _slabMargin = 50.0; // Default 5mm margin
-  List<Point>? _adjustedContour;
+  List<CoordinatePointXY>? _adjustedContour;
 
   @override
 void initState() {
@@ -106,18 +106,18 @@ void _updateAdjustedContour() {
 }
 
 /// Create a buffered polygon from the original contour using angle bisector method
-List<Point> _createBufferedPolygon(List<Point> originalContour, double distance) {
+List<CoordinatePointXY> _createBufferedPolygon(List<CoordinatePointXY> originalContour, double distance) {
   if (originalContour.length < 3) {
     return originalContour;
   }
   
   // Ensure the contour is closed
-  final contour = List<Point>.from(originalContour);
+  final contour = List<CoordinatePointXY>.from(originalContour);
   if (contour.first.x != contour.last.x || contour.first.y != contour.last.y) {
     contour.add(contour.first);
   }
   
-  final bufferedPoints = <Point>[];
+  final bufferedPoints = <CoordinatePointXY>[];
   final size = contour.length;
   
   // Process each vertex except the last one (which is a duplicate of the first for closed polygon)
@@ -187,7 +187,7 @@ List<Point> _createBufferedPolygon(List<Point> originalContour, double distance)
       newPointY = currY - (currY - pointOfBisectorY) * distance / bisectorDistanceVertex;
     }
     
-    bufferedPoints.add(Point(newPointX, newPointY));
+    bufferedPoints.add(CoordinatePointXY(newPointX, newPointY));
   }
   
   // Close the polygon
@@ -199,7 +199,7 @@ List<Point> _createBufferedPolygon(List<Point> originalContour, double distance)
 }
 
 /// Check if a vertex is convex
-bool _isVertexConvex(List<Point> vertices, int vertexIndex) {
+bool _isVertexConvex(List<CoordinatePointXY> vertices, int vertexIndex) {
   final prev = vertices[(vertexIndex - 1 + vertices.length) % vertices.length];
   final curr = vertices[vertexIndex];
   final next = vertices[(vertexIndex + 1) % vertices.length];
@@ -213,11 +213,11 @@ bool _isVertexConvex(List<Point> vertices, int vertexIndex) {
 }
 
 /// Calculate cross product (z component) for CCW check
-double _crossProduct(Point a, Point b, Point c) {
+double _crossProduct(CoordinatePointXY a, CoordinatePointXY b, CoordinatePointXY c) {
   return (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x);
 }
 
-  double _calculateContourArea(List<Point> contour) {
+  double _calculateContourArea(List<CoordinatePointXY> contour) {
     if (contour.length < 3) return 0;
     
     double area = 0;
@@ -230,7 +230,7 @@ double _crossProduct(Point a, Point b, Point c) {
     return (area.abs() / 2);
   }
 
-  double _estimateMachiningTime(List<Point> contour, SettingsModel settings) {
+  double _estimateMachiningTime(List<CoordinatePointXY> contour, SettingsModel settings) {
     // Approximate toolpath length
     double pathLength = 0;
     for (int i = 0; i < contour.length - 1; i++) {
@@ -1002,12 +1002,12 @@ void _visualizeGcode() {
 
 /// Custom painter for visualizing the adjusted contour
 class AdjustedContourPainter extends CustomPainter {
-  final List<Point> adjustedContour;
+  final List<CoordinatePointXY> adjustedContour;
   final MachineCoordinateSystem coordSystem;
   final Size imageSize;
   final Size displaySize;
   final bool showOriginalContour;
-  final List<Point>? originalContour;
+  final List<CoordinatePointXY>? originalContour;
 
   AdjustedContourPainter({
     required this.adjustedContour,

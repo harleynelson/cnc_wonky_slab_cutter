@@ -9,10 +9,10 @@ import '../../utils/general/machine_coordinates.dart';
 /// Result of slab contour detection
 class SlabContourResult {
   /// Contour in image pixel coordinates
-  final List<Point> pixelContour;
+  final List<CoordinatePointXY> pixelContour;
   
   /// Contour in machine (mm) coordinates
-  final List<Point> machineContour;
+  final List<CoordinatePointXY> machineContour;
   
   /// Optional debug image with visualizations
   final img.Image? debugImage;

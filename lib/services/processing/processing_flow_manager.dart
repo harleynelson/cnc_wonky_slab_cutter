@@ -38,7 +38,7 @@ class ProcessingResult {
   final img.Image? processedImage;
   final MarkerDetectionResult? markerResult;
   final SlabContourResult? contourResult;
-  final List<Point>? toolpath;
+  final List<CoordinatePointXY>? toolpath;
   final String? gcode;
   final File? gcodeFile;
   final String? errorMessage;
@@ -64,7 +64,7 @@ class ProcessingResult {
     img.Image? processedImage,
     MarkerDetectionResult? markerResult,
     SlabContourResult? contourResult,
-    List<Point>? toolpath,
+    List<CoordinatePointXY>? toolpath,
     String? gcode,
     File? gcodeFile,
     String? errorMessage,
@@ -492,7 +492,7 @@ Future<void> generateGcodeWithFilename(String filename) async {
   }
   
   /// Generate a toolpath for the contour
-  List<Point> _generateToolpath(List<Point> contour, double toolDiameter, double stepover) {
+  List<CoordinatePointXY> _generateToolpath(List<CoordinatePointXY> contour, double toolDiameter, double stepover) {
     // Find the bounding box of the contour
     double minX = double.infinity;
     double minY = double.infinity;
@@ -514,17 +514,17 @@ Future<void> generateGcodeWithFilename(String filename) async {
     maxY -= inset;
     
     // Generate zigzag pattern
-    final toolpath = <Point>[];
+    final toolpath = <CoordinatePointXY>[];
     double y = minY;
     bool movingRight = true;
     
     while (y <= maxY) {
       if (movingRight) {
-        toolpath.add(Point(minX, y));
-        toolpath.add(Point(maxX, y));
+        toolpath.add(CoordinatePointXY(minX, y));
+        toolpath.add(CoordinatePointXY(maxX, y));
       } else {
-        toolpath.add(Point(maxX, y));
-        toolpath.add(Point(minX, y));
+        toolpath.add(CoordinatePointXY(maxX, y));
+        toolpath.add(CoordinatePointXY(minX, y));
       }
       
       y += stepover;

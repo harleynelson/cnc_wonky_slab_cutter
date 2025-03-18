@@ -11,8 +11,8 @@ import 'base_image_utils.dart';
 /// Utilities for contour detection and processing
 class ContourDetectionUtils {
   /// Find the outer contour of a binary mask using boundary tracing
-  static List<Point> findOuterContour(List<List<bool>> mask) {
-  var contourPoints = <Point>[];
+  static List<CoordinatePointXY> findOuterContour(List<List<bool>> mask) {
+  var contourPoints = <CoordinatePointXY>[];
   final height = mask.length;
   final width = mask[0].length;
   
@@ -22,7 +22,7 @@ class ContourDetectionUtils {
   final maxGapToFill = 15; // Maximum gap size to attempt to fill
   
   // First find the boundary points - points where true meets false
-  final boundaryPoints = <Point>[];
+  final boundaryPoints = <CoordinatePointXY>[];
   
   for (int y = 0; y < height; y++) {
     for (int x = 0; x < width; x++) {
@@ -47,7 +47,7 @@ class ContourDetectionUtils {
         }
         
         if (isBoundary) {
-          boundaryPoints.add(Point(x.toDouble(), y.toDouble()));
+          boundaryPoints.add(CoordinatePointXY(x.toDouble(), y.toDouble()));
         }
       }
     }
@@ -66,7 +66,7 @@ class ContourDetectionUtils {
   }
   final centerX = sumX / boundaryPoints.length;
   final centerY = sumY / boundaryPoints.length;
-  final center = Point(centerX, centerY);
+  final center = CoordinatePointXY(centerX, centerY);
   
   // Sort boundary points by angle from center
   boundaryPoints.sort((a, b) {
@@ -94,7 +94,7 @@ class ContourDetectionUtils {
         final t = j / steps;
         final interpX = prev.x + (current.x - prev.x) * t;
         final interpY = prev.y + (current.y - prev.y) * t;
-        contourPoints.add(Point(interpX, interpY));
+        contourPoints.add(CoordinatePointXY(interpX, interpY));
       }
     }
     
@@ -116,15 +116,15 @@ class ContourDetectionUtils {
 }
 
 // Helper to calculate distance between points
-static double _distance(Point a, Point b) {
+static double _distance(CoordinatePointXY a, CoordinatePointXY b) {
   final dx = a.x - b.x;
   final dy = a.y - b.y;
   return math.sqrt(dx * dx + dy * dy);
 }
 
 // Create fallback contour
-static List<Point> _createFallbackContour(int width, int height) {
-  final contour = <Point>[];
+static List<CoordinatePointXY> _createFallbackContour(int width, int height) {
+  final contour = <CoordinatePointXY>[];
   final centerX = width / 2;
   final centerY = height / 2;
   final radius = math.min(width, height) * 0.3;
@@ -133,7 +133,7 @@ static List<Point> _createFallbackContour(int width, int height) {
     final angle = i * math.pi / 18; // 10 degrees in radians
     final x = centerX + radius * math.cos(angle);
     final y = centerY + radius * math.sin(angle);
-    contour.add(Point(x, y));
+    contour.add(CoordinatePointXY(x, y));
   }
   
   return contour;
@@ -158,7 +158,7 @@ static List<Point> _createFallbackContour(int width, int height) {
   }
 
   /// Find contour using ray casting with edge-based re-seeding for complex shapes
-static List<Point> findContourByRayCasting(
+static List<CoordinatePointXY> findContourByRayCasting(
   img.Image binaryImage, 
   int seedX, 
   int seedY,
@@ -190,10 +190,10 @@ static List<Point> findContourByRayCasting(
   );
   
   // Apply initial filtering to remove obvious outliers
-  contourPoints = _rejectDistanceOutliers(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
+  contourPoints = _rejectDistanceOutliers(contourPoints, CoordinatePointXY(seedX.toDouble(), seedY.toDouble()));
   
   // Sort by angle for consistent ordering
-  sortPointsByAngle(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
+  sortPointsByAngle(contourPoints, CoordinatePointXY(seedX.toDouble(), seedY.toDouble()));
   
   // PHASE 2: Identify areas needing additional ray casting
   if (enableReseeding && contourPoints.length >= 10) {
@@ -230,10 +230,10 @@ static List<Point> findContourByRayCasting(
     
     // PHASE 3: Perform additional ray casting from strategic points
     if (limitedReseedPoints.isNotEmpty) {
-      final newPoints = <Point>[];
+      final newPoints = <CoordinatePointXY>[];
       
       for (final reseedData in limitedReseedPoints) {
-        final reseedPoint = reseedData['point'] as Point;
+        final reseedPoint = reseedData['point'] as CoordinatePointXY;
         
         // Calculate direction for reseeding based on reason
         int reseedX = reseedPoint.x.round();
@@ -260,9 +260,9 @@ static List<Point> findContourByRayCasting(
       contourPoints.addAll(newPoints);
       
       // Filter and sort the combined points
-      contourPoints = _rejectDistanceOutliers(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
+      contourPoints = _rejectDistanceOutliers(contourPoints, CoordinatePointXY(seedX.toDouble(), seedY.toDouble()));
       contourPoints = _enforceNeighborhoodConsistency(contourPoints);
-      sortPointsByAngle(contourPoints, Point(seedX.toDouble(), seedY.toDouble()));
+      sortPointsByAngle(contourPoints, CoordinatePointXY(seedX.toDouble(), seedY.toDouble()));
     }
   }
   
@@ -280,7 +280,7 @@ static bool isPixelInBounds(img.Image image, int x, int y) {
 }
 
 /// Cast rays from a specific point with improved bounds checking
-static List<Point> _castRaysFromPoint(
+static List<CoordinatePointXY> _castRaysFromPoint(
   img.Image binaryImage,
   int seedX,
   int seedY,
@@ -292,7 +292,7 @@ static List<Point> _castRaysFromPoint(
   final width = binaryImage.width;
   final height = binaryImage.height;
   final visited = Set<String>();
-  final Map<double, Point> farthestEdgePoints = {};
+  final Map<double, CoordinatePointXY> farthestEdgePoints = {};
   
   // Cast rays in all directions
   for (double angle = 0; angle < 360; angle += angularStep) {
@@ -307,10 +307,10 @@ static List<Point> _castRaysFromPoint(
     // Tracking variables
     int gapSize = 0;
     bool foundEdge = false;
-    Point? lastEdgePoint;
+    CoordinatePointXY? lastEdgePoint;
     double lastEdgeDistance = 0;
     double currentDistance = 0;
-    List<Point> edgePointsOnRay = [];
+    List<CoordinatePointXY> edgePointsOnRay = [];
     
     // Cast ray until we hit the image boundary
     while (x >= 0 && x < width && y >= 0 && y < height) {
@@ -337,7 +337,7 @@ static List<Point> _castRaysFromPoint(
             final isEdge = luminance > 128;
             
             if (isEdge) {
-              lastEdgePoint = Point(x, y);
+              lastEdgePoint = CoordinatePointXY(x, y);
               lastEdgeDistance = currentDistance;
               edgePointsOnRay.add(lastEdgePoint);
               gapSize = 0;
@@ -367,7 +367,7 @@ static List<Point> _castRaysFromPoint(
     
     // Process edge points on this ray
     if (edgePointsOnRay.isNotEmpty) {
-      Point farthestPoint = edgePointsOnRay.first;
+      CoordinatePointXY farthestPoint = edgePointsOnRay.first;
       double maxDistance = _distanceFromSeed(farthestPoint, seedX, seedY);
       
       for (int i = 1; i < edgePointsOnRay.length; i++) {
@@ -391,7 +391,7 @@ static List<Point> _castRaysFromPoint(
 }
 
 /// Cast rays from an edge point, primarily looking outward
-static List<Point> _castRaysFromEdge(
+static List<CoordinatePointXY> _castRaysFromEdge(
   img.Image binaryImage,
   int edgeX,
   int edgeY,
@@ -405,7 +405,7 @@ static List<Point> _castRaysFromEdge(
   final width = binaryImage.width;
   final height = binaryImage.height;
   final visited = Set<String>();
-  final Map<double, Point> edgePoints = {};
+  final Map<double, CoordinatePointXY> edgePoints = {};
   
   // Calculate vector from original seed to edge point
   final seedToEdgeX = edgeX - originalSeedX;
@@ -427,10 +427,10 @@ static List<Point> _castRaysFromEdge(
     // Similar tracking variables as the main ray casting
     int gapSize = 0;
     bool foundEdge = false;
-    Point? lastEdgePoint;
+    CoordinatePointXY? lastEdgePoint;
     double lastEdgeDistance = 0;
     double currentDistance = 0;
-    List<Point> edgePointsOnRay = [];
+    List<CoordinatePointXY> edgePointsOnRay = [];
     
     // First move a bit in the ray direction to avoid detecting the starting edge
     x += dirX * 3;
@@ -454,7 +454,7 @@ static List<Point> _castRaysFromEdge(
         final isEdge = luminance > 128;
         
         if (isEdge) {
-          lastEdgePoint = Point(x, y);
+          lastEdgePoint = CoordinatePointXY(x, y);
           lastEdgeDistance = currentDistance;
           edgePointsOnRay.add(lastEdgePoint);
           gapSize = 0;
@@ -476,7 +476,7 @@ static List<Point> _castRaysFromEdge(
     
     // Similar processing as main ray casting
     if (edgePointsOnRay.isNotEmpty) {
-      Point bestPoint = edgePointsOnRay.first;
+      CoordinatePointXY bestPoint = edgePointsOnRay.first;
       
       // For edge reseeding, prefer points that form good continuations of the contour
       for (int i = 1; i < edgePointsOnRay.length; i++) {
@@ -509,7 +509,7 @@ static int getLuminance(img.Image image, int x, int y) {
 }
 
 /// Calculate the angle change (in degrees) at a point on the contour
-static double _calculateAngleChange(Point p1, Point p2, Point p3) {
+static double _calculateAngleChange(CoordinatePointXY p1, CoordinatePointXY p2, CoordinatePointXY p3) {
   // Calculate vectors
   final v1x = p1.x - p2.x;
   final v1y = p1.y - p2.y;
@@ -532,8 +532,8 @@ static double _calculateAngleChange(Point p1, Point p2, Point p3) {
 }
 
 /// Calculate average of points (centroid)
-static Point _calculateAveragePoint(List<Point> points) {
-  if (points.isEmpty) return Point(0, 0);
+static CoordinatePointXY _calculateAveragePoint(List<CoordinatePointXY> points) {
+  if (points.isEmpty) return CoordinatePointXY(0, 0);
   
   double sumX = 0;
   double sumY = 0;
@@ -543,11 +543,11 @@ static Point _calculateAveragePoint(List<Point> points) {
     sumY += point.y;
   }
   
-  return Point(sumX / points.length, sumY / points.length);
+  return CoordinatePointXY(sumX / points.length, sumY / points.length);
 }
 
 /// Reject outlier points based on distance from center
-static List<Point> _rejectDistanceOutliers(List<Point> points, Point center) {
+static List<CoordinatePointXY> _rejectDistanceOutliers(List<CoordinatePointXY> points, CoordinatePointXY center) {
   if (points.length < 5) return points;
   
   // Calculate distances from center for all points
@@ -564,7 +564,7 @@ static List<Point> _rejectDistanceOutliers(List<Point> points, Point center) {
   final upperBound = q3 + 1.5 * iqr;
   
   // Filter points based on distance bounds
-  final result = <Point>[];
+  final result = <CoordinatePointXY>[];
   for (int i = 0; i < points.length; i++) {
     final distance = _distanceFromSeed(points[i], center.x.toInt(), center.y.toInt());
     if (distance <= upperBound) {
@@ -577,16 +577,16 @@ static List<Point> _rejectDistanceOutliers(List<Point> points, Point center) {
 
 
 /// Enforce neighborhood consistency by removing isolated points
-static List<Point> _enforceNeighborhoodConsistency(List<Point> points) {
+static List<CoordinatePointXY> _enforceNeighborhoodConsistency(List<CoordinatePointXY> points) {
   if (points.length < 5) return points;
   
   // Sort points by angle so neighbors in the list are neighbors in polar space
   final center = _calculateAveragePoint(points);
-  final sorted = List<Point>.from(points);
+  final sorted = List<CoordinatePointXY>.from(points);
   sortPointsByAngle(sorted, center);
   
   final maxGapAllowed = _calculateAverageEdgeDistance(sorted) * 3;
-  final result = <Point>[];
+  final result = <CoordinatePointXY>[];
   
   for (int i = 0; i < sorted.length; i++) {
     final prev = sorted[(i - 1 + sorted.length) % sorted.length];
@@ -607,7 +607,7 @@ static List<Point> _enforceNeighborhoodConsistency(List<Point> points) {
 }
 
 /// Calculate average edge distance between consecutive points
-static double _calculateAverageEdgeDistance(List<Point> points) {
+static double _calculateAverageEdgeDistance(List<CoordinatePointXY> points) {
   if (points.length < 2) return 0.0;
   
   double totalDistance = 0.0;
@@ -641,14 +641,14 @@ static double _calculateAverageEdgeDistance(List<Point> points) {
 // }
 
 // Add helper method to calculate distance from seed
-static double _distanceFromSeed(Point point, int seedX, int seedY) {
+static double _distanceFromSeed(CoordinatePointXY point, int seedX, int seedY) {
   final dx = point.x - seedX;
   final dy = point.y - seedY;
   return math.sqrt(dx * dx + dy * dy);
 }
 
 // Add helper method to calculate contour area
-static double _calculateArea(List<Point> points) {
+static double _calculateArea(List<CoordinatePointXY> points) {
   if (points.length < 3) return 0.0;
   
   double area = 0.0;
@@ -662,7 +662,7 @@ static double _calculateArea(List<Point> points) {
 }
 
 /// Create a fallback contour around a seed point
-static List<Point> createFallbackContour(
+static List<CoordinatePointXY> createFallbackContour(
   int width, 
   int height, 
   [int? seedX, int? seedY]  // Optional parameters with default values
@@ -671,7 +671,7 @@ static List<Point> createFallbackContour(
   final centerX = seedX ?? (width / 2).round();
   final centerY = seedY ?? (height / 2).round();
   
-  final contour = <Point>[];
+  final contour = <CoordinatePointXY>[];
   final radius = math.min(width, height) * 0.3;
   
   // Create a circular contour around the seed point
@@ -679,14 +679,14 @@ static List<Point> createFallbackContour(
     final radians = angle * math.pi / 180;
     final x = centerX + radius * math.cos(radians);
     final y = centerY + radius * math.sin(radians);
-    contour.add(Point(x, y));
+    contour.add(CoordinatePointXY(x, y));
   }
   
   return contour;
 }
 
 /// Sort points by angle around center
-static void sortPointsByAngle(List<Point> points, Point center) {
+static void sortPointsByAngle(List<CoordinatePointXY> points, CoordinatePointXY center) {
   points.sort((a, b) {
     final angleA = math.atan2(a.y - center.y, a.x - center.x);
     final angleB = math.atan2(b.y - center.y, b.x - center.x);
@@ -726,7 +726,7 @@ static void sortPointsByAngle(List<Point> points, Point center) {
   }
 
   /// Detect potential corners in a contour
-static List<int> detectCorners(List<Point> contour) {
+static List<int> detectCorners(List<CoordinatePointXY> contour) {
   if (contour.length < 4) return [];
   
   final corners = <int>[];
@@ -926,8 +926,8 @@ static List<int> detectCorners(List<Point> contour) {
   }
 
   /// Smooth and simplify a contour with corner preservation
-static List<Point> smoothAndSimplifyContour(
-  List<Point> contour, 
+static List<CoordinatePointXY> smoothAndSimplifyContour(
+  List<CoordinatePointXY> contour, 
   double epsilon, 
   {int windowSize = 5, double sigma = 1.0, bool preserveCorners = true}
 ) {
@@ -941,10 +941,10 @@ static List<Point> smoothAndSimplifyContour(
 }
 
 /// Smooth contour using Gaussian smoothing
-static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, double sigma = 1.0}) {
+static List<CoordinatePointXY> smoothContour(List<CoordinatePointXY> contour, {int windowSize = 5, double sigma = 1.0}) {
   if (contour.length <= 3) return contour;
   
-  final result = <Point>[];
+  final result = <CoordinatePointXY>[];
   final halfWindow = windowSize ~/ 2;
   
   // Generate Gaussian kernel
@@ -975,19 +975,19 @@ static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, doubl
       sumY += contour[idx].y * weight;
     }
     
-    result.add(Point(sumX, sumY));
+    result.add(CoordinatePointXY(sumX, sumY));
   }
   
   return result;
 }
   
   /// Find connected components in a binary image
-  static List<List<Point>> findConnectedComponents(img.Image binaryImage, {
+  static List<List<CoordinatePointXY>> findConnectedComponents(img.Image binaryImage, {
     int minSize = 20,
     int maxSize = 100000,
     int maxDepth = 1000,
   }) {
-    final List<List<Point>> components = [];
+    final List<List<CoordinatePointXY>> components = [];
     final width = binaryImage.width;
     final height = binaryImage.height;
     
@@ -1008,7 +1008,7 @@ static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, doubl
         ) < 128; // Object is dark in binary image
         
         if (isObject) {
-          final List<Point> component = [];
+          final List<CoordinatePointXY> component = [];
           _floodFill(binaryImage, x, y, visited, component, maxDepth);
           
           // Filter by size
@@ -1025,7 +1025,7 @@ static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, doubl
   }
   
   /// Find the largest contour in a binary image
-  static List<Point> findLargestContour(img.Image binary) {
+  static List<CoordinatePointXY> findLargestContour(img.Image binary) {
     final blobs = findConnectedComponents(binary);
     
     // If no blobs found, return empty list
@@ -1045,7 +1045,7 @@ static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, doubl
     }
     
     // Extract the largest blob
-    final List<Point> largestBlob = blobs[largestBlobIndex];
+    final List<CoordinatePointXY> largestBlob = blobs[largestBlobIndex];
     
     // If we have enough points, compute the convex hull
     if (largestBlob.length >= 3) {
@@ -1061,7 +1061,7 @@ static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, doubl
     int x,
     int y,
     List<List<bool>> visited,
-    List<Point> component,
+    List<CoordinatePointXY> component,
     int maxDepth,
     {int depth = 0}
   ) {
@@ -1083,7 +1083,7 @@ static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, doubl
     }
     
     visited[y][x] = true;
-    component.add(Point(x.toDouble(), y.toDouble()));
+    component.add(CoordinatePointXY(x.toDouble(), y.toDouble()));
     
     // Check 4-connected neighbors
     _floodFill(image, x + 1, y, visited, component, maxDepth, depth: depth + 1);
@@ -1093,7 +1093,7 @@ static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, doubl
   }
   
   /// Check if a contour is self-intersecting
-  static bool isContourSelfIntersecting(List<Point> contour) {
+  static bool isContourSelfIntersecting(List<CoordinatePointXY> contour) {
     if (contour.length < 4) return false;
     
     // Check each pair of non-adjacent line segments for intersection
@@ -1118,7 +1118,7 @@ static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, doubl
   }
 
   /// Ensure we have a clean outer contour without internal details
-  static List<Point> ensureCleanOuterContour(List<Point> contour) {
+  static List<CoordinatePointXY> ensureCleanOuterContour(List<CoordinatePointXY> contour) {
     // If the contour is too small or invalid, return as is
     if (contour.length < 10) {
       return contour;
@@ -1126,7 +1126,7 @@ static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, doubl
     
     try {
       // 1. Make sure the contour is closed
-      List<Point> workingContour = List.from(contour);
+      List<CoordinatePointXY> workingContour = List.from(contour);
       if (workingContour.first.x != workingContour.last.x || 
           workingContour.first.y != workingContour.last.y) {
         workingContour.add(workingContour.first);
@@ -1135,7 +1135,7 @@ static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, doubl
       // 2. Check if the contour is self-intersecting
       if (isContourSelfIntersecting(workingContour)) {
         // If self-intersecting, compute convex hull instead
-        final points = List<Point>.from(workingContour);
+        final points = List<CoordinatePointXY>.from(workingContour);
         return GeometryUtils.convexHull(points);
       }
       
@@ -1153,10 +1153,10 @@ static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, doubl
   }
 
   /// Simplify deep concavities in the contour
-  static List<Point> simplifyDeepConcavities(List<Point> contour, [double thresholdRatio = 0.2]) {
+  static List<CoordinatePointXY> simplifyDeepConcavities(List<CoordinatePointXY> contour, [double thresholdRatio = 0.2]) {
     if (contour.length < 4) return contour;
     
-    final result = <Point>[];
+    final result = <CoordinatePointXY>[];
     
     // Calculate perimeter
     double perimeter = GeometryUtils.polygonPerimeter(contour);
@@ -1193,12 +1193,12 @@ static List<Point> smoothContour(List<Point> contour, {int windowSize = 5, doubl
   }
 
   /// Clip a toolpath to ensure it stays within the contour
-  static List<Point> clipToolpathToContour(List<Point> toolpath, List<Point> contour) {
+  static List<CoordinatePointXY> clipToolpathToContour(List<CoordinatePointXY> toolpath, List<CoordinatePointXY> contour) {
     if (toolpath.isEmpty || contour.length < 3) {
       return toolpath;
     }
     
-    final result = <Point>[];
+    final result = <CoordinatePointXY>[];
     
     // For each segment in the toolpath
     for (int i = 0; i < toolpath.length - 1; i++) {

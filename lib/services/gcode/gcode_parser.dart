@@ -7,10 +7,10 @@ import 'dart:math' as math;
 class GcodeParser {
   /// Parse G-code content into a list of toolpaths (points)
   /// Each toolpath represents a cutting layer or section
-  List<List<Point>> parseGcode(String gcodeContent) {
-  final List<List<Point>> toolpaths = [];
-  final List<Point> traversePaths = []; // For rapid positioning moves
-  List<Point> currentPath = [];
+  List<List<CoordinatePointXY>> parseGcode(String gcodeContent) {
+  final List<List<CoordinatePointXY>> toolpaths = [];
+  final List<CoordinatePointXY> traversePaths = []; // For rapid positioning moves
+  List<CoordinatePointXY> currentPath = [];
   
   // Split G-code into lines
   final lines = gcodeContent.split('\n');
@@ -60,7 +60,7 @@ class GcodeParser {
       if ((coords['X'] != null || coords['Y'] != null) && 
           currentX != null && currentY != null && 
           currentZ != null && currentZ >= 0) { // Only above the surface
-        traversePaths.add(Point(currentX, currentY));
+        traversePaths.add(CoordinatePointXY(currentX, currentY));
       }
     } else if (command == 'G1' || command == 'G01') {
       isRapid = false;
@@ -81,10 +81,10 @@ class GcodeParser {
       // Add the point to our path if we have X and Y
       if (currentX != null && currentY != null) {
         if (inCuttingMove) {
-          currentPath.add(Point(currentX, currentY));
+          currentPath.add(CoordinatePointXY(currentX, currentY));
         } else {
           // This is a non-cutting move (e.g., positioning)
-          traversePaths.add(Point(currentX, currentY));
+          traversePaths.add(CoordinatePointXY(currentX, currentY));
         }
       }
     }
@@ -136,7 +136,7 @@ class GcodeParser {
   
   /// Interpolate points along an arc
   void _interpolateArc(
-    List<Point> path,
+    List<CoordinatePointXY> path,
     double startX, double startY,
     double endX, double endY,
     double centerX, double centerY,
@@ -164,7 +164,7 @@ class GcodeParser {
       final angle = startAngle + i * angleIncrement;
       final x = centerX + radius * math.cos(angle);
       final y = centerY + radius * math.sin(angle);
-      path.add(Point(x, y));
+      path.add(CoordinatePointXY(x, y));
     }
   }
 }

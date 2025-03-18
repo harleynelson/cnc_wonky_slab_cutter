@@ -13,8 +13,8 @@ import '../services/gcode/gcode_parser.dart';
 class GcodeVisualizationScreen extends StatefulWidget {
   final File imageFile;
   final String gcodePath;
-  final List<Point> contourPoints;
-  final List<Point>? toolpath;
+  final List<CoordinatePointXY> contourPoints;
+  final List<CoordinatePointXY>? toolpath;
   final MachineCoordinateSystem coordSystem;
   final SettingsModel settings;
 
@@ -33,7 +33,7 @@ class GcodeVisualizationScreen extends StatefulWidget {
 }
 
 class _GcodeVisualizationScreenState extends State<GcodeVisualizationScreen> {
-  List<List<Point>> _toolpaths = [];
+  List<List<CoordinatePointXY>> _toolpaths = [];
   bool _isLoading = true;
   String _errorMessage = '';
   bool _showContour = true;
@@ -369,7 +369,7 @@ class _GcodeVisualizationScreenState extends State<GcodeVisualizationScreen> {
 }
 
 class ContourPainter extends CustomPainter {
-  final List<Point> contour;
+  final List<CoordinatePointXY> contour;
   final Size imageSize;
   final MachineCoordinateSystem coordSystem;
   final Color color;
@@ -440,7 +440,7 @@ class ContourPainter extends CustomPainter {
 }
 
 class ToolpathPainter extends CustomPainter {
-  final List<List<Point>> toolpaths;
+  final List<List<CoordinatePointXY>> toolpaths;
   final Size imageSize;
   final MachineCoordinateSystem coordSystem;
   final SettingsModel settings;
@@ -474,7 +474,7 @@ class ToolpathPainter extends CustomPainter {
       ..style = PaintingStyle.fill;
     
     // Draw the machine origin for reference
-    final originPixel = coordSystem.machineToPixelCoords(Point(0, 0));
+    final originPixel = coordSystem.machineToPixelCoords(CoordinatePointXY(0, 0));
     final originDisplay = MachineCoordinateSystem.imageToDisplayCoordinates(
       originPixel, imageSize, size);
     
@@ -515,8 +515,8 @@ class ToolpathPainter extends CustomPainter {
       
       if (traversePath.length > 1) {
         for (int i = 0; i < traversePath.length - 1; i++) {
-          final Point p1 = traversePath[i];
-          final Point p2 = traversePath[i + 1];
+          final CoordinatePointXY p1 = traversePath[i];
+          final CoordinatePointXY p2 = traversePath[i + 1];
           
           // Convert to display coordinates
           final p1Pixel = coordSystem.machineToPixelCoords(p1);
@@ -646,7 +646,7 @@ class ToolpathPainter extends CustomPainter {
     }
   }
 
-  double _distance(Point a, Point b) {
+  double _distance(CoordinatePointXY a, CoordinatePointXY b) {
     final dx = a.x - b.x;
     final dy = a.y - b.y;
     return (dx * dx + dy * dy).toDouble();

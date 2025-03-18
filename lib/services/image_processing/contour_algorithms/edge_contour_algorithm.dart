@@ -99,7 +99,7 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
     );
     
     // 5. Apply convex hull only if specified AND if there are no sharp corners
-    List<Point> processedContour = contourPoints;
+    List<CoordinatePointXY> processedContour = contourPoints;
     if (useConvexHull && contourPoints.length >= 3) {
       // Check for sharp corners before applying convex hull
       final corners = ContourDetectionUtils.detectCorners(contourPoints);
@@ -153,7 +153,7 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
    int seedY
  ) {
    // Create a rectangular or circular contour around the seed point
-   final List<Point> contour = [];
+   final List<CoordinatePointXY> contour = [];
    
    // Determine size based on image dimensions, centered around seed point
    final width = image.width;
@@ -170,7 +170,7 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
    
    // Top edge with rounded corners
    for (double x = left + cornerRadius; x <= right - cornerRadius; x += 5) {
-     contour.add(Point(x, top));
+     contour.add(CoordinatePointXY(x, top));
    }
    
    // Top-right corner
@@ -178,12 +178,12 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
      final rads = angle * math.pi / 180;
      final x = right - cornerRadius + cornerRadius * math.cos(rads);
      final y = top + cornerRadius + cornerRadius * math.sin(rads);
-     contour.add(Point(x, y));
+     contour.add(CoordinatePointXY(x, y));
    }
    
    // Right edge
    for (double y = top + cornerRadius; y <= bottom - cornerRadius; y += 5) {
-     contour.add(Point(right, y));
+     contour.add(CoordinatePointXY(right, y));
    }
    
    // Bottom-right corner
@@ -191,12 +191,12 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
      final rads = angle * math.pi / 180;
      final x = right - cornerRadius + cornerRadius * math.cos(rads);
      final y = bottom - cornerRadius + cornerRadius * math.sin(rads);
-     contour.add(Point(x, y));
+     contour.add(CoordinatePointXY(x, y));
    }
    
    // Bottom edge
    for (double x = right - cornerRadius; x >= left + cornerRadius; x -= 5) {
-     contour.add(Point(x, bottom));
+     contour.add(CoordinatePointXY(x, bottom));
    }
    
    // Bottom-left corner
@@ -204,12 +204,12 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
      final rads = angle * math.pi / 180;
      final x = left + cornerRadius + cornerRadius * math.cos(rads);
      final y = bottom - cornerRadius + cornerRadius * math.sin(rads);
-     contour.add(Point(x, y));
+     contour.add(CoordinatePointXY(x, y));
    }
    
    // Left edge
    for (double y = bottom - cornerRadius; y >= top + cornerRadius; y -= 5) {
-     contour.add(Point(left, y));
+     contour.add(CoordinatePointXY(left, y));
    }
    
    // Top-left corner
@@ -217,7 +217,7 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
      final rads = angle * math.pi / 180;
      final x = left + cornerRadius + cornerRadius * math.cos(rads);
      final y = top + cornerRadius + cornerRadius * math.sin(rads);
-     contour.add(Point(x, y));
+     contour.add(CoordinatePointXY(x, y));
    }
    
    // Close the contour
