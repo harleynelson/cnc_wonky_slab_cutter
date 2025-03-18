@@ -3,10 +3,7 @@ gcode generation
     - Have some sort of option to strictly stay within confines of slab + margin OR create efficient box
         - Let's say we have a U shaped piece of wood, it would be less efficient to have to go all the way up and back down it
             - we should cross the gap
-    - Stepover calculation based on tool diameter
-    - Checkmark Option for: Return to home position at the end
-    - Depth passes can be an int
-    - the popups at the bottom hide our buttons, can we move it to the middle?
+    - Stepover calculation based on tool diameter ( we've sorta got this.  We should probably default it to something like 40% of tool width and update the estimated completion time accordingly)
 
 gcode visualization
     - appears to be on a slope even though gcode is horizontal

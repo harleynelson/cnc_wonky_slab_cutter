@@ -115,9 +115,9 @@ lib/
 
 1. Start the app and grant required permissions
 2. Place three reference markers on your workspace:
-   - Origin marker (bottom left) - Red
-   - X-axis marker (bottom right) - Green
-   - Scale/Y-axis marker (top left) - Blue
+   - Origin marker (bottom left)
+   - X-axis marker (bottom right)
+   - Y-axis marker (top left)
 3. Place your slab between the markers
 4. Capture an image using the camera or select a file
 5. The app will detect the reference markers
@@ -143,7 +143,7 @@ lib/
 - The web version has limited functionality due to browser restrictions
 - Large images (>10MB) may cause performance issues on older devices
 - Camera calibration is currently simplified and may need manual adjustment
-- Edge detection can struggle with low-contrast materials
+- Edge detection can struggle with low-contrast materials (especially wood on mdf spillboard, which is basically every cnc ever)
 
 ## To-Do
 

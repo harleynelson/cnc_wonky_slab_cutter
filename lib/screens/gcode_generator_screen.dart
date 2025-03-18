@@ -114,11 +114,12 @@ void _updateAdjustedContour() {
       _adjustedContour = _createBufferedPolygon(originalContour, _slabMargin);
     }
     
-    // Mark cache as dirty when contour changes
+    // Recalculate area and time based on adjusted contour
     _statsCacheDirty = true;
     _calculateStats();
   }
 }
+
 // 4. Memory management
 @override
 void dispose() {
@@ -534,7 +535,7 @@ Widget build(BuildContext context) {
                 SizedBox(height: 16),
                 _buildPathSettings(),
                 SizedBox(height: 16),
-                _buildMachineSettingsCard(),
+                _buildMarkerSettingsCard(),
                 SizedBox(height: 16),
                 _buildToolSettingsCard(),
                 SizedBox(height: 16),
@@ -879,37 +880,45 @@ Widget _buildActionButtons() {
     );
   }
 
-  Widget _buildMachineSettingsCard() {
-    return Card(
-      child: Padding(
-        padding: EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Machine Settings',
-              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-            ),
-            Divider(),
-            SettingsTextField(
-              label: 'CNC Work Area Width (mm)',
-              value: _settings.cncWidth,
-              onChanged: (value) => setState(() => _settings.cncWidth = value),
-              icon: Icons.width_normal,
-              isInteger: true, // Set this to true for integer-only display
-            ),
-            SettingsTextField(
-              label: 'CNC Work Area Height (mm)',
-              value: _settings.cncHeight,
-              onChanged: (value) => setState(() => _settings.cncHeight = value),
-              icon: Icons.height,
-              isInteger: true, // Set this to true for integer-only display
-            ),
-          ],
-        ),
+  Widget _buildMarkerSettingsCard() {
+  return Card(
+    child: Padding(
+      padding: EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Marker Settings',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          Divider(),
+          SettingsTextField(
+            label: 'X-Axis Marker Distance (mm)',
+            value: _settings.markerXDistance,
+            onChanged: (value) => setState(() {
+              _settings.markerXDistance = value;
+              _statsCacheDirty = true; // Mark stats as dirty since coordinate system changes
+              _updateAdjustedContour(); // Update contour with new marker settings
+            }),
+            icon: Icons.arrow_right_alt,
+            helperText: 'Real-world distance between Origin and X-Axis markers',
+          ),
+          SettingsTextField(
+            label: 'Y-Axis Marker Distance (mm)',
+            value: _settings.markerYDistance,
+            onChanged: (value) => setState(() {
+              _settings.markerYDistance = value;
+              _statsCacheDirty = true; // Mark stats as dirty since coordinate system changes
+              _updateAdjustedContour(); // Update contour with new marker settings
+            }),
+            icon: Icons.arrow_upward,
+            helperText: 'Real-world distance between Origin and Y-Axis/Scale markers',
+          ),
+        ],
       ),
-    );
-  }
+    ),
+  );
+}
 
   Widget _buildToolSettingsCard() {
   return Card(
@@ -1023,21 +1032,15 @@ void _visualizeGcode() {
   // Get the contour and coordinate system
   final contour = _adjustedContour ?? flowManager.result.contourResult!.machineContour;
   
-  // Create the coordinate system using the marker detection results
+  // Create the coordinate system using the marker detection results AND marker settings
   final markerResult = flowManager.result.markerResult!;
   final coordSystem = MachineCoordinateSystem.fromMarkerPointsWithDistances(
     markerResult.markers[0].toPoint(),
     markerResult.markers[1].toPoint(),
     markerResult.markers[2].toPoint(),
-    _settings.markerXDistance,
-    _settings.markerYDistance
+    _settings.markerXDistance, // Using marker settings for X distance
+    _settings.markerYDistance  // Using marker settings for Y distance
   );
-  
-  // Print debug info
-  print("Visualizing G-code with contour of ${contour.length} points");
-  print("Original image: ${flowManager.result.originalImage!.path}");
-  print("G-code path: $_gcodePath");
-  print("Marker points: ${markerResult.markers.map((m) => '(${m.x},${m.y})')}");
   
   // Navigate to visualization screen
   Navigator.push(
