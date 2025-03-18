@@ -2,14 +2,16 @@
 // Utility functions for correcting image perspective based on markers
 
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'package:image/image.dart' as img;
+import 'package:opencv_dart/opencv.dart' as cv;
 import '../general/machine_coordinates.dart';
 import '../../services/detection/marker_detector.dart';
 import 'image_utils.dart';
 
 /// Utilities for image perspective correction
 class ImageCorrectionUtils {
-  /// Correct perspective distortion of an image based on marker positions
+/// Correct perspective distortion using OpenCV's findHomography and warpPerspective
 static Future<img.Image> correctPerspective(
   img.Image sourceImage,
   Point originMarker,
@@ -22,120 +24,52 @@ static Future<img.Image> correctPerspective(
   print('MARKER DEBUG: X-Axis (${xAxisMarker.x.round()}, ${xAxisMarker.y.round()})');
   print('MARKER DEBUG: Y-Axis (${scaleMarker.x.round()}, ${scaleMarker.y.round()})');
   
-  // IMPORTANT: In image coordinates, y=0 is at the TOP of the image
-  // This means the "top" of our markers is actually at LOWER y values
-  
-  // Calculate the vectors between markers
-  final double baseVectorX = xAxisMarker.x - originMarker.x;
-  final double baseVectorY = xAxisMarker.y - originMarker.y;
-  final double sideVectorX = scaleMarker.x - originMarker.x;
-  final double sideVectorY = scaleMarker.y - originMarker.y;
-  
-  // Calculate lengths of sides
-  final double baseLength = math.sqrt(baseVectorX * baseVectorX + baseVectorY * baseVectorY);
-  final double sideLength = math.sqrt(sideVectorX * sideVectorX + sideVectorY * sideVectorY);
-  
-  // Calculate the top-right corner from our three markers
-  // It's important to note that in image coordinates, the "top" of our trapezoid
-  // has SMALLER y values than the bottom
-  final Point topRightCorner = Point(
-    xAxisMarker.x + sideVectorX,
-    xAxisMarker.y + sideVectorY
+  // Calculate top-right corner from our three markers
+  final topRightCorner = Point(
+    xAxisMarker.x + (scaleMarker.x - originMarker.x),
+    xAxisMarker.y + (scaleMarker.y - originMarker.y)
   );
   
-  // Calculate lengths of the top edge
-  final double topEdgeX = topRightCorner.x - scaleMarker.x;
-  final double topEdgeY = topRightCorner.y - scaleMarker.y;
-  final double topLength = math.sqrt(topEdgeX * topEdgeX + topEdgeY * topEdgeY);
-  
-  print('DEBUG: Base length: $baseLength, Side length: $sideLength, Top length: $topLength');
-  
-  // The extension factor for the bottom edge (making it wider)
-  final double bottomExtensionFactor = 1.5; // Adjust as needed
-  
-  // Original corners of the quadrilateral in the source image
-  final List<Point> sourcePts = [
-    originMarker,       // Bottom-left
-    xAxisMarker,        // Bottom-right
-    topRightCorner,     // Top-right
-    scaleMarker,        // Top-left
+  // Create arrays for source and destination points
+  final srcPoints = [
+    (originMarker.x.toDouble(), originMarker.y.toDouble()),       // Bottom-left
+    (xAxisMarker.x.toDouble(), xAxisMarker.y.toDouble()),         // Bottom-right
+    (topRightCorner.x.toDouble(), topRightCorner.y.toDouble()),   // Top-right
+    (scaleMarker.x.toDouble(), scaleMarker.y.toDouble()),         // Top-left
   ];
   
-  // Calculate the bottom edge midpoint
-  final double bottomMidX = (originMarker.x + xAxisMarker.x) / 2;
-  final double bottomMidY = (originMarker.y + xAxisMarker.y) / 2;
+  // Determine output size based on real-world distances
+  final outputWidth = markerXDistance.toInt();
+  final outputHeight = markerYDistance.toInt();
   
-  // Calculate the extension amount for bottom edge
-  final double extensionAmount = (baseLength * (bottomExtensionFactor - 1)) / 2;
-  
-  // Calculate destination points with BOTTOM edge extended
-  final List<Point> destPts = [
-    Point(                                          // Extended bottom-left
-      originMarker.x - extensionAmount, 
-      originMarker.y
-    ),
-    Point(                                          // Extended bottom-right
-      xAxisMarker.x + extensionAmount, 
-      xAxisMarker.y
-    ),
-    topRightCorner,                                 // Top-right stays the same
-    scaleMarker,                                    // Top-left stays the same
+  // Destination points - where we want the corners to be in the output
+  final dstPoints = [
+    (0.0, outputHeight.toDouble()),                    // Bottom-left
+    (outputWidth.toDouble(), outputHeight.toDouble()), // Bottom-right
+    (outputWidth.toDouble(), 0.0),                     // Top-right
+    (0.0, 0.0),                                        // Top-left
   ];
   
-  print('SOURCE QUAD: ${sourcePts.map((p) => "(${p.x.round()},${p.y.round()})").join(", ")}');
-  print('DEST QUAD: ${destPts.map((p) => "(${p.x.round()},${p.y.round()})").join(", ")}');
+  // Convert image to OpenCV format
+  final Uint8List imageBytes = img.encodePng(sourceImage);
+  final cvImage = cv.imdecode(imageBytes, cv.IMREAD_COLOR);
   
-  // Create a destination image large enough to hold the wider bottom
-  final int extraWidth = (extensionAmount * 2.2).toInt();
-  final int outputWidth = sourceImage.width + extraWidth;
-  final int outputHeight = sourceImage.height;
-  
-  // Create destination image
-  final img.Image destImage = img.Image(width: outputWidth, height: outputHeight);
-  
-  // Fill with white background
-  for (int y = 0; y < outputHeight; y++) {
-    for (int x = 0; x < outputWidth; x++) {
-      destImage.setPixel(x, y, img.ColorRgba8(255, 255, 255, 255));
-    }
-  }
+  // Find homography matrix
+  final homography = cv.findHomography(srcPoints as cv.InputArray, dstPoints as cv.InputArray);
   
   // Apply perspective transformation
-  final perspectiveMatrix = _calculatePerspectiveTransform(sourcePts, destPts);
-  _applyPerspectiveTransform(sourceImage, destImage, perspectiveMatrix);
-  
-  // Draw calibration grid at the bottom part
-  _drawCalibrationGrid(
-    destImage,
-    destPts[0].x.round(), // Extended bottom-left
-    destPts[0].y.round() - sideLength.round(), // Go up by side length 
-    (destPts[1].x - destPts[0].x).round(), // Width of extended bottom
-    sideLength.round(), // Height equal to side length
-    (baseLength / 10).round(), // Grid spacing
-    img.ColorRgba8(0, 100, 255, 80)
+  final correctedCvImage = cv.warpPerspective(
+    cvImage, 
+    homography, 
+    (outputWidth, outputHeight),
+    flags: cv.INTER_LINEAR
   );
   
-  // NEW CODE: Crop the image back to a rectangle and resize to match original dimensions
-  final img.Image croppedImage = _cropToRectangle(
-  destImage, 
-  destPts,
-  Point(destPts[0].x, destPts[0].y),  // Origin marker in dest coordinates
-  Point(destPts[1].x, destPts[1].y)   // X-axis marker in dest coordinates
-);
+  // Convert back to image.dart format
+  final (_, correctedBytes) = cv.imencode(".png", correctedCvImage);
+  final correctedImage = img.decodePng(correctedBytes)!;
   
-  // Resize to match the original width while preserving aspect ratio
-final double aspectRatio = croppedImage.width / croppedImage.height;
-final int resizedWidth = sourceImage.width;
-final int resizedHeight = (resizedWidth / aspectRatio).round();
-
-final img.Image resizedImage = img.copyResize(
-  croppedImage,
-  width: resizedWidth,
-  height: resizedHeight,
-  interpolation: img.Interpolation.cubic
-);
-  
-  return resizedImage;
+  return correctedImage;
 }
   
   /// Create a debug image showing original and corrected images
@@ -273,7 +207,12 @@ static img.Image createDebugImage(
 }
 
 /// Crop the image to create a rectangle based on the narrowest width of the trapezoid
-static img.Image _cropToRectangle(img.Image image, List<Point> destPts) {
+static img.Image _cropToRectangle(
+  img.Image image, 
+  List<Point> destPts,
+  Point originPoint,
+  Point xAxisPoint
+) {
   const int margin = 10;
   
   // Find narrowest width - typically this would be between top points (points 2 and 3)
