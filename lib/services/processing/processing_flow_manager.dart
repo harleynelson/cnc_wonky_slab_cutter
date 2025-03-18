@@ -334,6 +334,63 @@ Future<bool> detectSlabContourAutomatic([int? seedX, int? seedY]) async {
     }
   }
 
+  /// Generate toolpath and G-code with a custom filename
+Future<void> generateGcodeWithFilename(String filename) async {
+  if (_result.contourResult == null) {
+    _setErrorState('Slab contour detection must be completed first');
+    return;
+  }
+  
+  try {
+    _updateState(ProcessingState.gcodeGeneration);
+    
+    final contourResult = _result.contourResult!;
+    
+    // Generate toolpath
+    final toolpath = _generateToolpath(
+      contourResult.machineContour,
+      settings.toolDiameter,
+      settings.stepover
+    );
+    
+    // Generate G-code
+    final gcodeGenerator = GcodeGenerator(
+      safetyHeight: settings.safetyHeight,
+      feedRate: settings.feedRate,
+      plungeRate: settings.plungeRate,
+      cuttingDepth: settings.cuttingDepth,
+      stepover: settings.stepover,
+      toolDiameter: settings.toolDiameter,
+      spindleSpeed: settings.spindleSpeed,
+    );
+    
+    final gcode = gcodeGenerator.generateGcode(toolpath);
+    
+    // Save G-code to file with custom filename
+    final tempDir = await Directory.systemTemp.createTemp('gcode_');
+    final gcodeFile = File('${tempDir.path}/${filename}');
+    await gcodeFile.writeAsString(gcode);
+    
+    // Update result
+    _result = _result.copyWith(
+      toolpath: toolpath,
+      gcode: gcode,
+      gcodeFile: gcodeFile,
+      state: ProcessingState.completed,
+    );
+    
+    notifyListeners();
+  } catch (e, stackTrace) {
+    ErrorUtils().logError(
+      'Error during G-code generation',
+      e,
+      stackTrace: stackTrace,
+      context: 'gcode_generation',
+    );
+    _setErrorState('G-code generation failed: ${e.toString()}');
+  }
+}
+
   void updateSettings(SettingsModel newSettings) {
   settings = newSettings;
   notifyListeners();

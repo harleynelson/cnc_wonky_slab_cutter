@@ -31,46 +31,49 @@ class GcodeGenerator {
   });
 
   /// Generate G-code for a surfacing operation within a contour
-  String generateSurfacingGcode(List<Point> contour) {
-    final buffer = StringBuffer();
-    
-    // Write G-code header with initialization commands
-    _writeHeader(buffer);
-    
-    // Calculate bounding box of the contour
-    final boundingBox = _calculateBoundingBox(contour);
-    
-    // Generate toolpath for surfacing
-    final toolpath = _generateSurfacingToolpath(contour, boundingBox);
-    
-    // Write the toolpath commands
-    _writeSurfacingToolpath(buffer, toolpath, boundingBox, contour);
-    
-    // Add footer
-    _writeFooter(buffer);
-    
-    return buffer.toString();
-  }
+  String generateSurfacingGcode(List<Point> contour, {String filename = ''}) {
+  final buffer = StringBuffer();
+  
+  // Write G-code header with initialization commands
+  _writeHeader(buffer, filename: filename);
+  
+  // Calculate bounding box of the contour
+  final boundingBox = _calculateBoundingBox(contour);
+  
+  // Generate toolpath for surfacing
+  final toolpath = _generateSurfacingToolpath(contour, boundingBox);
+  
+  // Write the toolpath commands
+  _writeSurfacingToolpath(buffer, toolpath, boundingBox, contour);
+  
+  // Add footer
+  _writeFooter(buffer);
+  
+  return buffer.toString();
+}
 
   /// Write G-code header with initialization commands
-  void _writeHeader(StringBuffer buffer) {
-    buffer.writeln("(CNC Slab Scanner - Surfacing Operation)");
-    buffer.writeln("(Generated on ${DateTime.now().toString()})");
-    buffer.writeln("(Tool Diameter: ${toolDiameter}mm)");
-    buffer.writeln("(Stepover: ${stepover}mm)");
-    buffer.writeln("(Cutting Depth: ${cuttingDepth}mm)");
-    buffer.writeln("(Feed Rate: ${feedRate}mm/min)");
-    buffer.writeln("(Plunge Rate: ${plungeRate}mm/min)");
-    buffer.writeln("");
-    buffer.writeln("G90 G94"); // Absolute positioning, Feed rate mode in units per minute
-    buffer.writeln("G17");     // XY plane selection
-    buffer.writeln("G21");     // Set units to millimeters
-    buffer.writeln("");
-    buffer.writeln("(Start operation)");
-    buffer.writeln("S$spindleSpeed M3"); // Set spindle speed and start spindle
-    buffer.writeln("G54");     // Use work coordinate system 1
-    buffer.writeln("");
+  void _writeHeader(StringBuffer buffer, {String filename = ''}) {
+  buffer.writeln("(CNC Slab Scanner - Surfacing Operation)");
+  buffer.writeln("(Generated on ${DateTime.now().toString()})");
+  if (filename.isNotEmpty) {
+    buffer.writeln("(Filename: $filename)");
   }
+  buffer.writeln("(Tool Diameter: ${toolDiameter}mm)");
+  buffer.writeln("(Stepover: ${stepover}mm)");
+  buffer.writeln("(Cutting Depth: ${cuttingDepth}mm)");
+  buffer.writeln("(Feed Rate: ${feedRate}mm/min)");
+  buffer.writeln("(Plunge Rate: ${plungeRate}mm/min)");
+  buffer.writeln("");
+  buffer.writeln("G90 G94"); // Absolute positioning, Feed rate mode in units per minute
+  buffer.writeln("G17");     // XY plane selection
+  buffer.writeln("G21");     // Set units to millimeters
+  buffer.writeln("");
+  buffer.writeln("(Start operation)");
+  buffer.writeln("S$spindleSpeed M3"); // Set spindle speed and start spindle
+  buffer.writeln("G54");     // Use work coordinate system 1
+  buffer.writeln("");
+}
 
   /// Calculate the bounding box of a contour
   Map<String, double> _calculateBoundingBox(List<Point> contour) {

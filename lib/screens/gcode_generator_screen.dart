@@ -15,6 +15,7 @@ import '../utils/general/machine_coordinates.dart';
 import '../widgets/settings_fields.dart';
 import '../widgets/contour_overlay.dart';
 import '../widgets/marker_overlay.dart';
+import 'gcode_visualization_screen.dart';
 
 class GcodeGeneratorScreen extends StatefulWidget {
   final SettingsModel settings;
@@ -36,22 +37,32 @@ class _GcodeGeneratorScreenState extends State<GcodeGeneratorScreen> {
   double _contourArea = 0.0;
   double _estimatedTime = 0.0;
   String _errorMessage = '';
-  
   bool _forceHorizontalPaths = true;
+  late TextEditingController _filenameController;
+  String _fileExtension = '.gcode';
   
   // Add slabMargin for adjusting the contour size
   double _slabMargin = 50.0; // Default 5mm margin
   List<Point>? _adjustedContour;
 
   @override
-  void initState() {
-    super.initState();
-    _settings = widget.settings.copy();
-    _forceHorizontalPaths = _settings.forceHorizontalPaths;
-    _slabMargin = 50.0; // Default to 50mm
-    _calculateStats();
-    _updateAdjustedContour();
-  }
+void initState() {
+  super.initState();
+  _settings = widget.settings.copy();
+  _forceHorizontalPaths = _settings.forceHorizontalPaths;
+  _slabMargin = 50.0; // Default to 50mm
+  _calculateStats();
+  _updateAdjustedContour();
+  
+  // Initialize filename controller with default name
+  _filenameController = TextEditingController(text: 'slab_surfacing');
+}
+
+@override
+void dispose() {
+  _filenameController.dispose();
+  super.dispose();
+}
 
   void _calculateStats() {
     final provider = Provider.of<ProcessingProvider>(context, listen: false);
@@ -273,15 +284,22 @@ double _crossProduct(Point a, Point b, Point c) {
       spindleSpeed: _settings.spindleSpeed,
       depthPasses: _settings.depthPasses,
       margin: _slabMargin,
-      forceHorizontal: _forceHorizontalPaths, // Pass the direction parameter
+      forceHorizontal: _forceHorizontalPaths,
     );
     
     // Generate surfacing G-code
-    final gcode = gcodeGenerator.generateSurfacingGcode(contour);
+    final filenameWithoutExt = _filenameController.text;
+    final gcode = gcodeGenerator.generateSurfacingGcode(
+    contour, 
+    filename: '$filenameWithoutExt$_fileExtension'
+    );
+    
+    // Create a custom filename using the user input and selected extension
+    final filename = '${_filenameController.text}${_fileExtension}';
     
     // Save G-code to file
     final tempDir = await Directory.systemTemp.createTemp('gcode_');
-    final gcodeFile = File('${tempDir.path}/${gcodeTempFileName}');
+    final gcodeFile = File('${tempDir.path}/${filename}');
     await gcodeFile.writeAsString(gcode);
     
     setState(() {
@@ -291,7 +309,7 @@ double _crossProduct(Point a, Point b, Point c) {
     });
     
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('G-code generated successfully!')),
+      SnackBar(content: Text('G-code generated successfully as $filename!')),
     );
   } catch (e) {
     setState(() {
@@ -319,6 +337,60 @@ double _crossProduct(Point a, Point b, Point c) {
     }
   }
 
+  // Build the filename input field
+Widget _buildFilenameInput() {
+  return Card(
+    child: Padding(
+      padding: EdgeInsets.all(padding),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Output File Settings',
+            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          ),
+          Divider(),
+          Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _filenameController,
+                  decoration: InputDecoration(
+                    labelText: 'Filename',
+                    hintText: 'Enter filename',
+                    border: OutlineInputBorder(),
+                    prefixIcon: Icon(Icons.file_present),
+                  ),
+                ),
+              ),
+              SizedBox(width: 16),
+              DropdownButton<String>(
+                value: _fileExtension,
+                items: [
+                  DropdownMenuItem(value: '.gcode', child: Text('.gcode')),
+                  DropdownMenuItem(value: '.nc', child: Text('.nc')),
+                ],
+                onChanged: (value) {
+                  if (value != null) {
+                    setState(() {
+                      _fileExtension = value;
+                    });
+                  }
+                },
+              ),
+            ],
+          ),
+          SizedBox(height: 8),
+          Text(
+            'The file will be saved with this name after generation.',
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+        ],
+      ),
+    ),
+  );
+}
+
   @override
 Widget build(BuildContext context) {
   return Scaffold(
@@ -340,6 +412,8 @@ Widget build(BuildContext context) {
                 _buildStatisticsCard(),
                 SizedBox(height: 16),
                 _buildPathSettings(), // New combined settings widget
+                SizedBox(height: 16),
+                _buildFilenameInput(),
                 SizedBox(height: 16),
                 _buildMachineSettingsCard(),
                 SizedBox(height: 16),
@@ -813,46 +887,118 @@ Widget build(BuildContext context) {
   }
 
   Widget _buildBottomButtons() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 4,
-            offset: Offset(0, -2),
+  return Container(
+    padding: EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black12,
+          blurRadius: 4,
+          offset: Offset(0, -2),
+        ),
+      ],
+    ),
+    child: Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        ElevatedButton.icon(
+          icon: Icon(_isGenerated ? Icons.refresh : Icons.code),
+          label: Text(_isGenerated ? 'Regenerate G-code' : 'Generate G-code'),
+          onPressed: _isGenerating ? null : _generateGcode,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.blue,
+            minimumSize: Size(double.infinity, 48),
           ),
-        ],
-      ),
-      child: Row(
-        children: [
-          Expanded(
-            child: ElevatedButton.icon(
-              icon: Icon(_isGenerated ? Icons.refresh : Icons.code),
-              label: Text(_isGenerated ? 'Regenerate G-code' : 'Generate G-code'),
-              onPressed: _isGenerating ? null : _generateGcode,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
+        ),
+        SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(
+              child: ElevatedButton.icon(
+                icon: Icon(Icons.visibility),
+                label: Text('Visualize Path'),
+                onPressed: _isGenerating || !_isGenerated ? null : _visualizeGcode,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.orange,
+                ),
               ),
             ),
-          ),
-          SizedBox(width: 16),
-          Expanded(
-            child: ElevatedButton.icon(
-              icon: Icon(Icons.share),
-              label: Text('Share G-code'),
-              onPressed: _isGenerating || !_isGenerated ? null : _shareGcode,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+            SizedBox(width: 12),
+            Expanded(
+              child: ElevatedButton.icon(
+                icon: Icon(Icons.share),
+                label: Text('Share G-code'),
+                onPressed: _isGenerating || !_isGenerated ? null : _shareGcode,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                ),
               ),
             ),
-          ),
-        ],
-      ),
-    );
-  }
+          ],
+        ),
+      ],
+    ),
+  );
 }
+
+void _visualizeGcode() {
+  if (_gcodePath == null) {
+    setState(() {
+      _errorMessage = 'No G-code file available to visualize';
+    });
+    return;
+  }
+  
+  final provider = Provider.of<ProcessingProvider>(context, listen: false);
+  final flowManager = provider.flowManager;
+  
+  if (flowManager == null || flowManager.result.originalImage == null || 
+      flowManager.result.contourResult == null || 
+      flowManager.result.markerResult == null) {
+    setState(() {
+      _errorMessage = 'Missing required data for visualization';
+    });
+    return;
+  }
+  
+  // Get the contour and coordinate system
+  final contour = _adjustedContour ?? flowManager.result.contourResult!.machineContour;
+  
+  // Create the coordinate system using the marker detection results
+  final markerResult = flowManager.result.markerResult!;
+  final coordSystem = MachineCoordinateSystem.fromMarkerPointsWithDistances(
+    markerResult.markers[0].toPoint(),
+    markerResult.markers[1].toPoint(),
+    markerResult.markers[2].toPoint(),
+    _settings.markerXDistance,
+    _settings.markerYDistance
+  );
+  
+  // Print debug info
+  print("Visualizing G-code with contour of ${contour.length} points");
+  print("Original image: ${flowManager.result.originalImage!.path}");
+  print("G-code path: $_gcodePath");
+  print("Marker points: ${markerResult.markers.map((m) => '(${m.x},${m.y})')}");
+  
+  // Navigate to visualization screen
+  Navigator.push(
+    context,
+    MaterialPageRoute(
+      builder: (context) => GcodeVisualizationScreen(
+        imageFile: flowManager.result.originalImage!,
+        gcodePath: _gcodePath!,
+        contourPoints: contour,
+        toolpath: null, // We'll parse from the G-code file
+        coordSystem: coordSystem,
+        settings: _settings,
+      ),
+    ),
+  );
+}
+}
+
+
 
 /// Custom painter for visualizing the adjusted contour
 class AdjustedContourPainter extends CustomPainter {

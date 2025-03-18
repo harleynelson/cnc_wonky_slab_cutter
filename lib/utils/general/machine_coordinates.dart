@@ -33,29 +33,41 @@ class MachineCoordinateSystem {
 
   /// Convert a point from image coordinates to display (canvas) coordinates
 static Point imageToDisplayCoordinates(Point imagePoint, Size imageSize, Size displaySize) {
+  // Calculate aspect ratios
   final imageAspect = imageSize.width / imageSize.height;
   final displayAspect = displaySize.width / displaySize.height;
   
   double displayWidth, displayHeight, offsetX = 0, offsetY = 0;
   
+  // Determine scaling to maintain aspect ratio
   if (imageAspect > displayAspect) {
+    // Image is wider than display area (letterboxing)
     displayWidth = displaySize.width;
-    displayHeight = displaySize.width / imageAspect;
+    displayHeight = displayWidth / imageAspect;
     offsetY = (displaySize.height - displayHeight) / 2;
-    // Remove any hardcoded offset correction
   } else {
+    // Image is taller than display area (pillarboxing)
     displayHeight = displaySize.height;
-    displayWidth = displaySize.height * imageAspect;
+    displayWidth = displayHeight * imageAspect;
     offsetX = (displaySize.width - displayWidth) / 2;
   }
   
-  final normalizedX = imagePoint.x / imageSize.width;
-  final normalizedY = imagePoint.y / imageSize.height;
+  // Calculate display coordinates
+  final scaledX = (imagePoint.x / imageSize.width) * displayWidth;
+  final scaledY = (imagePoint.y / imageSize.height) * displayHeight;
   
-  final displayX = normalizedX * displayWidth + offsetX;
-  final displayY = normalizedY * displayHeight + offsetY;
-  
-  return Point(displayX, displayY);
+  return Point(
+    scaledX + offsetX, 
+    scaledY + offsetY
+  );
+}
+
+/// Debug helper method to print coordinate system information
+void debugPrintInfo() {
+  print("Coordinate System Info:");
+  print("Origin: (${originPx.x}, ${originPx.y})");
+  print("Orientation: ${orientationRad * 180 / math.pi} degrees");
+  print("Pixel to MM ratio: $pixelToMmRatio");
 }
 
 /// Convert a point from display (canvas) coordinates to image coordinates
@@ -111,32 +123,49 @@ static Point displayToImageCoordinates(Point displayPoint, Size imageSize, Size 
   }
   
   /// Convert a point from machine (mm) coordinates to pixel coordinates
-  Point machineToPixelCoords(Point machinePoint) {
-    // Scale to pixels
-    final pxRot = machinePoint.x / pixelToMmRatio;
-    final pyRot = machinePoint.y / pixelToMmRatio;
-    
-    // Rotate from machine coordinates
-    final px = pxRot * math.cos(orientationRad) - pyRot * math.sin(orientationRad);
-    // Remember to negate y for image coordinates
-    final py = -(pxRot * math.sin(orientationRad) + pyRot * math.cos(orientationRad));
-    
-    // Translate from origin
-    final xPx = px + originPx.x;
-    final yPx = py + originPx.y;
-    
-    return Point(xPx, yPx);
-  }
+Point machineToPixelCoords(Point machinePoint) {
+  // Scale to pixels
+  final pxRot = machinePoint.x / pixelToMmRatio;
+  final pyRot = machinePoint.y / pixelToMmRatio;
   
-  /// Convert a list of points from pixel to machine coordinates
-  List<Point> convertPointListToMachineCoords(List<Point> pixelPoints) {
-    return pixelPoints.map((p) => pixelToMachineCoords(p)).toList();
-  }
+  // Rotate from machine coordinates
+  final px = pxRot * math.cos(orientationRad) - pyRot * math.sin(orientationRad);
+  // Remember to negate y for image coordinates (since image Y increases downward)
+  final py = -(pxRot * math.sin(orientationRad) + pyRot * math.cos(orientationRad));
+  
+  // Translate from origin
+  final xPx = px + originPx.x;
+  final yPx = py + originPx.y;
+  
+  return Point(xPx, yPx);
+}
+  
+  /// Convert a list of points from pixel to machine coordinates accurately
+List<Point> convertPointListToMachineCoords(List<Point> pixelPoints) {
+  return pixelPoints.map((p) => pixelToMachineCoords(p)).toList();
+}
   
   /// Convert a list of points from machine to pixel coordinates
   List<Point> convertPointListToPixelCoords(List<Point> machinePoints) {
     return machinePoints.map((p) => machineToPixelCoords(p)).toList();
   }
+
+  /// Verify that a point can be accurately transformed back and forth
+bool verifyCoordinateTransformation(Point originalPoint) {
+  final machinePoint = pixelToMachineCoords(originalPoint);
+  final backToPixel = machineToPixelCoords(machinePoint);
+  
+  // Calculate error
+  final errorX = (originalPoint.x - backToPixel.x).abs();
+  final errorY = (originalPoint.y - backToPixel.y).abs();
+  
+  // Print debug info
+  print("Original: ($originalPoint), Machine: ($machinePoint), Back: ($backToPixel)");
+  print("Error: X=$errorX, Y=$errorY");
+  
+  // Error should be very small (floating point precision issues)
+  return errorX < 0.001 && errorY < 0.001;
+}
   
   /// Create a coordinate system from three marker points with separate X and Y distances
 static MachineCoordinateSystem fromMarkerPointsWithDistances(
