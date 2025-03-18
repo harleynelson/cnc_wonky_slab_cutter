@@ -59,25 +59,38 @@ void initState() {
   _filenameController = TextEditingController(text: 'slab_surfacing');
 }
 
-@override
-void dispose() {
-  _filenameController.dispose();
-  super.dispose();
+// 1. Cache expensive calculations - add this to the class
+Map<String, dynamic> _statsCache = {};
+bool _statsCacheDirty = true;
+
+
+// 2. Modify _calculateStats() to use caching
+void _calculateStats() {
+  // Skip recalculation if cache is valid
+  if (!_statsCacheDirty && _statsCache.isNotEmpty) {
+    _contourArea = _statsCache['area'] as double;
+    _estimatedTime = _statsCache['time'] as double;
+    return;
+  }
+  
+  final provider = Provider.of<ProcessingProvider>(context, listen: false);
+  final flowManager = provider.flowManager;
+  
+  if (flowManager?.result.contourResult != null) {
+    // Calculate area
+    final contour = flowManager!.result.contourResult!.machineContour;
+    _contourArea = _calculateContourArea(contour);
+    
+    // Estimate time
+    _estimatedTime = _estimateMachiningTime(contour, _settings);
+    
+    // Update cache
+    _statsCache['area'] = _contourArea;
+    _statsCache['time'] = _estimatedTime;
+    _statsCacheDirty = false;
+  }
 }
 
-  void _calculateStats() {
-    final provider = Provider.of<ProcessingProvider>(context, listen: false);
-    final flowManager = provider.flowManager;
-    
-    if (flowManager?.result.contourResult != null) {
-      // Calculate area
-      final contour = flowManager!.result.contourResult!.machineContour;
-      _contourArea = _calculateContourArea(contour);
-      
-      // Estimate time
-      _estimatedTime = _estimateMachiningTime(contour, _settings);
-    }
-  }
 
 // Update the _updateAdjustedContour method to use Simplified Polygon Buffering
 // Simplified polygon buffering implementation
@@ -85,6 +98,7 @@ void dispose() {
 // https://github.com/gurbuzkaanakkaya/Buffer-and-Path-Planning
 
 
+// 3. Mark cache as dirty when relevant inputs change
 void _updateAdjustedContour() {
   final provider = Provider.of<ProcessingProvider>(context, listen: false);
   final flowManager = provider.flowManager;
@@ -100,13 +114,23 @@ void _updateAdjustedContour() {
       _adjustedContour = _createBufferedPolygon(originalContour, _slabMargin);
     }
     
-    // Recalculate area and time based on adjusted contour
-    _contourArea = _calculateContourArea(_adjustedContour!);
-    _estimatedTime = _estimateMachiningTime(_adjustedContour!, _settings);
+    // Mark cache as dirty when contour changes
+    _statsCacheDirty = true;
+    _calculateStats();
   }
+}
+// 4. Memory management
+@override
+void dispose() {
+  // Clear caches
+  _statsCache.clear();
+  // Dispose controllers
+  _filenameController.dispose();
+  super.dispose();
 }
 
 /// Create a buffered polygon from the original contour using angle bisector method
+/// /// with improved simplification for straighter edges
 List<CoordinatePointXY> _createBufferedPolygon(List<CoordinatePointXY> originalContour, double distance) {
   if (originalContour.length < 3) {
     return originalContour;
@@ -196,7 +220,99 @@ List<CoordinatePointXY> _createBufferedPolygon(List<CoordinatePointXY> originalC
     bufferedPoints.add(bufferedPoints.first);
   }
   
-  return bufferedPoints;
+  // Apply Douglas-Peucker simplification to reduce unnecessary points
+  final double epsilon = 0.5 + distance * 0.05; // Scale epsilon based on margin size
+  return _simplifyPolygon(bufferedPoints, epsilon);
+}
+
+/// Simplify polygon using Douglas-Peucker algorithm
+List<CoordinatePointXY> _simplifyPolygon(List<CoordinatePointXY> points, double epsilon) {
+  if (points.length <= 2) return List.from(points);
+  
+  // Find the point with the maximum distance
+  double maxDistance = 0;
+  int index = 0;
+  
+  for (int i = 1; i < points.length - 1; i++) {
+    double distance = _perpendicularDistance(
+      points[i],
+      points.first,
+      points.last
+    );
+    
+    if (distance > maxDistance) {
+      maxDistance = distance;
+      index = i;
+    }
+  }
+  
+  // If max distance is greater than epsilon, recursively simplify
+  if (maxDistance > epsilon) {
+    // Recursive call
+    final List<CoordinatePointXY> firstSegment = _simplifyPolygon(
+      points.sublist(0, index + 1),
+      epsilon
+    );
+    
+    final List<CoordinatePointXY> secondSegment = _simplifyPolygon(
+      points.sublist(index),
+      epsilon
+    );
+    
+    // Concatenate the results (avoiding duplicate point)
+    return firstSegment.sublist(0, firstSegment.length - 1) + secondSegment;
+  } else {
+    // Below epsilon, return just the endpoints
+    return [points.first, points.last];
+  }
+}
+
+/// Calculate perpendicular distance from a point to a line segment
+double _perpendicularDistance(
+  CoordinatePointXY point,
+  CoordinatePointXY lineStart,
+  CoordinatePointXY lineEnd
+) {
+  final double x = point.x;
+  final double y = point.y;
+  final double x1 = lineStart.x;
+  final double y1 = lineStart.y;
+  final double x2 = lineEnd.x;
+  final double y2 = lineEnd.y;
+  
+  // Calculate line length
+  final double dx = x2 - x1;
+  final double dy = y2 - y1;
+  final double lineLengthSquared = dx * dx + dy * dy;
+  
+  // Handle case of zero-length line
+  if (lineLengthSquared < 1e-10) {
+    final double pdx = x - x1;
+    final double pdy = y - y1;
+    return math.sqrt(pdx * pdx + pdy * pdy);
+  }
+  
+  // Calculate the projection factor
+  final double t = ((x - x1) * dx + (y - y1) * dy) / lineLengthSquared;
+  
+  if (t < 0) {
+    // Point is beyond the start of the line
+    final double pdx = x - x1;
+    final double pdy = y - y1;
+    return math.sqrt(pdx * pdx + pdy * pdy);
+  } else if (t > 1) {
+    // Point is beyond the end of the line
+    final double pdx = x - x2;
+    final double pdy = y - y2;
+    return math.sqrt(pdx * pdx + pdy * pdy);
+  } else {
+    // Point is on the line
+    final double projX = x1 + t * dx;
+    final double projY = y1 + t * dy;
+    final double pdx = x - projX;
+    final double pdy = y - projY;
+    return math.sqrt(pdx * pdx + pdy * pdy);
+  }
 }
 
 /// Check if a vertex is convex
@@ -716,100 +832,6 @@ Widget _buildActionButtons() {
           ),
         ],
       ),
-    ),
-  );
-}
-  // deprecated, replaced by _buildPathSettings()
-  Widget _buildMarginSlider() {
-  return Padding(
-    padding: const EdgeInsets.all(padding),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Direction toggle
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Path Direction',
-                  style: TextStyle(fontWeight: FontWeight.bold),
-                ),
-                Text(
-                  'Set cutting path direction',
-                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-                ),
-              ],
-            ),
-            ToggleButtons(
-              isSelected: [_forceHorizontalPaths, !_forceHorizontalPaths],
-              onPressed: (int index) {
-                setState(() {
-                  _forceHorizontalPaths = index == 0;
-                  _settings.forceHorizontalPaths = _forceHorizontalPaths;
-                  _settings.save(); // Save to persistent storage
-                });
-              },
-              children: [
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Icon(Icons.swap_horiz),
-                      SizedBox(width: 4),
-                      Text('Horizontal')
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      Icon(Icons.swap_vert),
-                      SizedBox(width: 4),
-                      Text('Vertical')
-                    ],
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-        SizedBox(height: 16),
-        
-        // Margin slider (unchanged)
-        Text(
-          'Slab Margin: ${_slabMargin.toStringAsFixed(0)} mm',
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        Row(
-          children: [
-            Text('0 mm'),
-            Expanded(
-              child: Slider(
-                value: _slabMargin,
-                min: 0,
-                max: 50,
-                divisions: 50,
-                label: '${_slabMargin.toStringAsFixed(0)} mm',
-                onChanged: (value) {
-                  setState(() {
-                    _slabMargin = value;
-                    _updateAdjustedContour();
-                  });
-                },
-              ),
-            ),
-            Text('50 mm'),
-          ],
-        ),
-        Text(
-          'Add a safety margin around the detected slab for CNC cutting',
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-        ),
-      ],
     ),
   );
 }
