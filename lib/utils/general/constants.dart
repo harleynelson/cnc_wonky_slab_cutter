@@ -1,4 +1,5 @@
-/// App-wide constants
+// lib/utils/general/constants.dart
+// App-wide constants
 
 // App Info
 const String appName = "CNC Slab Scanner";
@@ -40,16 +41,39 @@ const Duration longAnimationDuration = Duration(milliseconds: 500);
 // Camera Constants
 const double cameraCrosshairSize = 20.0;
 const double markerSize = 10.0;
+const double cameraBottomBarHeight = 100.0; // Camera control bar height
 
 // Marker Colors
 const int markerOriginColorHex = 0xFFFF0000; // Red
 const int markerXAxisColorHex = 0xFF00FF00; // Green
 const int markerScaleColorHex = 0xFF0000FF; // Blue
 
+// Marker Position Constants (relative to screen size)
+const double markerOriginX = 0.2;   // Origin X position (bottom left)
+const double markerOriginY = 0.8;   // Origin Y position
+const double markerXAxisX = 0.8;    // X-Axis X position (bottom right)
+const double markerXAxisY = 0.8;    // X-Axis Y position
+const double markerScaleX = 0.2;    // Scale X position (top left)
+const double markerScaleY = 0.2;    // Scale Y position
+const double workAreaBorderPadding = 0.1; // Work area padding from screen edges
+
 // Processing Constants
 const int defaultThreshold = 128;
 const int edgeDetectionThreshold = 50;
-const int blurRadius = 2;
+const int defaultBlurRadius = 3;
+const int defaultSmoothingWindowSize = 5;
+const int minSlabSizeDefault = 1000;
+const int gapAllowedMinDefault = 5;
+const int gapAllowedMaxDefault = 20;
+const int continueSearchDistanceDefault = 30;
+const double defaultEdgeThreshold = 65.0;
+const double defaultSimplificationEpsilon = 5.0;
+const bool defaultUseConvexHull = true;
+const int defaultContourPostProcessPoints = 40; // Higher number = smoother contour
+
+// Image Processing Constants
+const int defaultMaxImageSize = 1200; // Maximum dimension for image processing
+const int defaultProcessingTimeout = 10000; // Default timeout in milliseconds
 
 // G-code Constants
 const String gcodeHeader = "; G-code generated for CNC slab surfacing";
