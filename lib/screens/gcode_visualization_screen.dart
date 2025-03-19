@@ -6,8 +6,8 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../utils/general/constants.dart';
-import '../models/settings_model.dart';
-import '../services/gcode/gcode_parser.dart';
+import '../utils/general/settings_model.dart';
+import '../utils/gcode/gcode_parser.dart';
 
 class GcodeVisualizationScreen extends StatefulWidget {
   final File imageFile;

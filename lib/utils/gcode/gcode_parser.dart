@@ -1,7 +1,7 @@
 // lib/services/gcode/gcode_parser.dart
 // Parser for G-code files to extract toolpaths for visualization
 
-import '../../utils/general/machine_coordinates.dart';
+import '../general/machine_coordinates.dart';
 import 'dart:math' as math;
 
 class GcodeParser {

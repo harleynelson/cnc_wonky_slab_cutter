@@ -7,9 +7,9 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:share_plus/share_plus.dart';
 
-import '../models/settings_model.dart';
-import '../providers/processing_provider.dart';
-import '../services/gcode/gcode_generator.dart';
+import '../utils/general/settings_model.dart';
+import '../flow_of_app/flow_provider.dart';
+import '../utils/gcode/gcode_generator.dart';
 import '../utils/general/constants.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../utils/general/time_formatter.dart';

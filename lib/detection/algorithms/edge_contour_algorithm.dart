@@ -5,15 +5,15 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 
-import '../../../utils/general/constants.dart';
-import '../../../utils/general/machine_coordinates.dart';
-import '../../../utils/image_processing/contour_detection_utils.dart';
-import '../../../utils/image_processing/filter_utils.dart';
-import '../../../utils/image_processing/drawing_utils.dart';
-import '../../../utils/image_processing/base_image_utils.dart';
-import '../../../utils/image_processing/geometry_utils.dart';
-import '../../../utils/image_processing/threshold_utils.dart';
-import '../../../utils/image_processing/image_utils.dart';
+import '../../utils/general/constants.dart';
+import '../../utils/general/machine_coordinates.dart';
+import '../../utils/image_processing/contour_detection_utils.dart';
+import '../../utils/image_processing/filter_utils.dart';
+import '../../utils/image_processing/drawing_utils.dart';
+import '../../utils/image_processing/base_image_utils.dart';
+import '../../utils/image_processing/geometry_utils.dart';
+import '../../utils/image_processing/threshold_utils.dart';
+import '../../utils/image_processing/image_utils.dart';
 import '../slab_contour_result.dart';
 import 'contour_algorithm_interface.dart';
 

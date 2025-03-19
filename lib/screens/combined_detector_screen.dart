@@ -7,13 +7,13 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image/image.dart' as img;
 
-import '../models/settings_model.dart';
-import '../providers/processing_provider.dart';
-import '../services/image_processing/contour_algorithms/contour_algorithm_registry.dart';
-import '../services/image_processing/contour_algorithms/edge_contour_algorithm.dart';
+import '../utils/general/settings_model.dart';
+import '../flow_of_app/flow_provider.dart';
+import '../detection/algorithms/contour_algorithm_registry.dart';
+import '../detection/algorithms/edge_contour_algorithm.dart';
 import '../utils/general/constants.dart';
 import '../utils/general/machine_coordinates.dart';
-import '../services/processing/processing_flow_manager.dart';
+import '../flow_of_app/flow_manager.dart';
 import '../widgets/marker_overlay.dart';
 import '../widgets/contour_overlay.dart';
 import '../utils/general/error_utils.dart';

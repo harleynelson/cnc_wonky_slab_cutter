@@ -7,8 +7,8 @@ import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 
-import '../models/settings_model.dart';
-import '../providers/processing_provider.dart';
+import '../utils/general/settings_model.dart';
+import '../flow_of_app/flow_provider.dart';
 import 'file_picker_screen.dart';
 import 'image_selection_screen.dart';
 import 'settings_screen.dart';

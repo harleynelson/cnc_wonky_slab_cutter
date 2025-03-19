@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import '../models/settings_model.dart';
+import '../utils/general/settings_model.dart';
 import '../utils/general/constants.dart';
 import '../widgets/settings_fields.dart';
 

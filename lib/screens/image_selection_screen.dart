@@ -6,8 +6,8 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image_picker/image_picker.dart';
 
-import '../models/settings_model.dart';
-import '../providers/processing_provider.dart';
+import '../utils/general/settings_model.dart';
+import '../flow_of_app/flow_provider.dart';
 import '../utils/general/permissions_utils.dart';
 import 'camera_screen_with_overlay.dart';
 

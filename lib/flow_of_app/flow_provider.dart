@@ -3,8 +3,8 @@
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import '../services/processing/processing_flow_manager.dart';
-import '../models/settings_model.dart';
+import 'flow_manager.dart';
+import '../utils/general/settings_model.dart';
 
 class ProcessingProvider extends ChangeNotifier {
   ProcessingFlowManager? _flowManager;

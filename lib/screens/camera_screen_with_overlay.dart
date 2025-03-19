@@ -5,7 +5,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 
-import '../models/settings_model.dart';
+import '../utils/general/settings_model.dart';
 import '../utils/general/constants.dart';
 import '../utils/general/permissions_utils.dart';
 import '../widgets/camera_overlay.dart';

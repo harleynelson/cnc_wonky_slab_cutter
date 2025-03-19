@@ -1,6 +1,6 @@
 import 'dart:convert';
 import 'package:shared_preferences/shared_preferences.dart';
-import '../utils/general/constants.dart';
+import 'constants.dart';
 
 class SettingsModel {
   double cncWidth;

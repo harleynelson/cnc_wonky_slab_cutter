@@ -1,7 +1,7 @@
 // lib/services/gcode/gcode_generator.dart
 // Enhanced G-code generator for CNC operations
 
-import '../../utils/general/machine_coordinates.dart';
+import '../general/machine_coordinates.dart';
 import 'dart:math' as math;
 
 /// Class to generate G-code for CNC operations
