@@ -239,6 +239,171 @@ List<MarkerPoint> _findCornerMarkers(img.Image image, img.Image? debugImage) {
   return markers;
 }
 
+/// Enhanced version of region marker finding that allows searching in a specific region
+/// for a specific marker role instead of using automatic corner detection
+MarkerPoint findMarkerNearPoint(
+  img.Image image, 
+  int centerX, 
+  int centerY, 
+  int searchRadius,
+  MarkerRole role
+) {
+  // Define the search region
+  final int x1 = math.max(0, centerX - searchRadius);
+  final int y1 = math.max(0, centerY - searchRadius);
+  final int x2 = math.min(image.width - 1, centerX + searchRadius);
+  final int y2 = math.min(image.height - 1, centerY + searchRadius);
+  
+  print('Searching for ${role.toString()} marker in region: ($x1,$y1) to ($x2,$y2)');
+  
+  try {
+    // Extract region statistics
+    int totalPixels = 0;
+    double sumBrightness = 0;
+    
+    for (int y = y1; y < y2; y++) {
+      for (int x = x1; x < x2; x++) {
+        if (x >= 0 && x < image.width && y >= 0 && y < image.height) {
+          final pixel = image.getPixel(x, y);
+          final brightness = calculateLuminance(
+            pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+          ) / 255.0; // Normalize to 0-1
+          
+          sumBrightness += brightness;
+          totalPixels++;
+        }
+      }
+    }
+    
+    // Calculate average brightness
+    final avgBrightness = totalPixels > 0 ? sumBrightness / totalPixels : 0.5;
+    
+    // Look for the darkest or brightest area in the region as the marker
+    int bestX = -1, bestY = -1;
+    double bestDifference = -1;
+    
+    // Determine if we should look for dark markers on light background or vice versa
+    final lookForDark = avgBrightness > 0.5;
+    
+    // Slide a smaller window through the region to find the distinctive marker
+    final windowSize = math.max(5, math.min(x2 - x1, y2 - y1) ~/ 6);
+    
+    for (int y = y1; y < y2 - windowSize; y += windowSize ~/ 3) {
+      for (int x = x1; x < x2 - windowSize; x += windowSize ~/ 3) {
+        int windowPixels = 0;
+        double windowSum = 0;
+        
+        // Calculate window statistics
+        for (int wy = 0; wy < windowSize; wy++) {
+          for (int wx = 0; wx < windowSize; wx++) {
+            final px = x + wx;
+            final py = y + wy;
+            
+            if (px >= 0 && px < image.width && py >= 0 && py < image.height) {
+              final pixel = image.getPixel(px, py);
+              final brightness = calculateLuminance(
+                pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+              ) / 255.0; // Normalize to 0-1
+              
+              windowSum += brightness;
+              windowPixels++;
+            }
+          }
+        }
+        
+        if (windowPixels > 0) {
+          final windowAvg = windowSum / windowPixels;
+          double difference;
+          
+          if (lookForDark) {
+            // Looking for dark markers on light background
+            difference = avgBrightness - windowAvg;
+          } else {
+            // Looking for light markers on dark background
+            difference = windowAvg - avgBrightness;
+          }
+          
+          if (difference > bestDifference) {
+            bestDifference = difference;
+            bestX = x + windowSize ~/ 2;
+            bestY = y + windowSize ~/ 2;
+          }
+        }
+      }
+    }
+    
+    // Require a higher minimum contrast difference to prevent false positives
+    if (bestDifference < 0.15 || bestX < 0 || bestY < 0) {
+      // If we couldn't find a clear marker, use the center of the search region
+      return MarkerPoint(centerX, centerY, role, confidence: 0.5);
+    }
+    
+    // Debug image visualization is handled separately in the calling code
+    // since we don't have direct access to the debug image here
+    
+    return MarkerPoint(bestX, bestY, role, confidence: bestDifference);
+  } catch (e) {
+    print('Error finding marker in region: $e');
+    // Fall back to using the tap point directly
+    return MarkerPoint(centerX, centerY, role, confidence: 0.5);
+  }
+}
+
+/// Create a MarkerDetectionResult from manually-selected marker points
+MarkerDetectionResult createResultFromMarkerPoints(List<MarkerPoint> markers, {img.Image? debugImage}) {
+  if (markers.length < 3) {
+    throw Exception('Need at least 3 markers to create a coordinate system');
+  }
+  
+  // Find the markers by role
+  final originMarker = markers.firstWhere(
+    (m) => m.role == MarkerRole.origin, 
+    orElse: () => markers[0]
+  );
+  
+  final xAxisMarker = markers.firstWhere(
+    (m) => m.role == MarkerRole.xAxis,
+    orElse: () => markers[1]
+  );
+  
+  final scaleMarker = markers.firstWhere(
+    (m) => m.role == MarkerRole.scale,
+    orElse: () => markers[2]
+  );
+  
+  // Calculate orientation angle
+  final dx = xAxisMarker.x - originMarker.x;
+  final dy = xAxisMarker.y - originMarker.y;
+  final orientationAngle = math.atan2(dy, dx);
+  
+  // Calculate pixel-to-mm ratio from scale marker distance
+  final scaleX = scaleMarker.x - originMarker.x;
+  final scaleY = scaleMarker.y - originMarker.y;
+  final distancePx = math.sqrt(scaleX * scaleX + scaleY * scaleY);
+  
+  // Use a default value if we don't have markerRealDistanceMm property
+  const markerRealDistanceMm = 50.0; // Default value
+  
+  // Calculate pixel-to-mm ratio
+  final pixelToMmRatio = markerRealDistanceMm / distancePx;
+  
+  // Create origin point
+  final origin = CoordinatePointXY(originMarker.x.toDouble(), originMarker.y.toDouble());
+  
+  return MarkerDetectionResult(
+    markers: markers,
+    pixelToMmRatio: pixelToMmRatio,
+    origin: origin,
+    orientationAngle: orientationAngle,
+    debugImage: debugImage,
+  );
+}
+
+/// Helper method to calculate luminance from RGB values
+int calculateLuminance(int r, int g, int b) {
+  return (0.299 * r + 0.587 * g + 0.114 * b).round().clamp(0, 255);
+}
+
 /// Find a marker within a specific region
 MarkerPoint? _findMarkerInRegion(img.Image image, int x1, int y1, int x2, int y2, img.Image? debugImage) {
   try {
