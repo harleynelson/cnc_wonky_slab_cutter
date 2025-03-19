@@ -192,21 +192,54 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
         debugImage: debugImage,
       );
       
-      // Update flow manager with the result
-      var updatedResult = _flowManager.result.copyWith(
-        markerResult: markerResult,
-        processedImage: debugImage,
-      );
-      
-      // This creates a dummy SlabContourResult just to update the flow manager
-      // with our marker detection debug image
-      if (debugImage != null) {
+      // Method 1: Try the public detectMarkers method first
+      try {
+        // First reset the flow manager state to start clean
+        _flowManager.reset();
+        await _flowManager.initWithImage(widget.imageFile);
+        
+        // Create a dummy contour result to update the flow manager
+        if (debugImage != null) {
+          final dummyContourResult = SlabContourResult(
+            pixelContour: [],
+            machineContour: [],
+            debugImage: debugImage,
+          );
+          
+          // Update the result in the flow manager
+          _flowManager.updateContourResult(dummyContourResult, method: ContourDetectionMethod.manual);
+          
+          // Explicitly update the markerResult in the flow manager
+          await _flowManager.detectMarkers();
+          
+          // Force the markerResult to be our calculated result
+          var updatedResult = _flowManager.result.copyWith(
+            markerResult: markerResult,
+            processedImage: debugImage,
+          );
+          
+          _flowManager.updateContourResult(dummyContourResult, method: ContourDetectionMethod.manual);
+        }
+      } catch (e) {
+        print('Failed to use flow manager methods: $e');
+        
+        // Method 2: Fallback - create a MarkerDetector and use it directly
+        final markerDetector = MarkerDetector(
+          markerRealDistanceMm: widget.settings.markerXDistance,
+          generateDebugImage: true,
+        );
+        
+        // Create a ResultWithMarkers directly
+        final newMarkerResult = await markerDetector.createResultFromMarkerPoints(_detectedMarkers, debugImage: debugImage);
+        
+        // Update the flow manager with our new marker result
         final dummyContourResult = SlabContourResult(
           pixelContour: [],
           machineContour: [],
           debugImage: debugImage,
         );
-        _flowManager.updateContourResult(dummyContourResult, method: null);
+        
+        _flowManager.updateContourResult(dummyContourResult, method: ContourDetectionMethod.manual);
       }
       
       setState(() {
@@ -467,71 +500,136 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   }
   
   Future<void> _detectContour() async {
-  if (_selectedPoint == null) {
-    setState(() {
-      _errorMessage = 'Please tap on the slab to select a seed point first';
-    });
-    return;
-  }
+    if (_selectedPoint == null) {
+      setState(() {
+        _errorMessage = 'Please tap on the slab to select a seed point first';
+      });
+      return;
+    }
 
-  setState(() {
-    _isLoading = true;
-    _statusMessage = 'Detecting contour...';
-    _errorMessage = '';
-  });
+    setState(() {
+      _isLoading = true;
+      _statusMessage = 'Detecting contour...';
+      _errorMessage = '';
+    });
 
-  try {
-    // If the image size is not available, we can't reliably calculate the seed point
-    if (_imageSize == null) {
-      throw Exception('Image dimensions not available');
+    try {
+      // If the image size is not available, we can't reliably calculate the seed point
+      if (_imageSize == null) {
+        throw Exception('Image dimensions not available');
+      }
+      
+      // Calculate the actual seed point in the image
+      final imagePoint = _calculateImagePoint(_selectedPoint!);
+      
+      // Verify we have markers detected before proceeding
+      if (!_markersDetected) {
+        throw Exception('Markers must be detected before contour detection');
+      }
+      
+      // Check if marker result is available
+      if (_flowManager.result.markerResult == null) {
+        print('Marker result is null, attempting to recreate it');
+        
+        // Recreate marker result
+        if (_detectedMarkers.length < 3) {
+          throw Exception('Not enough markers detected');
+        }
+        
+        // Create original image and debug image
+        final imageBytes = await widget.imageFile.readAsBytes();
+        final originalImage = img.decodeImage(imageBytes);
+        
+        if (originalImage == null) {
+          throw Exception('Failed to decode image');
+        }
+        
+        // Create a debug image
+        img.Image debugImage = img.copyResize(originalImage, width: originalImage.width, height: originalImage.height);
+        
+        // Draw markers on debug image
+        _drawMarkersOnDebugImage(debugImage, _detectedMarkers);
+        
+        // Use the marker detector to create a result
+        final markerDetector = MarkerDetector(
+          markerRealDistanceMm: widget.settings.markerXDistance,
+          generateDebugImage: true,
+        );
+        
+        // Recreate marker detection result
+        final originMarker = _detectedMarkers.firstWhere((m) => m.role == MarkerRole.origin);
+        final xAxisMarker = _detectedMarkers.firstWhere((m) => m.role == MarkerRole.xAxis);
+        final scaleMarker = _detectedMarkers.firstWhere((m) => m.role == MarkerRole.scale);
+        
+        // Calculate parameters
+        final dx = xAxisMarker.x - originMarker.x;
+        final dy = xAxisMarker.y - originMarker.y;
+        final orientationAngle = math.atan2(dy, dx);
+        
+        final scaleX = scaleMarker.x - originMarker.x;
+        final scaleY = scaleMarker.y - originMarker.y;
+        final distancePx = math.sqrt(scaleX * scaleX + scaleY * scaleY);
+        
+        final pixelToMmRatio = widget.settings.markerXDistance / distancePx;
+        
+        final origin = CoordinatePointXY(originMarker.x.toDouble(), originMarker.y.toDouble());
+        
+        // Create the result
+        final markerResult = MarkerDetectionResult(
+          markers: _detectedMarkers,
+          pixelToMmRatio: pixelToMmRatio,
+          origin: origin,
+          orientationAngle: orientationAngle,
+          debugImage: debugImage,
+        );
+        
+        // Update flow manager
+        var updatedResult = _flowManager.result.copyWith(
+          markerResult: markerResult,
+          processedImage: debugImage,
+        );
+        
+        // This creates a dummy SlabContourResult just to update the flow manager
+        final dummyContourResult = SlabContourResult(
+          pixelContour: [],
+          machineContour: [],
+          debugImage: debugImage,
+        );
+        
+        _flowManager.updateContourResult(dummyContourResult, method: ContourDetectionMethod.manual);
+      }
+      
+      // Double-check if we have a marker result now
+      if (_flowManager.result.markerResult == null) {
+        throw Exception('Marker detection result not available despite recovery attempts');
+      }
+      
+      // Use edge contour algorithm with the calculated image point coordinates
+      final contourAlgorithmRegistry = await _flowManager.detectSlabContourAutomatic(
+        imagePoint.x.toInt(),  // Pass the seed point x coordinate
+        imagePoint.y.toInt()   // Pass the seed point y coordinate
+      );
+      
+      setState(() {
+        _contourDetected = true;
+        _isLoading = false;
+        _statusMessage = 'Contour detected! Tap "Continue" to generate G-code.';
+        _markerSelectionState = MarkerSelectionState.complete;
+      });
+    } catch (e, stackTrace) {
+      ErrorUtils().logError(
+        'Error during contour detection',
+        e,
+        stackTrace: stackTrace,
+        context: 'contour_detection',
+      );
+      
+      setState(() {
+        _errorMessage = 'Contour detection failed: ${e.toString()}';
+        _isLoading = false;
+      });
     }
-    
-    // Calculate the actual seed point in the image
-    final imagePoint = _calculateImagePoint(_selectedPoint!);
-    
-    // Detect contour using interactive method
-    final markerResult = _flowManager.result.markerResult;
-    if (markerResult == null) {
-      throw Exception('Marker detection result not available');
-    }
-    
-    // Load image
-    final imageBytes = await widget.imageFile.readAsBytes();
-    final decodedImage = img.decodeImage(imageBytes);
-    
-    if (decodedImage == null) {
-      throw Exception('Failed to decode image');
-    }
-    
-    // Create coordinate system from marker detection result
-    final coordinateSystem = _flowManager.result.markerResult!;
-    
-    // Use edge contour algorithm with the calculated image point coordinates
-    final contourAlgorithmRegistry = await _flowManager.detectSlabContourAutomatic(
-      imagePoint.x.toInt(),  // Pass the seed point x coordinate
-      imagePoint.y.toInt()   // Pass the seed point y coordinate
-    );
-    
-    setState(() {
-      _contourDetected = true;
-      _isLoading = false;
-      _statusMessage = 'Contour detected! Tap "Continue" to generate G-code.';
-      _markerSelectionState = MarkerSelectionState.complete;
-    });
-  } catch (e, stackTrace) {
-    ErrorUtils().logError(
-      'Error during contour detection',
-      e,
-      stackTrace: stackTrace,
-      context: 'contour_detection',
-    );
-    
-    setState(() {
-      _errorMessage = 'Contour detection failed: ${e.toString()}';
-      _isLoading = false;
-    });
   }
-}
   
   Future<void> _generateGcode() async {
   Navigator.push(
@@ -945,36 +1043,46 @@ Widget _buildControlButtons() {
   }
   
   Widget _buildImageDisplay() {
-  if (_flowManager.result.originalImage != null) {
-    if (_contourDetected && _flowManager.result.contourResult?.debugImage != null) {
-      // Use Image.memory to display the debug image if contour was detected
-      return Center(
-        child: Image.memory(
-          Uint8List.fromList(img.encodePng(_flowManager.result.contourResult!.debugImage!)),
-          fit: BoxFit.contain,
-        ),
-      );
-    } else if (_markersDetected && _flowManager.result.markerResult?.debugImage != null) {
-      // Use Image.memory to display the debug image if markers were detected
-      return Center(
-        child: Image.memory(
-          Uint8List.fromList(img.encodePng(_flowManager.result.markerResult!.debugImage!)),
-          fit: BoxFit.contain,
-        ),
-      );
+    if (_flowManager.result.originalImage != null) {
+      if (_contourDetected && _flowManager.result.contourResult?.debugImage != null) {
+        // Use Image.memory to display the debug image if contour was detected
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Image.memory(
+              Uint8List.fromList(img.encodePng(_flowManager.result.contourResult!.debugImage!)),
+              fit: BoxFit.contain,
+            ),
+          ),
+        );
+      } else if (_markersDetected && _flowManager.result.markerResult?.debugImage != null) {
+        // Use Image.memory to display the debug image if markers were detected
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Image.memory(
+              Uint8List.fromList(img.encodePng(_flowManager.result.markerResult!.debugImage!)),
+              fit: BoxFit.contain,
+            ),
+          ),
+        );
+      } else {
+        // Show the original image if no debug images available
+        // Apply padding to original image view as well for consistency
+        return Center(
+          child: Padding(
+            padding: const EdgeInsets.all(16.0),
+            child: Image.file(
+              _flowManager.result.originalImage!,
+              fit: BoxFit.contain,
+            ),
+          ),
+        );
+      }
     } else {
-      // Show the original image if no debug images available
-      return Center(
-        child: Image.file(
-          _flowManager.result.originalImage!,
-          fit: BoxFit.contain,
-        ),
-      );
+      return Center(child: Text('Image not available'));
     }
-  } else {
-    return Center(child: Text('Image not available'));
   }
-}
 
 void _updateLocalSettings(SettingsModel updatedSettings) {
     setState(() {
