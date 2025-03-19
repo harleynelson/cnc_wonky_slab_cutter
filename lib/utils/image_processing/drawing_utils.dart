@@ -84,56 +84,56 @@ class DrawingUtils {
     }
   }
   
-  /// Draw a dotted/dashed line
-  static void drawDashedLine(
-    img.Image image,
-    int x1,
-    int y1,
-    int x2,
-    int y2,
-    img.Color color,
-    int dashLength,
-    int gapLength
-  ) {
-    final dx = x2 - x1;
-    final dy = y2 - y1;
-    final length = math.sqrt(dx * dx + dy * dy);
+  // /// Draw a dotted/dashed line
+  // static void drawDashedLine(
+  //   img.Image image,
+  //   int x1,
+  //   int y1,
+  //   int x2,
+  //   int y2,
+  //   img.Color color,
+  //   int dashLength,
+  //   int gapLength
+  // ) {
+  //   final dx = x2 - x1;
+  //   final dy = y2 - y1;
+  //   final length = math.sqrt(dx * dx + dy * dy);
     
-    if (length < 1e-10) {
-      // Just a point
-      if (x1 >= 0 && x1 < image.width && y1 >= 0 && y1 < image.height) {
-        image.setPixel(x1, y1, color);
-      }
-      return;
-    }
+  //   if (length < 1e-10) {
+  //     // Just a point
+  //     if (x1 >= 0 && x1 < image.width && y1 >= 0 && y1 < image.height) {
+  //       image.setPixel(x1, y1, color);
+  //     }
+  //     return;
+  //   }
     
-    // Normalize direction vector
-    final dirX = dx / length;
-    final dirY = dy / length;
+  //   // Normalize direction vector
+  //   final dirX = dx / length;
+  //   final dirY = dy / length;
     
-    // Draw dashed line
-    double currentLength = 0;
-    bool drawing = true;
-    int currentDashLength = dashLength;
+  //   // Draw dashed line
+  //   double currentLength = 0;
+  //   bool drawing = true;
+  //   int currentDashLength = dashLength;
     
-    while (currentLength < length) {
-      final currentX = (x1 + currentLength * dirX).round();
-      final currentY = (y1 + currentLength * dirY).round();
+  //   while (currentLength < length) {
+  //     final currentX = (x1 + currentLength * dirX).round();
+  //     final currentY = (y1 + currentLength * dirY).round();
       
-      if (drawing && currentX >= 0 && currentX < image.width && 
-          currentY >= 0 && currentY < image.height) {
-        image.setPixel(currentX, currentY, color);
-      }
+  //     if (drawing && currentX >= 0 && currentX < image.width && 
+  //         currentY >= 0 && currentY < image.height) {
+  //       image.setPixel(currentX, currentY, color);
+  //     }
       
-      currentLength++;
-      currentDashLength--;
+  //     currentLength++;
+  //     currentDashLength--;
       
-      if (currentDashLength == 0) {
-        drawing = !drawing;
-        currentDashLength = drawing ? dashLength : gapLength;
-      }
-    }
-  }
+  //     if (currentDashLength == 0) {
+  //       drawing = !drawing;
+  //       currentDashLength = drawing ? dashLength : gapLength;
+  //     }
+  //   }
+  // }
   
   /// Draw a circle on an image
   static void drawCircle(

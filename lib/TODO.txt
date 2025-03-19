@@ -19,3 +19,19 @@ Edge detection:
 Marker Detection:
     - have the user tap the general area where the markers are and then perform the blob search there to detect.
     - should we have a separate marker for the origin of the machine?
+
+Rotation:
+    - we currently detect rotation from the markers and then apply it throughout our app.
+    - I'm not sure we want to keep doing this...
+        - it potentially helps if the camera angle is off
+        - but it can also distract if someone's markers aren't perfect and...
+            complicates things like gcode viewing
+            Stems from...
+            machine_coordinates.dart
+                fromMarkerPointsWithDistances...
+                    final dx = xAxisMarker.x - originMarker.x;
+                    final dy = xAxisMarker.y - originMarker.y;
+                    final orientationRad = math.atan2(dy, dx);
+
+                Disabled it by...
+                    final orientationRad = 0.0; // Instead of math.atan2(dy, dx);

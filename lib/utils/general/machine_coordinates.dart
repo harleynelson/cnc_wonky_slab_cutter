@@ -178,7 +178,9 @@ static MachineCoordinateSystem fromMarkerPointsWithDistances(
   // Calculate orientation angle from origin to x-axis marker
   final dx = xAxisMarker.x - originMarker.x;
   final dy = xAxisMarker.y - originMarker.y;
-  final orientationRad = math.atan2(dy, dx);
+  // Force horizontal orientation (orientation angle = 0)
+  final orientationRad = 0.0; // Instead of math.atan2(dy, dx);
+
   
   // Calculate pixel distances
   final xDistancePx = math.sqrt(dx * dx + dy * dy);

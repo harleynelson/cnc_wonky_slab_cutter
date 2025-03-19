@@ -67,20 +67,34 @@ void paint(Canvas canvas, Size size) {
     // Choose color based on marker role
     Color color;
     String label;
-    
+
     switch (marker.role) {
       case MarkerRole.origin:
         color = Colors.red;
-        label = "Origin (${marker.x.toInt()},${marker.y.toInt()})";
+        label = "Origin   ";
         break;
       case MarkerRole.xAxis:
         color = Colors.green;
-        label = "X-Axis (${marker.x.toInt()},${marker.y.toInt()})";
+        label = "X   ";
         break;
       case MarkerRole.scale:
         color = Colors.blue;
-        label = "Y-Axis (${marker.x.toInt()},${marker.y.toInt()})";
+        label = "Y   ";
         break;
+    
+    // switch (marker.role) {
+    //   case MarkerRole.origin:
+    //     color = Colors.red;
+    //     label = "Origin (${marker.x.toInt()},${marker.y.toInt()})";
+    //     break;
+    //   case MarkerRole.xAxis:
+    //     color = Colors.green;
+    //     label = "X-Axis (${marker.x.toInt()},${marker.y.toInt()})";
+    //     break;
+    //   case MarkerRole.scale:
+    //     color = Colors.blue;
+    //     label = "Y-Axis (${marker.x.toInt()},${marker.y.toInt()})";
+    //     break;
     }
     
     // Draw marker at transformed position

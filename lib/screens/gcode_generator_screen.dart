@@ -730,7 +730,7 @@ Widget _buildActionButtons() {
             style: TextStyle(fontWeight: FontWeight.bold),
           ),
           Text(
-            'Add a safety margin around the detected slab for CNC cutting',
+            'Add a margin around the slab for extra cutting',
             style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
           ),
           Row(
@@ -869,7 +869,7 @@ Widget _buildActionButtons() {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text('Safety Margin:'),
+                  Text('Extra Margin:'),
                   Text('${_slabMargin.toStringAsFixed(0)} mm all around'),
                 ],
               ),
