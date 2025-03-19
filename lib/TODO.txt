@@ -1,5 +1,37 @@
-Fix x,y, origin dots displayed wrong on interactive screen
-update algorithm for detection
-clean up flow with slab detection
-generate gcode
-crashes when minimized
+
+gcode generation
+    - Have some sort of option to strictly stay within confines of slab + margin OR create efficient box
+        - Let's say we have a U shaped piece of wood, it would be less efficient to have to go all the way up and back down it
+            - we should cross the gap
+    - Stepover calculation based on tool diameter ( we've sorta got this.  We should probably default it to something like 40% of tool width and update the estimated completion time accordingly)
+
+gcode visualization
+    - appears to be on a slope even though gcode is horizontal
+
+App wide:
+    - How do we go about implementing metric vs standard without screwing up our code
+    - Consider moving device-specific or display-dependent constants to a dynamic configuration
+    - crashes when minimized sometimes?
+
+Edge detection:
+    - have a tap for the slab and a tap for the spillboard bor better detection
+        - since slab and mdf spillboard will look too similar
+Marker Detection:
+    - have the user tap the general area where the markers are and then perform the blob search there to detect.
+    - should we have a separate marker for the origin of the machine?
+
+Rotation:
+    - we currently detect rotation from the markers and then apply it throughout our app.
+    - I'm not sure we want to keep doing this...
+        - it potentially helps if the camera angle is off
+        - but it can also distract if someone's markers aren't perfect and...
+            complicates things like gcode viewing
+            Stems from...
+            machine_coordinates.dart
+                fromMarkerPointsWithDistances...
+                    final dx = xAxisMarker.x - originMarker.x;
+                    final dy = xAxisMarker.y - originMarker.y;
+                    final orientationRad = math.atan2(dy, dx);
+
+                Disabled it by...
+                    final orientationRad = 0.0; // Instead of math.atan2(dy, dx);

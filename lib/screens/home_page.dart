@@ -1,12 +1,18 @@
+// lib/screens/home_page.dart
+// Main home page that initializes the app and manages navigation
+
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 import 'dart:io';
 import 'package:flutter/foundation.dart' show kIsWeb;
+import 'package:provider/provider.dart';
 
-import '../models/settings_model.dart';
+import '../utils/general/settings_model.dart';
+import '../flow_of_app/flow_provider.dart';
 import 'file_picker_screen.dart';
 import 'image_selection_screen.dart';
 import 'settings_screen.dart';
+import 'combined_detector_screen.dart';
 
 class HomePage extends StatefulWidget {
   final List<CameraDescription> cameras;
@@ -39,7 +45,10 @@ class _HomePageState extends State<HomePage> {
   void _initializePages() {
     _widgetOptions = <Widget>[
       _hasCameraSupport
-          ? ImageSelectionScreen(settings: _settings)
+          ? ImageSelectionScreen(
+              settings: _settings,
+              onImageSelected: _handleImageCaptured,
+            )
           : FilePickerScreen(
               settings: _settings,
               onImageSelected: _handleImageCaptured,
@@ -52,8 +61,21 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _handleImageCaptured(File imageFile) {
-    // Navigation to preview screen will be handled in the camera/file_picker screen
-    // This is just a placeholder for any additional logic needed at this level
+    // Initialize the processing provider
+    final processingProvider = Provider.of<ProcessingProvider>(context, listen: false);
+    processingProvider.createFlowManager(_settings);
+    
+    // Navigate to the combined detector screen
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CombinedDetectorScreen(
+          imageFile: imageFile,
+          settings: _settings,
+          onSettingsChanged: _handleSettingsChanged,
+        ),
+      ),
+    );
   }
 
   void _handleSettingsChanged(SettingsModel newSettings) async {

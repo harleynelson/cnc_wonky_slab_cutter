@@ -5,9 +5,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
 
-import '../models/settings_model.dart';
-import '../utils/constants.dart';
-import '../utils/permissions_utils.dart';
+import '../utils/general/settings_model.dart';
+import '../utils/general/constants.dart';
+import '../utils/general/permissions_utils.dart';
 import '../widgets/camera_overlay.dart';
 
 class CameraScreenWithOverlay extends StatefulWidget {
@@ -227,69 +227,69 @@ class _CameraScreenWithOverlayState extends State<CameraScreenWithOverlay> with 
   }
 
   Widget _buildCameraPreview() {
-    final size = MediaQuery.of(context).size;
-    
-    return ClipRect(
-      child: Stack(
-        alignment: Alignment.center,
-        children: [
-          // Camera preview
-          Container(
-            width: size.width,
-            height: size.width * _controller.value.aspectRatio,
-            child: CameraPreview(_controller),
-          ),
-          
-          // Camera overlay with guides
-          CameraOverlay(
-            markerSize: markerSize,
-            markerOriginColor: Color(markerOriginColorHex),
-            markerXAxisColor: Color(markerXAxisColorHex),
-            markerScaleColor: Color(markerScaleColorHex),
-          ),
-        ],
-      ),
-    );
-  }
+  final size = MediaQuery.of(context).size;
+  
+  return ClipRect(
+    child: Stack(
+      alignment: Alignment.center,
+      children: [
+        // Camera preview
+        Container(
+          width: size.width,
+          height: size.width * _controller.value.aspectRatio,
+          child: CameraPreview(_controller),
+        ),
+        
+        // Camera overlay with guides
+        CameraOverlay(
+          markerSize: markerSize,
+          markerOriginColor: Color(markerOriginColorHex),
+          markerXAxisColor: Color(markerXAxisColorHex),
+          markerScaleColor: Color(markerScaleColorHex),
+        ),
+      ],
+    ),
+  );
+}
 
   Widget _buildCameraControls() {
-    return Container(
-      height: 100,
-      color: Colors.black,
-      padding: EdgeInsets.symmetric(horizontal: 20),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-        children: [
-          // Flash toggle
-          IconButton(
-            icon: Icon(
-              _isFlashOn ? Icons.flash_on : Icons.flash_off,
-              color: Colors.white,
-              size: 28,
-            ),
-            onPressed: _toggleFlash,
+  return Container(
+    height: cameraBottomBarHeight,
+    color: Colors.black,
+    padding: EdgeInsets.symmetric(horizontal: padding),
+    child: Row(
+      mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+      children: [
+        // Flash toggle
+        IconButton(
+          icon: Icon(
+            _isFlashOn ? Icons.flash_on : Icons.flash_off,
+            color: Colors.white,
+            size: 28,
           ),
-          
-          // Capture button
-          FloatingActionButton(
-            heroTag: "takePicture",
-            child: Icon(Icons.camera_alt, size: 36),
-            onPressed: _takePicture,
+          onPressed: _toggleFlash,
+        ),
+        
+        // Capture button
+        FloatingActionButton(
+          heroTag: "takePicture",
+          child: Icon(Icons.camera_alt, size: 36),
+          onPressed: _takePicture,
+        ),
+        
+        // Camera switch button
+        IconButton(
+          icon: Icon(
+            Icons.flip_camera_ios,
+            color: Colors.white,
+            size: 28,
           ),
-          
-          // Camera switch button
-          IconButton(
-            icon: Icon(
-              Icons.flip_camera_ios,
-              color: Colors.white,
-              size: 28,
-            ),
-            onPressed: _cameras.length > 1 ? _switchCamera : null,
-          ),
-        ],
-      ),
-    );
-  }
+          onPressed: _cameras.length > 1 ? _switchCamera : null,
+        ),
+      ],
+    ),
+  );
+}
 
   void _showErrorDialog(String message) {
     showDialog(
