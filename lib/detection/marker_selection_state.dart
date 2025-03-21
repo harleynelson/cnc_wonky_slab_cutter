@@ -12,6 +12,9 @@ enum MarkerSelectionState {
   /// Selecting the slab seed point
   slab,
   
+  /// Selecting the spillboard seed point
+  spillboard,
+  
   /// All selections complete
   complete
 }

@@ -5,7 +5,6 @@ import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
 import 'package:cnc_wonky_slab_cutter/utils/drawing/drawing_utils.dart';
-import 'package:cnc_wonky_slab_cutter/utils/image_processing/filter_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image/image.dart' as img;
@@ -20,7 +19,6 @@ import '../detection/algorithms/edge_contour_algorithm.dart';
 import '../utils/general/constants.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../flow_of_app/flow_manager.dart';
-import '../utils/image_processing/color_utils.dart';
 import '../widgets/marker_overlay.dart';
 import '../widgets/contour_overlay.dart';
 import '../utils/general/error_utils.dart';
@@ -59,12 +57,13 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   late ProcessingFlowManager _flowManager;
   
   // Detection seed point for contour detection
-  Offset? _selectedPoint;
+  Offset? _selectedPoint; // slab tap point
+  Offset? _spillboardTapPoint; // spillboard tap point
 
   // Marker tap points
-  Offset? _originTapPoint;
-  Offset? _xAxisTapPoint;
-  Offset? _scaleTapPoint;
+  Offset? _originTapPoint; // origin tap point
+  Offset? _xAxisTapPoint; // X axis tap point
+  Offset? _scaleTapPoint; // Y axis tap point
 
   // Current marker selection state
   MarkerSelectionState _markerSelectionState = MarkerSelectionState.origin;
@@ -367,43 +366,63 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
 }
   
   void _handleImageTap(TapDownDetails details) {
-    if (_isLoading) return;
-    
-    setState(() {
-      switch (_markerSelectionState) {
-        case MarkerSelectionState.origin:
-          _originTapPoint = details.localPosition;
-          _statusMessage = 'Tap on the X-Axis marker (bottom right)';
-          _markerSelectionState = MarkerSelectionState.xAxis;
-          break;
-          
-        case MarkerSelectionState.xAxis:
-          _xAxisTapPoint = details.localPosition;
-          _statusMessage = 'Tap on the Scale/Y-Axis marker (top left)';
-          _markerSelectionState = MarkerSelectionState.scale;
-          break;
-          
-        case MarkerSelectionState.scale:
-          _scaleTapPoint = details.localPosition;
-          _detectMarkersFromTapPoints();
-          break;
-          
-        case MarkerSelectionState.slab:
-          _selectedPoint = details.localPosition;
-          
-          // Calculate image point
-          final imagePoint = _calculateImagePoint(_selectedPoint!);
-          
-          // Update status message with tap coordinates
-          _statusMessage = 'Tap at: (${_selectedPoint!.dx.toInt()},${_selectedPoint!.dy.toInt()}) → Image: (${imagePoint.x.toInt()},${imagePoint.y.toInt()}). Tap "Detect Contour" to proceed.';
-          break;
-          
-        case MarkerSelectionState.complete:
-          // Do nothing when we've completed all the steps
-          break;
-      }
-    });
-  }
+  if (_isLoading) return;
+  
+  setState(() {
+    switch (_markerSelectionState) {
+      case MarkerSelectionState.origin:
+        _originTapPoint = details.localPosition;
+        _statusMessage = 'Tap on the X-Axis marker (bottom right)';
+        _markerSelectionState = MarkerSelectionState.xAxis;
+        break;
+        
+      case MarkerSelectionState.xAxis:
+        _xAxisTapPoint = details.localPosition;
+        _statusMessage = 'Tap on the Scale/Y-Axis marker (top left)';
+        _markerSelectionState = MarkerSelectionState.scale;
+        break;
+        
+      case MarkerSelectionState.scale:
+        _scaleTapPoint = details.localPosition;
+        _detectMarkersFromTapPoints();
+        break;
+        
+      case MarkerSelectionState.slab:
+        _selectedPoint = details.localPosition;
+        
+        // Calculate image point
+        final imagePoint = _calculateImagePoint(_selectedPoint!);
+        
+        // Update status message with tap coordinates
+        _statusMessage = 'Slab: (${_selectedPoint!.dx.toInt()},${_selectedPoint!.dy.toInt()}) → Image: (${imagePoint.x.toInt()},${imagePoint.y.toInt()}). Now tap on the spillboard.';
+        _markerSelectionState = MarkerSelectionState.spillboard;
+        break;
+      
+      case MarkerSelectionState.spillboard:
+        _spillboardTapPoint = details.localPosition;
+        
+        // Calculate image point
+        final imagePoint = _calculateImagePoint(_spillboardTapPoint!);
+
+        // Calculate the actual seed points in the image
+        // For now, we only use the slab seed point, but we store the spillboard seed point for future use
+        // TODO: use the spillboard seed point to better detect edges
+        final slabSeedImagePoint = _calculateImagePoint(_selectedPoint!);
+        final spillboardSeedImagePoint = _spillboardTapPoint != null ? 
+        _calculateImagePoint(_spillboardTapPoint!) : null;
+
+        
+        // Update status message with tap coordinates
+        _statusMessage = 'Spillboard: (${_spillboardTapPoint!.dx.toInt()},${_spillboardTapPoint!.dy.toInt()}) → Image: (${imagePoint.x.toInt()},${imagePoint.y.toInt()}). Tap "Detect Contour" to proceed.';
+        _markerSelectionState = MarkerSelectionState.complete;
+        break;
+        
+      case MarkerSelectionState.complete:
+        // Do nothing when we've completed all the steps
+        break;
+    }
+  });
+}
 
   CoordinatePointXY _calculateImagePoint(Offset tapPosition) {
   if (_imageSize == null) {
@@ -614,6 +633,22 @@ Widget build(BuildContext context) {
                     ),
                   ),
                   
+                  if (_spillboardTapPoint != null && (_markerSelectionState == MarkerSelectionState.complete || _markerSelectionState == MarkerSelectionState.spillboard))
+                  Positioned(
+                    left: _spillboardTapPoint!.dx - seedPointIndicatorSize / 2,
+                    top: _spillboardTapPoint!.dy - seedPointIndicatorSize / 2,
+                    child: Container(
+                      width: seedPointIndicatorSize,
+                      height: seedPointIndicatorSize,
+                      decoration: BoxDecoration(
+                        color: Colors.purple.withOpacity(seedPointIndicatorOpacity),
+                        shape: BoxShape.circle,
+                        border: Border.all(color: Colors.purple, width: seedPointIndicatorBorderWidth),
+                      ),
+                    ),
+                  ),
+                  
+                  
                 // Loading indicator
                 if (_isLoading)
                   Container(
@@ -675,7 +710,7 @@ Widget _buildControlButtons() {
       child: Column(
         children: [
           // Detect Contour Button (only visible after markers are detected)
-          if (_markerSelectionState == MarkerSelectionState.slab)
+          if (_markerSelectionState == MarkerSelectionState.complete)
             ElevatedButton.icon(
               icon: Icon(Icons.content_cut),
               label: Text('Detect Contour'),
@@ -758,6 +793,7 @@ Widget _buildControlButtons() {
       _originTapPoint = null;
       _xAxisTapPoint = null;
       _scaleTapPoint = null;
+      _spillboardTapPoint = null;
       _errorMessage = '';
       _statusMessage = 'Tap on the Origin marker (bottom left)';
       _markerSelectionState = MarkerSelectionState.origin;
