@@ -4,12 +4,11 @@
 import 'dart:async';
 import 'package:image/image.dart' as img;
 
-import '../utils/image_processing/drawing_utils.dart';
+import '../utils/drawing/drawing_utils.dart';
 import '../utils/general/machine_coordinates.dart';
 import 'slab_contour_result.dart';
 import '../utils/image_processing/contour_detection_utils.dart';
 import '../utils/image_processing/filter_utils.dart';
-import '../utils/image_processing/image_utils.dart';
 import '../utils/image_processing/threshold_utils.dart';
 import '../utils/image_processing/geometry_utils.dart';
 
@@ -44,7 +43,7 @@ class SlabContourDetector {
     // Downsample large images if needed
     img.Image processImage = image;
     if (image.width > maxImageSize || image.height > maxImageSize) {
-      processImage = ImageUtils.safeResize(image, maxSize: maxImageSize);
+      processImage = FilterUtils.safeResize(image, maxSize: maxImageSize);
     }
     
     // Create a debug image if needed
@@ -96,10 +95,10 @@ class SlabContourDetector {
   ) {
     try {
       // 1. Convert to grayscale
-      final grayscale = ImageUtils.convertToGrayscale(image);
+      final grayscale = FilterUtils.convertToGrayscale(image);
       
       // 2. Apply contrast enhancement
-      final enhanced = ImageUtils.enhanceContrast(grayscale);
+      final enhanced = FilterUtils.enhanceContrast(grayscale);
       
       // 3. Apply gaussian blur to reduce noise
       final blurred = FilterUtils.applyGaussianBlur(enhanced, 3);
@@ -143,7 +142,7 @@ class SlabContourDetector {
   ) {
     try {
       // Convert to grayscale
-      final grayscale = ImageUtils.convertToGrayscale(image);
+      final grayscale = FilterUtils.convertToGrayscale(image);
       
       // Try multiple threshold levels to find the best contour
       List<CoordinatePointXY> bestContour = [];
@@ -202,10 +201,10 @@ class SlabContourDetector {
   ) {
     try {
       // Convert to grayscale
-      final grayscale = ImageUtils.convertToGrayscale(image);
+      final grayscale = FilterUtils.convertToGrayscale(image);
       
       // Apply Otsu's thresholding
-      final threshold = ImageUtils.findOptimalThreshold(grayscale);
+      final threshold = FilterUtils.findOptimalThreshold(grayscale);
       final binary = ThresholdUtils.applyBinaryThreshold(grayscale, threshold);
       
       // Find all non-zero points
@@ -213,7 +212,7 @@ class SlabContourDetector {
       for (int y = 0; y < binary.height; y++) {
         for (int x = 0; x < binary.width; x++) {
           final pixel = binary.getPixel(x, y);
-          if (ImageUtils.calculateLuminance(pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()) < 128) {
+          if (FilterUtils.calculateLuminance(pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()) < 128) {
             nonZeroPoints.add(CoordinatePointXY(x.toDouble(), y.toDouble()));
           }
         }

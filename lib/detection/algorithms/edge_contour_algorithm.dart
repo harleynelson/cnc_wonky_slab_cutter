@@ -5,15 +5,14 @@ import 'dart:async';
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
 
+import '../../utils/drawing/drawing_utils.dart';
 import '../../utils/general/constants.dart';
 import '../../utils/general/machine_coordinates.dart';
 import '../../utils/image_processing/contour_detection_utils.dart';
 import '../../utils/image_processing/filter_utils.dart';
-import '../../utils/image_processing/drawing_utils.dart';
 import '../../utils/image_processing/base_image_utils.dart';
 import '../../utils/image_processing/geometry_utils.dart';
 import '../../utils/image_processing/threshold_utils.dart';
-import '../../utils/image_processing/image_utils.dart';
 import '../slab_contour_result.dart';
 import 'contour_algorithm_interface.dart';
 
@@ -68,7 +67,7 @@ class EdgeContourAlgorithm implements ContourDetectionAlgorithm {
   try {
     // 1. Apply preprocessing to enhance edges
     final grayscale = BaseImageUtils.convertToGrayscale(workingImage);
-    final equalized = ImageUtils.applyHistogramEqualization(grayscale);
+    final equalized = FilterUtils.applyHistogramEqualization(grayscale);
     final blurred = FilterUtils.applyGaussianBlur(equalized, blurRadius);
     
     // 2. Apply edge detection

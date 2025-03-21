@@ -4,6 +4,8 @@
 import 'dart:io';
 import 'dart:math' as math;
 import 'dart:typed_data';
+import 'package:cnc_wonky_slab_cutter/utils/drawing/drawing_utils.dart';
+import 'package:cnc_wonky_slab_cutter/utils/image_processing/filter_utils.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:image/image.dart' as img;
@@ -18,6 +20,7 @@ import '../detection/algorithms/edge_contour_algorithm.dart';
 import '../utils/general/constants.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../flow_of_app/flow_manager.dart';
+import '../utils/image_processing/color_utils.dart';
 import '../widgets/marker_overlay.dart';
 import '../widgets/contour_overlay.dart';
 import '../utils/general/error_utils.dart';
@@ -263,35 +266,6 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
     }
   }
   
-  Future<void> _detectMarkers() async {
-    setState(() {
-      _isLoading = true;
-      _statusMessage = 'Detecting markers...';
-      _errorMessage = '';
-    });
-
-    try {
-      await _flowManager.detectMarkers();
-      
-      setState(() {
-        _markersDetected = true;
-        _isLoading = false;
-        _statusMessage = 'Markers detected! Now tap on the slab to select a seed point for contour detection.';
-      });
-    } catch (e, stackTrace) {
-      ErrorUtils().logError(
-        'Error during marker detection',
-        e,
-        stackTrace: stackTrace,
-        context: 'marker_detection',
-      );
-      
-      setState(() {
-        _errorMessage = 'Marker detection failed: ${e.toString()}';
-        _isLoading = false;
-      });
-    }
-  }
 
   MarkerPoint _findMarkerInRegion(img.Image image, int centerX, int centerY, int searchRadius, MarkerRole role) {
     // Define the search region
@@ -309,7 +283,7 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
         for (int x = x1; x < x2; x++) {
           if (x >= 0 && x < image.width && y >= 0 && y < image.height) {
             final pixel = image.getPixel(x, y);
-            final brightness = _calculateLuminance(
+            final brightness = FilterUtils.calculateLuminance(
               pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
             ) / 255.0; // Normalize to 0-1
             
@@ -345,7 +319,7 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
               
               if (px >= 0 && px < image.width && py >= 0 && py < image.height) {
                 final pixel = image.getPixel(px, py);
-                final brightness = _calculateLuminance(
+                final brightness = FilterUtils.calculateLuminance(
                   pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
                 ) / 255.0; // Normalize to 0-1
                 
@@ -390,10 +364,6 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
     }
   }
 
-  int _calculateLuminance(int r, int g, int b) {
-    return (0.299 * r + 0.587 * g + 0.114 * b).round().clamp(0, 255);
-  }
-
   void _drawMarkersOnDebugImage(img.Image debugImage, List<MarkerPoint> markers) {
     // Define colors for each marker type
     final colors = {
@@ -407,14 +377,14 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
       final color = colors[marker.role] ?? img.ColorRgba8(255, 255, 0, 255);
       
       // Draw a circle around the marker
-      _drawCircle(debugImage, marker.x, marker.y, 15, color);
+      DrawingUtils.drawCircle(debugImage, marker.x, marker.y, 15, color);
       
       // Draw a filled inner circle
-      _drawCircle(debugImage, marker.x, marker.y, 5, color, fill: true);
+      DrawingUtils.drawCircle(debugImage, marker.x, marker.y, 5, color, fill: true);
       
       // Draw marker role text
       final roleText = marker.role.toString().split('.').last;
-      _drawText(debugImage, roleText, marker.x + 20, marker.y - 5, color);
+      DrawingUtils.drawText(debugImage, roleText, marker.x + 20, marker.y - 5, color);
     }
     
     // Draw lines between markers if we have all three
@@ -424,7 +394,7 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
       final scaleMarker = markers.firstWhere((m) => m.role == MarkerRole.scale);
       
       // Draw line from origin to X-axis
-      _drawLine(
+      DrawingUtils.drawLine(
         debugImage, 
         originMarker.x, originMarker.y, 
         xAxisMarker.x, xAxisMarker.y, 
@@ -432,7 +402,7 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
       );
       
       // Draw line from origin to scale marker
-      _drawLine(
+      DrawingUtils.drawLine(
         debugImage, 
         originMarker.x, originMarker.y, 
         scaleMarker.x, scaleMarker.y, 
@@ -440,64 +410,7 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
       );
     }
   }
-
-  void _drawCircle(img.Image image, int x, int y, int radius, img.Color color, {bool fill = false}) {
-    for (int j = -radius; j <= radius; j++) {
-      for (int i = -radius; i <= radius; i++) {
-        final distance = math.sqrt(i * i + j * j);
-        if ((fill && distance <= radius) || (!fill && (distance >= radius - 0.5 && distance <= radius + 0.5))) {
-          final px = x + i;
-          final py = y + j;
-          if (px >= 0 && px < image.width && py >= 0 && py < image.height) {
-            image.setPixel(px, py, color);
-          }
-        }
-      }
-    }
-  }
-
-  void _drawLine(img.Image image, int x1, int y1, int x2, int y2, img.Color color) {
-    // Bresenham's line algorithm
-    int dx = (x2 - x1).abs();
-    int dy = (y2 - y1).abs();
-    int sx = x1 < x2 ? 1 : -1;
-    int sy = y1 < y2 ? 1 : -1;
-    int err = dx - dy;
-    
-    while (true) {
-      if (x1 >= 0 && x1 < image.width && y1 >= 0 && y1 < image.height) {
-        image.setPixel(x1, y1, color);
-      }
-      
-      if (x1 == x2 && y1 == y2) break;
-      
-      int e2 = 2 * err;
-      if (e2 > -dy) {
-        err -= dy;
-        x1 += sx;
-      }
-      if (e2 < dx) {
-        err += dx;
-        y1 += sy;
-      }
-    }
-  }
-
-  void _drawText(img.Image image, String text, int x, int y, img.Color color) {
-    // Simple implementation that draws a placeholder for text
-    // In a real implementation, you would render actual text
-    _drawRectangle(image, x, y, x + text.length * 8, y + 10, color);
-  }
   
-  void _drawRectangle(img.Image image, int x1, int y1, int x2, int y2, img.Color color) {
-    for (int y = y1; y <= y2; y++) {
-      for (int x = x1; x <= x2; x++) {
-        if (x >= 0 && x < image.width && y >= 0 && y < image.height) {
-          image.setPixel(x, y, color);
-        }
-      }
-    }
-  }
   
   Future<void> _detectContour() async {
     if (_selectedPoint == null) {
@@ -1370,51 +1283,5 @@ void _showParametersDialog() {
         );
       },
     );
-  
 
-  void _showDebugImage() {
-    if (_flowManager.result.markerResult?.debugImage == null && 
-        _flowManager.result.contourResult?.debugImage == null) return;
-    
-    final debugImage = _flowManager.result.markerResult?.debugImage ?? 
-                       _flowManager.result.contourResult?.debugImage;
-    
-    if (debugImage == null) return;
-    
-    showDialog(
-      context: context,
-      builder: (context) => Dialog(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(
-                _markersDetected && !_contourDetected ? 
-                  'Marker Detection Debug Image' : 
-                  'Contour Detection Debug Image',
-                style: TextStyle(fontWeight: FontWeight.bold),
-              ),
-            ),
-            Image.memory(
-              Uint8List.fromList(
-                img.encodePng(debugImage)
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(8.0),
-              child: Text(
-                'Image dimensions: ${debugImage.width}x${debugImage.height}',
-                style: TextStyle(fontSize: 12),
-              ),
-            ),
-            TextButton(
-              child: Text('Close'),
-              onPressed: () => Navigator.of(context).pop(),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 }}

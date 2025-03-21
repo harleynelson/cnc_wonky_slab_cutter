@@ -274,6 +274,8 @@ class ToolpathPainter extends CustomPainter {
     }
   }
 
+  
+
   // Use the utility class for drawing dashed lines
 
   @override

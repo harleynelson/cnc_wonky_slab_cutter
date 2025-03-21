@@ -135,15 +135,16 @@ class DrawingUtils {
   //   }
   // }
   
-  /// Draw a circle on an image
-  static void drawCircle(
-    img.Image image,
-    int centerX,
-    int centerY,
-    int radius,
-    img.Color color,
-    {bool fill = false}
-  ) {
+  /// Draw a circle on an image with improved performance and error handling
+static void drawCircle(
+  img.Image image,
+  int centerX,
+  int centerY,
+  int radius,
+  img.Color color,
+  {bool fill = false}
+) {
+  try {
     if (radius <= 0) {
       if (centerX >= 0 && centerX < image.width && 
           centerY >= 0 && centerY < image.height) {
@@ -184,7 +185,10 @@ class DrawingUtils {
         x++;
       }
     }
+  } catch (e) {
+    print('Error drawing circle: $e');
   }
+}
   
   /// Helper method to draw points for each octant of a circle
   static void _drawCirclePoints(
@@ -667,6 +671,29 @@ static void visualizeContourWithInfo(
     for (int i = 0; i < text.length; i++) {
       final charCode = text.codeUnitAt(i);
       _drawChar(image, charCode, x + i * 6 * scale, y, color, scale);
+    }
+  }
+
+  /// Draw a cross marker at the specified coordinates
+  static void drawCross(img.Image image, int x, int y, img.Color color, int size) {
+    try {
+      for (int i = -size; i <= size; i++) {
+        final px = x + i;
+        final py = y;
+        if (px >= 0 && px < image.width && py >= 0 && py < image.height) {
+          image.setPixel(px, py, color);
+        }
+      }
+      
+      for (int i = -size; i <= size; i++) {
+        final px = x;
+        final py = y + i;
+        if (px >= 0 && px < image.width && py >= 0 && py < image.height) {
+          image.setPixel(px, py, color);
+        }
+      }
+    } catch (e) {
+      print('Error drawing cross: $e');
     }
   }
 

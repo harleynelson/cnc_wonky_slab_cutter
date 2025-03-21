@@ -1,32 +1,9 @@
 import 'dart:math' as math;
 import 'package:image/image.dart' as img;
-import '../general/machine_coordinates.dart';
 import 'base_image_utils.dart';
 
 /// Utilities for image thresholding operations
 class ThresholdUtils {
-  // /// Apply binary thresholding to create a black and white image
-  // static img.Image applyThreshold(img.Image image, int threshold) {
-  //   final grayscale = BaseImageUtils.convertToGrayscale(image);
-  //   final result = img.Image(width: grayscale.width, height: grayscale.height);
-    
-  //   for (int y = 0; y < grayscale.height; y++) {
-  //     for (int x = 0; x < grayscale.width; x++) {
-  //       final pixel = grayscale.getPixel(x, y);
-  //       final intensity = pixel.r.toInt();
-        
-  //       if (intensity > threshold) {
-  //         // White
-  //         result.setPixel(x, y, img.ColorRgba8(255, 255, 255, 255));
-  //       } else {
-  //         // Black
-  //         result.setPixel(x, y, img.ColorRgba8(0, 0, 0, 255));
-  //       }
-  //     }
-  //   }
-    
-  //   return result;
-  // }
 
   /// Create a binary mask from an image using a threshold
 static List<List<bool>> createBinaryMask(img.Image image, int threshold) {
