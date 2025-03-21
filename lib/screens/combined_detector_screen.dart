@@ -106,310 +106,121 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   }
 
   Future<void> _detectMarkersFromTapPoints() async {
-    if (_originTapPoint == null || _xAxisTapPoint == null || _scaleTapPoint == null || _imageSize == null) {
-      setState(() {
-        _errorMessage = 'Missing tap points for markers';
-      });
-      return;
+  if (_originTapPoint == null || _xAxisTapPoint == null || _scaleTapPoint == null || _imageSize == null) {
+    setState(() {
+      _errorMessage = 'Missing tap points for markers';
+    });
+    return;
+  }
+  
+  setState(() {
+    _isLoading = true;
+    _statusMessage = 'Detecting markers...';
+    _errorMessage = '';
+  });
+
+  try {
+    // Convert tap points to image coordinates
+    final originImagePoint = _calculateImagePoint(_originTapPoint!);
+    final xAxisImagePoint = _calculateImagePoint(_xAxisTapPoint!);
+    final scaleImagePoint = _calculateImagePoint(_scaleTapPoint!);
+    
+    // Prepare tap regions for marker detector
+    final tapRegions = [
+      {
+        'x': originImagePoint.x.toInt(),
+        'y': originImagePoint.y.toInt(),
+        'role': MarkerRole.origin
+      },
+      {
+        'x': xAxisImagePoint.x.toInt(),
+        'y': xAxisImagePoint.y.toInt(),
+        'role': MarkerRole.xAxis
+      },
+      {
+        'x': scaleImagePoint.x.toInt(),
+        'y': scaleImagePoint.y.toInt(),
+        'role': MarkerRole.scale
+      }
+    ];
+    
+    // Use the flow manager to detect markers from tap points
+    await _flowManager.detectMarkersFromUserTaps(tapRegions);
+    
+    // Store the detected markers for later use
+    _detectedMarkers = _flowManager.result.markerResult?.markers ?? [];
+    
+    if (_detectedMarkers.isEmpty) {
+      throw Exception('No markers were detected from your taps. Please try again.');
     }
     
     setState(() {
-      _isLoading = true;
-      _statusMessage = 'Detecting markers...';
-      _errorMessage = '';
+      _markersDetected = true;
+      _isLoading = false;
+      _statusMessage = 'Markers detected! Now tap on the slab to select a seed point for contour detection.';
+      _markerSelectionState = MarkerSelectionState.slab;
     });
-
-    try {
-      // Convert tap points to image coordinates
-      final originImagePoint = _calculateImagePoint(_originTapPoint!);
-      final xAxisImagePoint = _calculateImagePoint(_xAxisTapPoint!);
-      final scaleImagePoint = _calculateImagePoint(_scaleTapPoint!);
-      
-      // Load the image
-      final imageBytes = await widget.imageFile.readAsBytes();
-      final originalImage = img.decodeImage(imageBytes);
-      
-      if (originalImage == null) {
-        throw Exception('Failed to decode image');
-      }
-      
-      // Create search regions around each tap point
-      final searchRadius = math.min(originalImage.width, originalImage.height) ~/ 10;
-      
-      // Detect markers in regions around tap points
-      final originMarker = _findMarkerInRegion(
-        originalImage, 
-        originImagePoint.x.toInt(), 
-        originImagePoint.y.toInt(), 
-        searchRadius,
-        MarkerRole.origin
-      );
-      
-      final xAxisMarker = _findMarkerInRegion(
-        originalImage, 
-        xAxisImagePoint.x.toInt(), 
-        xAxisImagePoint.y.toInt(), 
-        searchRadius,
-        MarkerRole.xAxis
-      );
-      
-      final scaleMarker = _findMarkerInRegion(
-        originalImage, 
-        scaleImagePoint.x.toInt(), 
-        scaleImagePoint.y.toInt(), 
-        searchRadius,
-        MarkerRole.scale
-      );
-      
-      // Create list of detected markers
-      _detectedMarkers = [originMarker, xAxisMarker, scaleMarker];
-      
-      // Create a debug image
-      img.Image? debugImage;
-      if (originalImage != null) {
-        debugImage = img.copyResize(originalImage, width: originalImage.width, height: originalImage.height);
-        
-        // Draw markers on debug image
-        _drawMarkersOnDebugImage(debugImage, _detectedMarkers);
-      }
-      
-      // Calculate parameters for the MarkerDetectionResult
-      final dx = xAxisMarker.x - originMarker.x;
-      final dy = xAxisMarker.y - originMarker.y;
-      final orientationAngle = math.atan2(dy, dx);
-      
-      final scaleX = scaleMarker.x - originMarker.x;
-      final scaleY = scaleMarker.y - originMarker.y;
-      final distancePx = math.sqrt(scaleX * scaleX + scaleY * scaleY);
-      
-      final pixelToMmRatio = widget.settings.markerXDistance / distancePx;
-      
-      final origin = CoordinatePointXY(originMarker.x.toDouble(), originMarker.y.toDouble());
-      
-      // Create the marker detection result
-      final markerResult = MarkerDetectionResult(
-        markers: _detectedMarkers,
-        pixelToMmRatio: pixelToMmRatio,
-        origin: origin,
-        orientationAngle: orientationAngle,
-        debugImage: debugImage,
-      );
-      
-      // Method 1: Try the public detectMarkers method first
-      try {
-        // First reset the flow manager state to start clean
-        _flowManager.reset();
-        await _flowManager.initWithImage(widget.imageFile);
-        
-        // Create a dummy contour result to update the flow manager
-        if (debugImage != null) {
-          final dummyContourResult = SlabContourResult(
-            pixelContour: [],
-            machineContour: [],
-            debugImage: debugImage,
-          );
-          
-          // Update the result in the flow manager
-          _flowManager.updateContourResult(dummyContourResult, method: ContourDetectionMethod.manual);
-          
-          // Explicitly update the markerResult in the flow manager
-          await _flowManager.detectMarkers();
-          
-          // Force the markerResult to be our calculated result
-          var updatedResult = _flowManager.result.copyWith(
-            markerResult: markerResult,
-            processedImage: debugImage,
-          );
-          
-          _flowManager.updateContourResult(dummyContourResult, method: ContourDetectionMethod.manual);
-        }
-      } catch (e) {
-        print('Failed to use flow manager methods: $e');
-        
-        // Method 2: Fallback - create a MarkerDetector and use it directly
-        final markerDetector = MarkerDetector(
-          markerRealDistanceMm: widget.settings.markerXDistance,
-          generateDebugImage: true,
-        );
-        
-        // Create a ResultWithMarkers directly
-        final newMarkerResult = await markerDetector.createResultFromMarkerPoints(_detectedMarkers, debugImage: debugImage);
-        
-        // Update the flow manager with our new marker result
-        final dummyContourResult = SlabContourResult(
-          pixelContour: [],
-          machineContour: [],
-          debugImage: debugImage,
-        );
-        
-        _flowManager.updateContourResult(dummyContourResult, method: ContourDetectionMethod.manual);
-      }
-      
-      setState(() {
-        _markersDetected = true;
-        _isLoading = false;
-        _statusMessage = 'Markers detected! Now tap on the slab to select a seed point for contour detection.';
-        _markerSelectionState = MarkerSelectionState.slab;
-      });
-    } catch (e, stackTrace) {
-      ErrorUtils().logError(
-        'Error during marker detection',
-        e,
-        stackTrace: stackTrace,
-        context: 'marker_detection',
-      );
-      
-      setState(() {
-        _errorMessage = 'Marker detection failed: ${e.toString()}';
-        _isLoading = false;
-      });
-    }
-  }
-  
-
-  MarkerPoint _findMarkerInRegion(img.Image image, int centerX, int centerY, int searchRadius, MarkerRole role) {
-    // Define the search region
-    final int x1 = math.max(0, centerX - searchRadius);
-    final int y1 = math.max(0, centerY - searchRadius);
-    final int x2 = math.min(image.width - 1, centerX + searchRadius);
-    final int y2 = math.min(image.height - 1, centerY + searchRadius);
+  } catch (e, stackTrace) {
+    ErrorUtils().logError(
+      'Error during marker detection',
+      e,
+      stackTrace: stackTrace,
+      context: 'marker_detection',
+    );
     
-    try {
-      // Extract region statistics
-      int totalPixels = 0;
-      double sumBrightness = 0;
-      
-      for (int y = y1; y < y2; y++) {
-        for (int x = x1; x < x2; x++) {
-          if (x >= 0 && x < image.width && y >= 0 && y < image.height) {
-            final pixel = image.getPixel(x, y);
-            final brightness = FilterUtils.calculateLuminance(
-              pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
-            ) / 255.0; // Normalize to 0-1
-            
-            sumBrightness += brightness;
-            totalPixels++;
-          }
-        }
-      }
-      
-      // Calculate average brightness
-      final avgBrightness = totalPixels > 0 ? sumBrightness / totalPixels : 0.5;
-      
-      // Look for the darkest or brightest area in the region as the marker
-      int bestX = -1, bestY = -1;
-      double bestDifference = -1;
-      
-      // Determine if we should look for dark markers on light background or vice versa
-      final lookForDark = avgBrightness > 0.5;
-      
-      // Slide a smaller window through the region to find the distinctive marker
-      final windowSize = math.max(5, math.min(x2 - x1, y2 - y1) ~/ 6);
-      
-      for (int y = y1; y < y2 - windowSize; y += windowSize ~/ 3) {
-        for (int x = x1; x < x2 - windowSize; x += windowSize ~/ 3) {
-          int windowPixels = 0;
-          double windowSum = 0;
-          
-          // Calculate window statistics
-          for (int wy = 0; wy < windowSize; wy++) {
-            for (int wx = 0; wx < windowSize; wx++) {
-              final px = x + wx;
-              final py = y + wy;
-              
-              if (px >= 0 && px < image.width && py >= 0 && py < image.height) {
-                final pixel = image.getPixel(px, py);
-                final brightness = FilterUtils.calculateLuminance(
-                  pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
-                ) / 255.0; // Normalize to 0-1
-                
-                windowSum += brightness;
-                windowPixels++;
-              }
-            }
-          }
-          
-          if (windowPixels > 0) {
-            final windowAvg = windowSum / windowPixels;
-            double difference;
-            
-            if (lookForDark) {
-              // Looking for dark markers on light background
-              difference = avgBrightness - windowAvg;
-            } else {
-              // Looking for light markers on dark background
-              difference = windowAvg - avgBrightness;
-            }
-            
-            if (difference > bestDifference) {
-              bestDifference = difference;
-              bestX = x + windowSize ~/ 2;
-              bestY = y + windowSize ~/ 2;
-            }
-          }
-        }
-      }
-      
-      // Require a higher minimum contrast difference to prevent false positives
-      if (bestDifference < 0.15 || bestX < 0 || bestY < 0) {
-        // If we couldn't find a clear marker, use the center of the search region
-        return MarkerPoint(centerX, centerY, role, confidence: 0.5);
-      }
-      
-      return MarkerPoint(bestX, bestY, role, confidence: bestDifference);
-    } catch (e) {
-      print('Error finding marker in region: $e');
-      // Fall back to using the tap point directly
-      return MarkerPoint(centerX, centerY, role, confidence: 0.5);
-    }
+    setState(() {
+      _errorMessage = 'Marker detection failed: ${e.toString()}';
+      _isLoading = false;
+    });
   }
+}
 
   void _drawMarkersOnDebugImage(img.Image debugImage, List<MarkerPoint> markers) {
-    // Define colors for each marker type
-    final colors = {
-      MarkerRole.origin: img.ColorRgba8(255, 0, 0, 255),      // Red
-      MarkerRole.xAxis: img.ColorRgba8(0, 255, 0, 255),       // Green
-      MarkerRole.scale: img.ColorRgba8(0, 0, 255, 255)        // Blue
-    };
+  // Define colors for each marker type
+  final colors = {
+    MarkerRole.origin: img.ColorRgba8(255, 0, 0, 255),      // Red
+    MarkerRole.xAxis: img.ColorRgba8(0, 255, 0, 255),       // Green
+    MarkerRole.scale: img.ColorRgba8(0, 0, 255, 255)        // Blue
+  };
+  
+  // Draw each marker
+  for (var marker in markers) {
+    final color = colors[marker.role] ?? img.ColorRgba8(255, 255, 0, 255);
     
-    // Draw each marker
-    for (var marker in markers) {
-      final color = colors[marker.role] ?? img.ColorRgba8(255, 255, 0, 255);
-      
-      // Draw a circle around the marker
-      DrawingUtils.drawCircle(debugImage, marker.x, marker.y, 15, color);
-      
-      // Draw a filled inner circle
-      DrawingUtils.drawCircle(debugImage, marker.x, marker.y, 5, color, fill: true);
-      
-      // Draw marker role text
-      final roleText = marker.role.toString().split('.').last;
-      DrawingUtils.drawText(debugImage, roleText, marker.x + 20, marker.y - 5, color);
-    }
+    // Draw a circle around the marker
+    DrawingUtils.drawCircle(debugImage, marker.x, marker.y, 15, color);
     
-    // Draw lines between markers if we have all three
-    if (markers.length >= 3) {
-      final originMarker = markers.firstWhere((m) => m.role == MarkerRole.origin);
-      final xAxisMarker = markers.firstWhere((m) => m.role == MarkerRole.xAxis);
-      final scaleMarker = markers.firstWhere((m) => m.role == MarkerRole.scale);
-      
-      // Draw line from origin to X-axis
-      DrawingUtils.drawLine(
-        debugImage, 
-        originMarker.x, originMarker.y, 
-        xAxisMarker.x, xAxisMarker.y, 
-        img.ColorRgba8(255, 255, 0, 200)
-      );
-      
-      // Draw line from origin to scale marker
-      DrawingUtils.drawLine(
-        debugImage, 
-        originMarker.x, originMarker.y, 
-        scaleMarker.x, scaleMarker.y, 
-        img.ColorRgba8(255, 255, 0, 200)
-      );
-    }
+    // Draw a filled inner circle
+    DrawingUtils.drawCircle(debugImage, marker.x, marker.y, 5, color, fill: true);
+    
+    // Draw marker role text
+    final roleText = marker.role.toString().split('.').last;
+    DrawingUtils.drawText(debugImage, roleText, marker.x + 20, marker.y - 5, color);
   }
+  
+  // Draw lines between markers if we have all three
+  if (markers.length >= 3) {
+    final originMarker = markers.firstWhere((m) => m.role == MarkerRole.origin);
+    final xAxisMarker = markers.firstWhere((m) => m.role == MarkerRole.xAxis);
+    final scaleMarker = markers.firstWhere((m) => m.role == MarkerRole.scale);
+    
+    // Draw line from origin to X-axis
+    DrawingUtils.drawLine(
+      debugImage, 
+      originMarker.x, originMarker.y, 
+      xAxisMarker.x, xAxisMarker.y, 
+      img.ColorRgba8(255, 255, 0, 200)
+    );
+    
+    // Draw line from origin to scale marker
+    DrawingUtils.drawLine(
+      debugImage, 
+      originMarker.x, originMarker.y, 
+      scaleMarker.x, scaleMarker.y, 
+      img.ColorRgba8(255, 255, 0, 200)
+    );
+  }
+}
   
   
   Future<void> _detectContour() async {
@@ -615,10 +426,12 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   double displayWidth, displayHeight, offsetX = 0, offsetY = 0;
   
   if (imageAspect > displayAspect) {
+    // Image is wider than display area (letterboxing)
     displayWidth = markerOverlaySize.width;
     displayHeight = displayWidth / imageAspect;
     offsetY = (markerOverlaySize.height - displayHeight) / 2;
   } else {
+    // Image is taller than display area (pillarboxing)
     displayHeight = markerOverlaySize.height;
     displayWidth = displayHeight * imageAspect;
     offsetX = (markerOverlaySize.width - displayWidth) / 2;

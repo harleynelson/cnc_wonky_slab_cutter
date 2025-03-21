@@ -3,9 +3,11 @@
 
 import 'dart:io';
 import 'dart:async';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:image/image.dart' as img;
 
+import '../utils/drawing/drawing_utils.dart';
 import '../utils/general/settings_model.dart';
 import '../detection/algorithms/contour_algorithm_registry.dart';
 import '../detection/algorithms/edge_contour_algorithm.dart';
@@ -146,51 +148,112 @@ class ProcessingFlowManager with ChangeNotifier {
     notifyListeners();
   }
   
-  /// Process markers in the image
-  Future<void> detectMarkers() async {
-    if (_result.originalImage == null) {
-      _setErrorState('No image available for marker detection');
+
+/// Process markers based on user tap points
+Future<void> detectMarkersFromUserTaps(List<Map<String, dynamic>> tapPoints) async {
+  if (_result.originalImage == null) {
+    _setErrorState('No image available for marker detection');
+    return;
+  }
+  
+  try {
+    _updateState(ProcessingState.markerDetection);
+    
+    // Load image
+    final imageBytes = await _result.originalImage!.readAsBytes();
+    final image = img.decodeImage(imageBytes);
+    
+    if (image == null) {
+      _setErrorState('Failed to decode image');
       return;
     }
     
-    try {
-      _updateState(ProcessingState.markerDetection);
+    // Create a debug image for visualization
+    img.Image debugImage = img.copyResize(image, width: image.width, height: image.height);
+    
+    // Create marker detector
+    final markerDetector = MarkerDetector(
+      markerRealDistanceMm: settings.markerXDistance,
+      generateDebugImage: true,
+    );
+    
+    // Create markers directly from the tap points
+    final List<MarkerPoint> detectedMarkers = [];
+    
+    for (final tapPoint in tapPoints) {
+      final int tapX = tapPoint['x'];
+      final int tapY = tapPoint['y'];
+      final MarkerRole role = tapPoint['role'];
       
-      // Load image
-      final imageBytes = await _result.originalImage!.readAsBytes();
-      final image = img.decodeImage(imageBytes);
-      
-      if (image == null) {
-        _setErrorState('Failed to decode image');
-        return;
-      }
-      
-      // Create marker detector
-      final markerDetector = MarkerDetector(
-        markerRealDistanceMm: settings.markerXDistance,
-        generateDebugImage: true,
+      // Use the utility method to enhance the tap point detection
+      final marker = markerDetector.findMarkerNearPoint(
+        image, 
+        tapX, 
+        tapY, 
+        math.min(image.width, image.height) ~/ 10, // Reasonable search radius
+        role
       );
       
-      // Process image to detect markers - this should not modify the original image
-      final markerResult = await markerDetector.detectMarkers(image);
+      detectedMarkers.add(marker);
       
-      // Update result but keep original image intact
-      _result = _result.copyWith(
-        processedImage: image, // Keep original image without markers drawn on it
-        markerResult: markerResult,
-      );
+      // Draw marker on debug image
+      final color = role == MarkerRole.origin ? 
+        img.ColorRgba8(255, 0, 0, 255) : 
+        (role == MarkerRole.xAxis ? 
+          img.ColorRgba8(0, 255, 0, 255) : 
+          img.ColorRgba8(0, 0, 255, 255));
       
-      notifyListeners();
-    } catch (e, stackTrace) {
-      ErrorUtils().logError(
-        'Error during marker detection',
-        e,
-        stackTrace: stackTrace,
-        context: 'marker_detection',
-      );
-      _setErrorState('Marker detection failed: ${e.toString()}');
+      DrawingUtils.drawCircle(debugImage, marker.x, marker.y, 15, color);
+      DrawingUtils.drawText(debugImage, role.toString().split('.').last, 
+                        marker.x + 20, marker.y - 5, color);
     }
+    
+    // Draw connecting lines between markers
+    if (detectedMarkers.length >= 3) {
+      final originMarker = detectedMarkers.firstWhere((m) => m.role == MarkerRole.origin);
+      final xAxisMarker = detectedMarkers.firstWhere((m) => m.role == MarkerRole.xAxis);
+      final scaleMarker = detectedMarkers.firstWhere((m) => m.role == MarkerRole.scale);
+      
+      // Draw line from origin to x-axis
+      DrawingUtils.drawLine(
+        debugImage,
+        originMarker.x, originMarker.y,
+        xAxisMarker.x, xAxisMarker.y,
+        img.ColorRgba8(255, 255, 0, 200)
+      );
+      
+      // Draw line from origin to scale point
+      DrawingUtils.drawLine(
+        debugImage,
+        originMarker.x, originMarker.y,
+        scaleMarker.x, scaleMarker.y,
+        img.ColorRgba8(255, 255, 0, 200)
+      );
+    }
+    
+    // Create result from detected markers
+    final markerResult = markerDetector.createResultFromMarkerPoints(
+      detectedMarkers,
+      debugImage: debugImage
+    );
+    
+    // Update result
+    _result = _result.copyWith(
+      processedImage: image,
+      markerResult: markerResult,
+    );
+    
+    notifyListeners();
+  } catch (e, stackTrace) {
+    ErrorUtils().logError(
+      'Error during user-assisted marker detection',
+      e,
+      stackTrace: stackTrace,
+      context: 'marker_detection_user_taps',
+    );
+    _setErrorState('Marker detection failed: ${e.toString()}');
   }
+}
   
   /// Process slab contour detection using automatic method
 Future<bool> detectSlabContourAutomatic([int? seedX, int? seedY]) async {

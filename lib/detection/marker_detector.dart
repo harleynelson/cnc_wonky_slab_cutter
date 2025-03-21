@@ -4,7 +4,9 @@ import 'dart:math' as math;
 import 'package:cnc_wonky_slab_cutter/utils/image_processing/color_utils.dart';
 import 'package:cnc_wonky_slab_cutter/utils/image_processing/filter_utils.dart';
 import 'package:image/image.dart' as img;
+import '../flow_of_app/flow_manager.dart';
 import '../utils/drawing/drawing_utils.dart';
+import '../utils/general/error_utils.dart';
 import '../utils/general/machine_coordinates.dart';
 
 enum MarkerRole {
@@ -53,8 +55,8 @@ class MarkerDetector {
     this.processingTimeout = 10000,  // Default 10 second timeout
   });
   
-  /// Detect markers in an image and calculate calibration parameters
-  Future<MarkerDetectionResult> detectMarkers(img.Image image) async {
+ /// Detect markers in an image and calculate calibration parameters
+Future<MarkerDetectionResult> detectMarkers(img.Image image) async {
   // Add timeout to detection process
   return await Future.delayed(Duration.zero, () {
     return Future.value(_detectMarkersInternal(image))
@@ -65,7 +67,7 @@ class MarkerDetector {
   });
 }
 
-  MarkerDetectionResult _detectMarkersInternal(img.Image image) {
+MarkerDetectionResult _detectMarkersInternal(img.Image image) {
   // Log input image dimensions
   print('Marker detection - input image dimensions: ${image.width}x${image.height}');
   
@@ -105,144 +107,18 @@ class MarkerDetector {
   }
   
   try {
-    // STRATEGY 1: Try corner detection
-    print('Attempting corner marker detection...');
-    var markers = _findCornerMarkers(processImage, debugImage);
-    if (markers.length >= 3) {
-      print('Found ${markers.length} corner markers');
-      final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
-      
-      // Rescale marker coordinates to original image dimensions if needed
-      final scaledMarkers = _rescaleMarkers(identifiedMarkers, scaleFactor);
-      
-      final calibrationResult = _calculateCalibration(scaledMarkers, debugImage);
-      
-      // Log the detected marker positions in original image coordinates
-      for (final marker in scaledMarkers) {
-        print('Detected ${marker.role} marker at: (${marker.x}, ${marker.y}) in original image coordinates');
-      }
-      
-      return calibrationResult;
-    }
-    
-    // STRATEGY 2: Try high contrast blob detection
-    print('Attempting high contrast blob detection...');
-    markers = _findHighContrastBlobs(processImage, debugImage);
-    if (markers.length >= 3) {
-      print('Found ${markers.length} high contrast markers');
-      final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
-      
-      // Rescale marker coordinates to original image dimensions if needed
-      final scaledMarkers = _rescaleMarkers(identifiedMarkers, scaleFactor);
-      
-      final calibrationResult = _calculateCalibration(scaledMarkers, debugImage);
-      
-      // Log the detected marker positions in original image coordinates
-      for (final marker in scaledMarkers) {
-        print('Detected ${marker.role} marker at: (${marker.x}, ${marker.y}) in original image coordinates');
-      }
-      
-      return calibrationResult;
-    }
-    
-    // STRATEGY 3: Try the original method
-    print('Attempting original marker detection...');
-    // Convert to grayscale for processing
-    final grayscale = FilterUtils.convertToGrayscale(processImage);
-    
-    // Preprocess the image to make markers stand out
-    final preprocessed = _preprocessImage(grayscale);
-    
-    // Find potential marker regions
-    markers = _findMarkerCandidates(preprocessed, debugImage);
-    
-    // Identify which marker is which based on their relative positions
-    final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
-    
-    // Rescale marker coordinates to original image dimensions if needed
-    final scaledMarkers = _rescaleMarkers(identifiedMarkers, scaleFactor);
-    
-    // Calculate calibration parameters with validation
-    final calibrationResult = _calculateCalibration(scaledMarkers, debugImage);
-    
-    // Log the detected marker positions in original image coordinates
-    for (final marker in scaledMarkers) {
-      print('Detected ${marker.role} marker at: (${marker.x}, ${marker.y}) in original image coordinates');
-    }
-    
-    return calibrationResult;
+    // Since we're requiring user-provided marker locations, 
+    // fall back to predefined markers immediately
+    return _createFallbackResult(processImage, debugImage);
   } catch (e) {
     print('Error in marker detection: $e');
-    // Fall back to predefined markers if detection fails
-    var fallbackMarkers = _fallbackMarkerDetection(processImage.width, processImage.height);
-    
-    // Rescale fallback markers to original image dimensions if needed
-    if (scaleFactor != 1.0) {
-      fallbackMarkers = _rescaleMarkers(fallbackMarkers, scaleFactor);
-    }
-    
     return _createFallbackResult(processImage, debugImage);
   }
 }
 
-/// Helper method to rescale marker coordinates from processed image to original image
-List<MarkerPoint> _rescaleMarkers(List<MarkerPoint> markers, double scaleFactor) {
-  // If no scaling was applied, return original markers
-  if (scaleFactor == 1.0) return markers;
-  
-  return markers.map((marker) {
-    // Convert back to original image coordinates
-    final originalX = (marker.x / scaleFactor).round();
-    final originalY = (marker.y / scaleFactor).round();
-    
-    return MarkerPoint(
-      originalX, 
-      originalY, 
-      marker.role, 
-      confidence: marker.confidence
-    );
-  }).toList();
-}
-
-  /// Find markers in corner regions of the image
-  List<MarkerPoint> _findCornerMarkers(img.Image image, img.Image? debugImage) {
-    final markers = <MarkerPoint>[];
-    final width = image.width;
-    final height = image.height;
-    
-    // Define corner regions to search (relative to image size)
-    final searchRegions = [
-    // Bottom left (origin)
-    [0.05, 0.75, 0.30, 0.95],
-    // Bottom right (x-axis)
-    [0.70, 0.75, 0.95, 0.95],
-    // Top left (scale/y-axis)
-    [0.05, 0.05, 0.30, 0.25],
-  ];
-    
-    for (int regionIndex = 0; regionIndex < searchRegions.length; regionIndex++) {
-      final region = searchRegions[regionIndex];
-      final x1 = (width * region[0]).round();
-      final y1 = (height * region[1]).round();
-      final x2 = (width * region[2]).round();
-      final y2 = (height * region[3]).round();
-      
-      // Visualize region on debug image
-      if (debugImage != null) {
-        DrawingUtils.drawRectangle(debugImage, x1, y1, x2, y2, ColorUtils.colorWhite);
-      }
-      
-      final regionMarker = _findMarkerInRegion(image, x1, y1, x2, y2, debugImage);
-      if (regionMarker != null) {
-        markers.add(regionMarker);
-      }
-    }
-    
-    return markers;
-}
-
 // TODO: let's build off this one
 
+/// Find markers from user tap points
 List<MarkerPoint> findMarkersFromUserTaps(
   img.Image image, 
   List<Map<String, dynamic>> userTapRegions,  // List of {x, y, role} maps
@@ -256,20 +132,35 @@ List<MarkerPoint> findMarkersFromUserTaps(
     final int tapY = tap['y'];
     final MarkerRole role = tap['role'];
     
-    // Calculate search region around tap point
-    final int x1 = math.max(0, tapX - searchRadius);
-    final int y1 = math.max(0, tapY - searchRadius);
-    final int x2 = math.min(image.width - 1, tapX + searchRadius);
-    final int y2 = math.min(image.height - 1, tapY + searchRadius);
+    // Find a marker near this tap point
+    final marker = findMarkerNearPoint(
+      image, 
+      tapX, 
+      tapY, 
+      searchRadius,
+      role
+    );
     
-    // Search for marker near this region
-    final marker = findMarkerNearLocation(image, x1, y1, x2, y2, role, debugImage: debugImage);
+    markers.add(marker);
     
-    if (marker != null) {
-      markers.add(marker);
-    } else {
-      // Fallback to using the tap point directly if no marker found
-      markers.add(MarkerPoint(tapX, tapY, role, confidence: 0.5));
+    // Draw the marker on debug image if available
+    if (debugImage != null) {
+      final color = role == MarkerRole.origin ? 
+        img.ColorRgba8(255, 0, 0, 255) : 
+        (role == MarkerRole.xAxis ? 
+          img.ColorRgba8(0, 255, 0, 255) : 
+          img.ColorRgba8(0, 0, 255, 255));
+      
+      DrawingUtils.drawCircle(debugImage, marker.x, marker.y, 10, color);
+      DrawingUtils.drawText(debugImage, "${role.toString()}: ${marker.confidence.toStringAsFixed(2)}", 
+                       marker.x + 15, marker.y, color);
+      
+      // Draw the search region on the debug image
+      final x1 = math.max(0, tapX - searchRadius);
+      final y1 = math.max(0, tapY - searchRadius);
+      final x2 = math.min(image.width - 1, tapX + searchRadius);
+      final y2 = math.min(image.height - 1, tapY + searchRadius);
+      DrawingUtils.drawRectangle(debugImage, x1, y1, x2, y2, ColorUtils.colorYellow, fill: false);
     }
   }
   
@@ -398,9 +289,58 @@ MarkerPoint? findMarkerNearLocation(
   }
 }
 
+/// Create a MarkerDetectionResult from manually-selected marker points
+MarkerDetectionResult createResultFromMarkerPoints(List<MarkerPoint> markers, {img.Image? debugImage}) {
+  if (markers.length < 3) {
+    throw Exception('Need at least 3 markers to create a coordinate system');
+  }
+  
+  // Find the markers by role
+  final originMarker = markers.firstWhere(
+    (m) => m.role == MarkerRole.origin, 
+    orElse: () => markers[0]
+  );
+  
+  final xAxisMarker = markers.firstWhere(
+    (m) => m.role == MarkerRole.xAxis,
+    orElse: () => markers[1]
+  );
+  
+  final scaleMarker = markers.firstWhere(
+    (m) => m.role == MarkerRole.scale,
+    orElse: () => markers[2]
+  );
+  
+  // Calculate orientation angle
+  final dx = xAxisMarker.x - originMarker.x;
+  final dy = xAxisMarker.y - originMarker.y;
+  final orientationAngle = math.atan2(dy, dx);
+  
+  // Calculate pixel-to-mm ratio from scale marker distance
+  final scaleX = scaleMarker.x - originMarker.x;
+  final scaleY = scaleMarker.y - originMarker.y;
+  final distancePx = math.sqrt(scaleX * scaleX + scaleY * scaleY);
+  
+  // Use a default value if we don't have markerRealDistanceMm property
+  const markerRealDistanceMm = 50.0; // Default value
+  
+  // Calculate pixel-to-mm ratio
+  final pixelToMmRatio = markerRealDistanceMm / distancePx;
+  
+  // Create origin point
+  final origin = CoordinatePointXY(originMarker.x.toDouble(), originMarker.y.toDouble());
+  
+  return MarkerDetectionResult(
+    markers: markers,
+    pixelToMmRatio: pixelToMmRatio,
+    origin: origin,
+    orientationAngle: orientationAngle,
+    debugImage: debugImage,
+  );
+}
 
-/// Enhanced version of region marker finding that allows searching in a specific region
-/// for a specific marker role instead of using automatic corner detection
+
+/// Find a marker near a specific point that was tapped by the user
 MarkerPoint findMarkerNearPoint(
   img.Image image, 
   int centerX, 
@@ -492,72 +432,20 @@ MarkerPoint findMarkerNearPoint(
       }
     }
     
-    // Require a higher minimum contrast difference to prevent false positives
-    if (bestDifference < 0.15 || bestX < 0 || bestY < 0) {
-      // If we couldn't find a clear marker, use the center of the search region
-      return MarkerPoint(centerX, centerY, role, confidence: 0.5);
+    // Use the detected point if we found one with good confidence
+    if (bestDifference >= 0.15 && bestX >= 0 && bestY >= 0) {
+      return MarkerPoint(bestX, bestY, role, confidence: bestDifference);
     }
     
-    // Debug image visualization is handled separately in the calling code
-    // since we don't have direct access to the debug image here
-    
-    return MarkerPoint(bestX, bestY, role, confidence: bestDifference);
+    // If we couldn't find a clear marker, simply use the exact tap point
+    return MarkerPoint(centerX, centerY, role, confidence: 0.5);
   } catch (e) {
     print('Error finding marker in region: $e');
-    // Fall back to using the tap point directly
+    // Always fall back to using the tap point directly
     return MarkerPoint(centerX, centerY, role, confidence: 0.5);
   }
 }
 
-/// Create a MarkerDetectionResult from manually-selected marker points
-MarkerDetectionResult createResultFromMarkerPoints(List<MarkerPoint> markers, {img.Image? debugImage}) {
-  if (markers.length < 3) {
-    throw Exception('Need at least 3 markers to create a coordinate system');
-  }
-  
-  // Find the markers by role
-  final originMarker = markers.firstWhere(
-    (m) => m.role == MarkerRole.origin, 
-    orElse: () => markers[0]
-  );
-  
-  final xAxisMarker = markers.firstWhere(
-    (m) => m.role == MarkerRole.xAxis,
-    orElse: () => markers[1]
-  );
-  
-  final scaleMarker = markers.firstWhere(
-    (m) => m.role == MarkerRole.scale,
-    orElse: () => markers[2]
-  );
-  
-  // Calculate orientation angle
-  final dx = xAxisMarker.x - originMarker.x;
-  final dy = xAxisMarker.y - originMarker.y;
-  final orientationAngle = math.atan2(dy, dx);
-  
-  // Calculate pixel-to-mm ratio from scale marker distance
-  final scaleX = scaleMarker.x - originMarker.x;
-  final scaleY = scaleMarker.y - originMarker.y;
-  final distancePx = math.sqrt(scaleX * scaleX + scaleY * scaleY);
-  
-  // Use a default value if we don't have markerRealDistanceMm property
-  const markerRealDistanceMm = 50.0; // Default value
-  
-  // Calculate pixel-to-mm ratio
-  final pixelToMmRatio = markerRealDistanceMm / distancePx;
-  
-  // Create origin point
-  final origin = CoordinatePointXY(originMarker.x.toDouble(), originMarker.y.toDouble());
-  
-  return MarkerDetectionResult(
-    markers: markers,
-    pixelToMmRatio: pixelToMmRatio,
-    origin: origin,
-    orientationAngle: orientationAngle,
-    debugImage: debugImage,
-  );
-}
 
 /// Find a marker within a specific region
 MarkerPoint? _findMarkerInRegion(img.Image image, int x1, int y1, int x2, int y2, img.Image? debugImage) {
