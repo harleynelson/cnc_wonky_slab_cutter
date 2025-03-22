@@ -94,12 +94,12 @@ const double contourBackgroundOpacity = 0.7;
 const double contourCenterCrosshairSize = 5.0;
 
 // Marker Overlay Constants
-const double markerCircleRadius = 20.0;
+const double markerCircleRadius = 10.0;
 const double markerInnerCircleRadius = 10.0;
 const double markerLabelFontSize = 14.0;
-const double markerLabelPadding = 10.0;
-const double markerLabelXOffset = 20.0;
-const double markerLabelYOffset = -7.0;
+const double markerLabelPadding = 3.0;
+const double markerLabelXOffset = 10.0;
+const double markerLabelYOffset = 0.0;
 const double markerLineOpacity = 0.7;
 const double markerLineStrokeWidth = 2.0;
 
