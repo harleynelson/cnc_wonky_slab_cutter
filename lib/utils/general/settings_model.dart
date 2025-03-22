@@ -27,6 +27,7 @@ class SettingsModel {
   int contourPostProcessPoints;  // New property for contour post-processing
   bool forceHorizontalPaths; // for path direction preference
   bool returnToHome;
+  double? margin;
 
   SettingsModel({
     required this.cncWidth,
@@ -53,6 +54,7 @@ class SettingsModel {
     this.contourPostProcessPoints = defaultContourPostProcessPoints,
     this.forceHorizontalPaths = true, // Default to horizontal
     this.returnToHome = true, // Default to returning home
+    this.margin,
   });
   
   SettingsModel copy() {

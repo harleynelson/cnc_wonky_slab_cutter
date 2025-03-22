@@ -103,16 +103,28 @@ void _updateAdjustedContour() {
   final provider = Provider.of<ProcessingProvider>(context, listen: false);
   final flowManager = provider.flowManager;
   
-  if (flowManager?.result.contourResult != null) {
-    final originalContour = flowManager!.result.contourResult!.machineContour;
+  if (flowManager?.result.contourResult != null && flowManager?.result.markerResult != null) {
+    // Create a fresh coordinate system with current marker settings
+    final freshCoordSystem = MachineCoordinateSystem.fromMarkerPointsWithDistances(
+      flowManager!.result.markerResult!.markers[0].toPoint(),
+      flowManager.result.markerResult!.markers[1].toPoint(),
+      flowManager.result.markerResult!.markers[2].toPoint(),
+      _settings.markerXDistance,
+      _settings.markerYDistance
+    );
+    
+    // Get original pixel contour
+    final pixelContour = flowManager.result.contourResult!.pixelContour;
+    
+    // Convert to machine coordinates using fresh coordinate system
+    final machineContour = freshCoordSystem.convertPointListToMachineCoords(pixelContour);
     
     // Use original contour if no margin needed
     if (_slabMargin <= 0) {
-      _adjustedContour = List.from(originalContour);
+      _adjustedContour = List.from(machineContour);
     } else {
       // Use offset polygon approach for positive margins
-      // The negative sign is removed - positive margin should expand the contour
-      _adjustedContour = _createBufferedPolygon(originalContour, _slabMargin);
+      _adjustedContour = _createBufferedPolygon(machineContour, _slabMargin);
     }
     
     // Recalculate area and time based on adjusted contour
@@ -378,68 +390,79 @@ double _crossProduct(CoordinatePointXY a, CoordinatePointXY b, CoordinatePointXY
   }
 
   Future<void> _generateGcode() async {
-    setState(() {
-      _isGenerating = true;
-      _errorMessage = '';
-    });
+  setState(() {
+    _isGenerating = true;
+    _errorMessage = '';
+  });
 
-    try {
-      final provider = Provider.of<ProcessingProvider>(context, listen: false);
-      final flowManager = provider.flowManager;
-      
-      if (flowManager == null || flowManager.result.contourResult == null) {
-        throw Exception('No contour data available');
-      }
-      
-      // Use the adjusted contour or fall back to the original contour
-      final contour = _adjustedContour ?? flowManager.result.contourResult!.machineContour;
-      
-      // Generate G-code using our improved surfacing operation
-      final gcodeGenerator = GcodeGenerator(
-        safetyHeight: _settings.safetyHeight,
-        feedRate: _settings.feedRate,
-        plungeRate: _settings.plungeRate,
-        cuttingDepth: _settings.cuttingDepth,
-        stepover: _settings.stepover,
-        toolDiameter: _settings.toolDiameter,
-        spindleSpeed: _settings.spindleSpeed,
-        depthPasses: _settings.depthPasses,
-        margin: _slabMargin,
-        forceHorizontal: _forceHorizontalPaths,
-        returnToHome: _returnToHome, // Pass the new option to the generator
-      );
-      
-      // Generate surfacing G-code
-      final filenameWithoutExt = _filenameController.text;
-      final gcode = gcodeGenerator.generateSurfacingGcode(
-        contour, 
-        filename: '$filenameWithoutExt$_fileExtension'
-      );
-      
-      // Create a custom filename using the user input and selected extension
-      final filename = '${_filenameController.text}${_fileExtension}';
-      
-      // Save G-code to file
-      final tempDir = await Directory.systemTemp.createTemp('gcode_');
-      final gcodeFile = File('${tempDir.path}/${filename}');
-      await gcodeFile.writeAsString(gcode);
-      
-      setState(() {
-        _isGenerating = false;
-        _isGenerated = true;
-        _gcodePath = gcodeFile.path;
-      });
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('G-code generated successfully as $filename!')),
-      );
-    } catch (e) {
-      setState(() {
-        _isGenerating = false;
-        _errorMessage = 'Error generating G-code: ${e.toString()}';
-      });
+  try {
+    final provider = Provider.of<ProcessingProvider>(context, listen: false);
+    final flowManager = provider.flowManager;
+    
+    if (flowManager == null || flowManager.result.contourResult == null) {
+      throw Exception('No contour data available');
     }
+    
+    // Create a fresh coordinate system using current marker settings
+    final markerResult = flowManager.result.markerResult!;
+    final coordSystem = MachineCoordinateSystem.fromMarkerPointsWithDistances(
+      markerResult.markers[0].toPoint(),
+      markerResult.markers[1].toPoint(),
+      markerResult.markers[2].toPoint(),
+      _settings.markerXDistance,
+      _settings.markerYDistance
+    );
+    
+    // Important: Use the adjusted contour that already includes the margin
+    List<CoordinatePointXY> contourToUse = _adjustedContour ?? 
+        flowManager.result.contourResult!.machineContour;
+    
+    // Generate G-code using the contour with margin
+    final gcodeGenerator = GcodeGenerator(
+      safetyHeight: _settings.safetyHeight,
+      feedRate: _settings.feedRate,
+      plungeRate: _settings.plungeRate,
+      cuttingDepth: _settings.cuttingDepth,
+      stepover: _settings.stepover,
+      toolDiameter: _settings.toolDiameter,
+      spindleSpeed: _settings.spindleSpeed,
+      depthPasses: _settings.depthPasses,
+      margin: 0, // Important: Set to 0 as margin is already in the contour
+      forceHorizontal: _forceHorizontalPaths,
+      returnToHome: _returnToHome,
+    );
+    
+    // Generate surfacing G-code
+    final filenameWithoutExt = _filenameController.text;
+    final gcode = gcodeGenerator.generateSurfacingGcode(
+      contourToUse, 
+      filename: '$filenameWithoutExt$_fileExtension'
+    );
+    
+    // Create a custom filename using the user input and selected extension
+    final filename = '${_filenameController.text}${_fileExtension}';
+    
+    // Save G-code to file
+    final tempDir = await Directory.systemTemp.createTemp('gcode_');
+    final gcodeFile = File('${tempDir.path}/${filename}');
+    await gcodeFile.writeAsString(gcode);
+    
+    setState(() {
+      _isGenerating = false;
+      _isGenerated = true;
+      _gcodePath = gcodeFile.path;
+    });
+    
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text('G-code generated successfully as $filename!')),
+    );
+  } catch (e) {
+    setState(() {
+      _isGenerating = false;
+      _errorMessage = 'Error generating G-code: ${e.toString()}';
+    });
   }
+}
 
   Future<void> _shareGcode() async {
     if (_gcodePath == null) {
@@ -903,6 +926,8 @@ Widget _buildActionButtons() {
               _settings.markerXDistance = value;
               _statsCacheDirty = true; // Mark stats as dirty since coordinate system changes
               _updateAdjustedContour(); // Update contour with new marker settings
+              // Also force rebuild of the entire widget to update visualization
+              setState(() {}); // This additional setState forces a rebuild
             }),
             icon: Icons.arrow_right_alt,
             helperText: 'Real-world distance between Origin and X-Axis markers',
@@ -914,6 +939,8 @@ Widget _buildActionButtons() {
               _settings.markerYDistance = value;
               _statsCacheDirty = true; // Mark stats as dirty since coordinate system changes
               _updateAdjustedContour(); // Update contour with new marker settings
+              // Also force rebuild of the entire widget to update visualization
+              setState(() {}); // This additional setState forces a rebuild
             }),
             icon: Icons.arrow_upward,
             helperText: 'Real-world distance between Origin and Y-Axis/Scale markers',
@@ -1033,34 +1060,35 @@ void _visualizeGcode() {
     return;
   }
   
-  // Get the contour and coordinate system
-  final contour = _adjustedContour ?? flowManager.result.contourResult!.machineContour;
+  // Important: Get the adjusted contour which includes the margin
+  final contour = _adjustedContour != null ? _adjustedContour! : flowManager.result.contourResult!.machineContour;
   
-  // Create the coordinate system using the marker detection results AND marker settings
+  // Create a fresh coordinate system using the current marker settings
   final markerResult = flowManager.result.markerResult!;
   final coordSystem = MachineCoordinateSystem.fromMarkerPointsWithDistances(
     markerResult.markers[0].toPoint(),
     markerResult.markers[1].toPoint(),
     markerResult.markers[2].toPoint(),
-    _settings.markerXDistance, // Using marker settings for X distance
-    _settings.markerYDistance  // Using marker settings for Y distance
+    _settings.markerXDistance,
+    _settings.markerYDistance
   );
   
-  // Navigate to visualization screen
+  // Navigate to visualization screen with the contour that includes margin
   Navigator.push(
     context,
     MaterialPageRoute(
       builder: (context) => GcodeVisualizationScreen(
         imageFile: flowManager.result.originalImage!,
         gcodePath: _gcodePath!,
-        contourPoints: contour,
-        toolpath: null, // We'll parse from the G-code file
+        contourPoints: contour,  // This contour already includes the margin
+        toolpath: null, // Will be parsed from G-code file
         coordSystem: coordSystem,
         settings: _settings,
       ),
     ),
   );
 }
+
 }
 
 
@@ -1085,25 +1113,20 @@ class AdjustedContourPainter extends CustomPainter {
 
   @override
   void paint(Canvas canvas, Size size) {
-    // Paint for the buffered contour
+    // Paint for the adjusted contour (with margin)
     final path = Path();
     final paint = Paint()
       ..color = Colors.blue
       ..style = PaintingStyle.stroke
-      ..strokeWidth = 2.0
+      ..strokeWidth = 2.5
       ..strokeJoin = StrokeJoin.round;
     
-    // Convert machine coordinates to pixel coordinates
-    final pixelPoints = coordSystem.convertPointListToPixelCoords(adjustedContour);
-    
-    // Convert pixel coordinates to display coordinates
+    // Draw the adjusted contour (including margin)
     bool isFirst = true;
-    
-    for (final point in pixelPoints) {
+    for (final point in adjustedContour) {
+      final pixelPoint = coordSystem.machineToPixelCoords(point);
       final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
-        point,
-        imageSize,
-        displaySize
+        pixelPoint, imageSize, displaySize
       );
       
       if (isFirst) {
@@ -1115,20 +1138,20 @@ class AdjustedContourPainter extends CustomPainter {
     }
     
     // Close the path if it's not already closed
-    if (pixelPoints.isNotEmpty && 
-        (pixelPoints.first.x != pixelPoints.last.x || 
-         pixelPoints.first.y != pixelPoints.last.y)) {
+    if (adjustedContour.isNotEmpty && 
+        (adjustedContour.first.x != adjustedContour.last.x || 
+         adjustedContour.first.y != adjustedContour.last.y)) {
       path.close();
     }
     
     // Draw outline for adjusted contour
     canvas.drawPath(path, paint);
     
-    // Draw the original contour in a different color if requested
+    // Draw the original contour with different style if requested
     if (showOriginalContour && originalContour != null && originalContour!.isNotEmpty) {
       final originalPath = Path();
       final originalPaint = Paint()
-        ..color = Colors.green.withOpacity(0.5)
+        ..color = Colors.green
         ..style = PaintingStyle.stroke
         ..strokeWidth = 1.0
         ..strokeJoin = StrokeJoin.round;
@@ -1139,9 +1162,7 @@ class AdjustedContourPainter extends CustomPainter {
       
       for (final point in originalPixelPoints) {
         final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
-          point,
-          imageSize,
-          displaySize
+          point, imageSize, displaySize
         );
         
         if (isFirstOriginal) {
@@ -1161,21 +1182,23 @@ class AdjustedContourPainter extends CustomPainter {
       
       // Draw outline for original contour
       canvas.drawPath(originalPath, originalPaint);
-    }
-    
-    // Draw points at vertices to highlight them
-    final pointPaint = Paint()
-      ..color = Colors.blue
-      ..style = PaintingStyle.fill;
-    
-    for (final point in pixelPoints) {
-      final displayPoint = MachineCoordinateSystem.imageToDisplayCoordinates(
-        point,
-        imageSize,
-        displaySize
-      );
       
-      canvas.drawCircle(Offset(displayPoint.x, displayPoint.y), 3, pointPaint);
+      // Add label for clarity
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: 'Green: Original contour\nBlue: With margin',
+          style: TextStyle(
+            color: Colors.black,
+            fontSize: 12,
+            fontWeight: FontWeight.bold,
+            backgroundColor: Colors.white.withOpacity(0.7),
+          ),
+        ),
+        textDirection: TextDirection.ltr,
+        textAlign: TextAlign.left,
+      );
+      textPainter.layout();
+      textPainter.paint(canvas, Offset(10, 10));
     }
   }
 
@@ -1184,6 +1207,7 @@ class AdjustedContourPainter extends CustomPainter {
     return true;
   }
 }
+
 
 extension DoubleExtension on double {
   double sqrt() => (this <= 0) ? 0 : math.sqrt(this);

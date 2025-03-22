@@ -413,7 +413,7 @@ Future<void> _detectMarkersFromTapPoints() async {
     setState(() {
       _contourDetected = true;
       _isLoading = false;
-      _statusMessage = 'Contour detected! Tap "Continue" to generate G-code.';
+      _statusMessage = 'Tap "Continue" to generate G-code.';
       _markerSelectionState = MarkerSelectionState.complete;
     });
     
@@ -994,7 +994,7 @@ Widget _buildControlButtons() {
       setState(() {
         _contourDetected = true;
         _isLoading = false;
-        _statusMessage = 'Manual contour processed successfully. Tap "Continue" to generate G-code.';
+        _statusMessage = 'Tap "Continue" to generate G-code.';
         _markerSelectionState = MarkerSelectionState.complete;
       });
     } catch (e, stackTrace) {

@@ -104,30 +104,30 @@ class _GcodeVisualizationScreenState extends State<GcodeVisualizationScreen> {
   }
 
   @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: Text('G-code Visualization'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.help_outline),
-            onPressed: _showHelpDialog,
-            tooltip: 'Help',
-          ),
-        ],
-      ),
-      body: Column(
-        children: [
-          _buildVisualizationOptions(),
-          _isLoading 
-              ? const Expanded(child: Center(child: CircularProgressIndicator()))
-              : _errorMessage.isNotEmpty 
-                  ? _buildErrorMessage() 
-                  : _buildVisualizationView(),
-        ],
-      ),
-    );
-  }
+Widget build(BuildContext context) {
+  return Scaffold(
+    appBar: AppBar(
+      title: Text('G-code Visualization'),
+      actions: [
+        IconButton(
+          icon: Icon(Icons.help_outline),
+          onPressed: _showHelpDialog,
+          tooltip: 'Help',
+        ),
+      ],
+    ),
+    body: Column(
+      children: [
+        _buildVisualizationOptions(),
+        _isLoading 
+            ? const Expanded(child: Center(child: CircularProgressIndicator()))
+            : _errorMessage.isNotEmpty 
+                ? _buildErrorMessage() 
+                : _buildVisualizationView(),
+      ],
+    ),
+  );
+}
 
   Widget _buildVisualizationOptions() {
     return Container(
@@ -219,71 +219,73 @@ class _GcodeVisualizationScreenState extends State<GcodeVisualizationScreen> {
   }
 
   Widget _buildVisualizationView() {
-    if (_imageSize == null) {
-      return const Expanded(
-        child: Center(
-          child: Text("Loading image dimensions..."),
-        ),
-      );
-    }
-    
-    return Expanded(
-      child: InteractiveViewer(
-        minScale: 0.5,
-        maxScale: 4.0,
-        child: Container(
-          color: Colors.grey.shade100,
-          child: Center(
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Background image
-                Image.file(widget.imageFile),
-                
-                // Contour overlay
-                if (_showContour)
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      print("Canvas size: ${constraints.maxWidth}x${constraints.maxHeight}");
-                      print("Image size: ${_imageSize!.width}x${_imageSize!.height}");
-                      print("Contour points: ${widget.contourPoints.length}");
-                      
-                      return CustomPaint(
-                        size: Size(constraints.maxWidth, constraints.maxHeight),
-                        painter: ContourPainter(
-                          contour: widget.contourPoints,
-                          imageSize: _imageSize!,
-                          coordSystem: widget.coordSystem,
-                          color: Colors.green.withOpacity(0.7),
-                          strokeWidth: 2.0,
-                        ),
-                      );
-                    },
-                  ),
-                
-                // Toolpath overlay - show all toolpaths at once
-                if (_showToolpath && _toolpaths.isNotEmpty)
-                  LayoutBuilder(
-                    builder: (context, constraints) {
-                      print("Toolpaths to display: ${_toolpaths.length}");
-                      return CustomPaint(
-                        size: Size(constraints.maxWidth, constraints.maxHeight),
-                        painter: ToolpathPainter(
-                          toolpaths: _toolpaths,
-                          imageSize: _imageSize!,
-                          coordSystem: widget.coordSystem,
-                          settings: widget.settings,
-                        ),
-                      );
-                    },
-                  ),
-              ],
-            ),
-          ),
-        ),
+  if (_imageSize == null) {
+    return const Expanded(
+      child: Center(
+        child: Text("Loading image dimensions..."),
       ),
     );
   }
+  
+  return Expanded(
+    child: InteractiveViewer(
+      minScale: 0.5,
+      maxScale: 4.0,
+      child: Container(
+        color: Colors.grey.shade100,
+        child: Center(
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Background image
+              Image.file(widget.imageFile),
+              
+              // Contour overlay
+              if (_showContour)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    print("Canvas size: ${constraints.maxWidth}x${constraints.maxHeight}");
+                    print("Image size: ${_imageSize!.width}x${_imageSize!.height}");
+                    print("Contour points: ${widget.contourPoints.length}");
+                    
+                    return CustomPaint(
+                      size: Size(constraints.maxWidth, constraints.maxHeight),
+                      painter: ContourPainter(
+                        contour: widget.contourPoints,
+                        imageSize: _imageSize!,
+                        coordSystem: widget.coordSystem,
+                        color: Colors.green.withOpacity(0.7),
+                        strokeWidth: 2.0,
+                      ),
+                    );
+                  },
+                ),
+              
+              // Toolpath overlay - show all toolpaths at once
+              if (_showToolpath && _toolpaths.isNotEmpty)
+                LayoutBuilder(
+                  builder: (context, constraints) {
+                    print("Toolpaths to display: ${_toolpaths.length}");
+                    return CustomPaint(
+                      size: Size(constraints.maxWidth, constraints.maxHeight),
+                      painter: ToolpathPainter(
+                        toolpaths: _toolpaths,
+                        imageSize: _imageSize!,
+                        coordSystem: widget.coordSystem,
+                        settings: widget.settings,
+                      ),
+                    );
+                  },
+                ),
+              
+              // Note: Removed the margin text here
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
+}
 
   void _showHelpDialog() {
     showDialog(
