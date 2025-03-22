@@ -232,7 +232,7 @@ Future<void> _detectMarkersFromTapPoints() async {
     setState(() {
       _markersDetected = true;
       _isLoading = false;
-      _statusMessage = 'Markers detected! You can now draw the contour manually.';
+      _statusMessage = 'You can now draw the contour manually.';
       _markerSelectionState = MarkerSelectionState.complete;
     });
     

@@ -190,7 +190,7 @@ Future<void> detectMarkersFromUserTaps(List<Map<String, dynamic>> tapPoints) asy
         image, 
         tapX, 
         tapY, 
-        math.min(image.width, image.height) ~/ 10, // Reasonable search radius
+        math.min(image.width, image.height) ~/ 5, // Reasonable search radius
         role
       );
       

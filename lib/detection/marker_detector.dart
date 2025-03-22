@@ -125,7 +125,7 @@ List<MarkerPoint> findMarkersFromUserTaps(
   {img.Image? debugImage}
 ) {
   final markers = <MarkerPoint>[];
-  final searchRadius = math.min(image.width, image.height) ~/ 10;  // Reasonable search area
+  final searchRadius = math.min(image.width, image.height) ~/ 5;  // Reasonable search area
   
   for (final tap in userTapRegions) {
     final int tapX = tap['x'];
