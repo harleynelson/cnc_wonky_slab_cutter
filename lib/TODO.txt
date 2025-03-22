@@ -5,20 +5,14 @@ gcode generation
             - we should cross the gap
     - Stepover calculation based on tool diameter ( we've sorta got this.  We should probably default it to something like 40% of tool width and update the estimated completion time accordingly)
 
-gcode visualization
-    - appears to be on a slope even though gcode is horizontal
-
 App wide:
     - How do we go about implementing metric vs standard without screwing up our code
     - Consider moving device-specific or display-dependent constants to a dynamic configuration
     - crashes when minimized sometimes?
 
-Edge detection:
-    - have a tap for the slab and a tap for the spillboard bor better detection
-        - since slab and mdf spillboard will look too similar
-Marker Detection:
-    - have the user tap the general area where the markers are and then perform the blob search there to detect.
-    - should we have a separate marker for the origin of the machine?
+Slab Detection:
+    - using manual cause it's too damn hard for wood slabs to be detected on mdf spillboards...  Let's sit on this for a bit
+
 
 Rotation:
     - we currently detect rotation from the markers and then apply it throughout our app.
