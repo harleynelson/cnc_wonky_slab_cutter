@@ -176,7 +176,7 @@ Future<void> _detectMarkersFromTapPoints() async {
         image, 
         tapX, 
         tapY, 
-        math.min(image.width, image.height) ~/ 20, // Reasonable search radius
+        math.min(image.width, image.height) ~/ 5, // Reasonable search radius
         role
       );
       

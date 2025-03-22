@@ -4,7 +4,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:image/image.dart' as img;
 
+import 'package:flutter_exif_rotation/flutter_exif_rotation.dart';
 import '../utils/general/settings_model.dart';
 import '../utils/general/constants.dart';
 import '../utils/general/permissions_utils.dart';
@@ -102,30 +104,51 @@ class _CameraScreenWithOverlayState extends State<CameraScreenWithOverlay> with 
   }
 
   Future<void> _takePicture() async {
-    if (!_controller.value.isInitialized) {
-      _showErrorDialog('Camera is not ready yet');
-      return;
-    }
-
-    try {
-      // Display a loading indicator
-      setState(() {});
-
-      // Take the picture
-      final XFile photo = await _controller.takePicture();
-      
-      // Create a File instance from the XFile
-      final File imageFile = File(photo.path);
-      
-      // Return the image file to the caller
-      Navigator.pop(context, imageFile);
-    } catch (e) {
-      print('Error taking picture: $e');
-      _showErrorDialog('Failed to take picture: $e');
-    } finally {
-      setState(() {});
-    }
+  if (!_controller.value.isInitialized) {
+    _showErrorDialog('Camera is not ready yet');
+    return;
   }
+
+  try {
+    setState(() {});
+
+    // Take the picture
+    final XFile photo = await _controller.takePicture();
+    
+    // Create a File instance from the XFile
+    File imageFile = File(photo.path);
+    
+    // Fix rotation based on EXIF data
+    try {
+      imageFile = await FlutterExifRotation.rotateImage(path: imageFile.path);
+    } catch (e) {
+      print('Error rotating image: $e');
+      // Continue with original image if rotation fails
+    }
+    
+    // Now manually check and rotate if needed for landscape mode
+    final bytes = await imageFile.readAsBytes();
+    final img.Image? decodedImage = img.decodeImage(bytes);
+    
+    if (decodedImage != null) {
+      // Force landscape orientation if needed
+      if (decodedImage.height > decodedImage.width) {
+        // Rotate to landscape
+        final rotatedImage = img.copyRotate(decodedImage, angle: 90);
+        await imageFile.writeAsBytes(img.encodePng(rotatedImage));
+        print('Rotated image to landscape: ${rotatedImage.width}x${rotatedImage.height}');
+      }
+    }
+    
+    // Return the rotated image file
+    Navigator.pop(context, imageFile);
+  } catch (e) {
+    print('Error taking picture: $e');
+    _showErrorDialog('Failed to take picture: $e');
+  } finally {
+    setState(() {});
+  }
+}
 
   void _toggleFlash() async {
     if (!_controller.value.isInitialized) return;
