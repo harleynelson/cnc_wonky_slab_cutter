@@ -15,6 +15,9 @@ enum MarkerSelectionState {
   /// Selecting the spillboard seed point
   spillboard,
   
+  /// Drawing the contour manually
+  manualDrawing,
+  
   /// All selections complete
   complete
 }

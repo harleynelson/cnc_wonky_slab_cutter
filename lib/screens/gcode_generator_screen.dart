@@ -110,7 +110,8 @@ void _updateAdjustedContour() {
     if (_slabMargin <= 0) {
       _adjustedContour = List.from(originalContour);
     } else {
-      // Use buffered polygon approach for positive margins
+      // Use offset polygon approach for positive margins
+      // The negative sign is removed - positive margin should expand the contour
       _adjustedContour = _createBufferedPolygon(originalContour, _slabMargin);
     }
     
@@ -203,12 +204,14 @@ List<CoordinatePointXY> _createBufferedPolygon(List<CoordinatePointXY> originalC
     
     double newPointX, newPointY;
     
-    if (!isConvex) {
-      // For concave vertices, move away from the bisector point
+    // FIXED: For convex vertices we move outward, for concave we move inward
+    // This is the opposite of what was happening before
+    if (isConvex) {
+      // For convex vertices, move AWAY from the bisector point to EXPAND the contour
       newPointX = currX + (currX - pointOfBisectorX) * distance / bisectorDistanceVertex;
       newPointY = currY + (currY - pointOfBisectorY) * distance / bisectorDistanceVertex;
     } else {
-      // For convex vertices, move toward the bisector point
+      // For concave vertices, move TOWARD the bisector point
       newPointX = currX - (currX - pointOfBisectorX) * distance / bisectorDistanceVertex;
       newPointY = currY - (currY - pointOfBisectorY) * distance / bisectorDistanceVertex;
     }

@@ -19,6 +19,7 @@ import '../detection/algorithms/edge_contour_algorithm.dart';
 import '../utils/general/constants.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../flow_of_app/flow_manager.dart';
+import '../widgets/manual_contour_drawer.dart';
 import '../widgets/marker_overlay.dart';
 import '../widgets/contour_overlay.dart';
 import '../utils/general/error_utils.dart';
@@ -79,92 +80,169 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   }
   
   Future<void> _initializeDetection() async {
+  setState(() {
+    _isLoading = true;
+    _statusMessage = 'Initializing...';
+  });
+
+  try {
+    // Initialize with the image file
+    await _flowManager.initWithImage(widget.imageFile);
+    
+    // Get image dimensions
+    final imageBytes = await widget.imageFile.readAsBytes();
+    final image = await decodeImageFromList(imageBytes);
     setState(() {
-      _isLoading = true;
-      _statusMessage = 'Initializing...';
+      _imageSize = Size(image.width.toDouble(), image.height.toDouble());
+      _isLoading = false;
+      _statusMessage = 'First, tap the three marker points: Origin (red), X-Axis (green), and Scale (blue)';
     });
-
-    try {
-      // Initialize with the image file
-      await _flowManager.initWithImage(widget.imageFile);
-      
-      // Get image dimensions
-      final imageBytes = await widget.imageFile.readAsBytes();
-      final image = await decodeImageFromList(imageBytes);
-      setState(() {
-        _imageSize = Size(image.width.toDouble(), image.height.toDouble());
-        _isLoading = false;
-        _statusMessage = 'Tap on the Origin marker (bottom left)';
-      });
-    } catch (e) {
-      setState(() {
-        _errorMessage = 'Initialization error: ${e.toString()}';
-        _isLoading = false;
-      });
-    }
-  }
-
-  Future<void> _detectMarkersFromTapPoints() async {
-  if (_originTapPoint == null || _xAxisTapPoint == null || _scaleTapPoint == null || _imageSize == null) {
+  } catch (e) {
     setState(() {
-      _errorMessage = 'Missing tap points for markers';
+      _errorMessage = 'Initialization error: ${e.toString()}';
+      _isLoading = false;
+    });
+  }
+}
+
+  // Fixed _detectMarkersFromTapPoints method for CombinedDetectorScreen
+
+Future<void> _detectMarkersFromTapPoints() async {
+  if (_flowManager.result.originalImage == null) {
+    setState(() {
+      _errorMessage = 'No image available for marker detection';
+      _isLoading = false;
     });
     return;
   }
   
-  setState(() {
-    _isLoading = true;
-    _statusMessage = 'Detecting markers...';
-    _errorMessage = '';
-  });
-
   try {
-    // Convert tap points to image coordinates
-    final originImagePoint = _calculateImagePoint(_originTapPoint!);
-    final xAxisImagePoint = _calculateImagePoint(_xAxisTapPoint!);
-    final scaleImagePoint = _calculateImagePoint(_scaleTapPoint!);
+    setState(() {
+      _isLoading = true;
+      _statusMessage = 'Detecting markers...';
+      _errorMessage = '';
+    });
+    
+    // Load image
+    final imageBytes = await widget.imageFile.readAsBytes();
+    final image = img.decodeImage(imageBytes);
+    
+    if (image == null) {
+      setState(() {
+        _errorMessage = 'Failed to decode image';
+        _isLoading = false;
+      });
+      return;
+    }
+    
+    // Create a debug image for visualization
+    img.Image debugImage = img.copyResize(image, width: image.width, height: image.height);
+    
+    // Create marker detector
+    final markerDetector = MarkerDetector(
+      markerRealDistanceMm: widget.settings.markerXDistance,
+      generateDebugImage: true,
+    );
+    
+    // Create markers directly from the tap points
+    final List<MarkerPoint> detectedMarkers = [];
     
     // Prepare tap regions for marker detector
     final tapRegions = [
       {
-        'x': originImagePoint.x.toInt(),
-        'y': originImagePoint.y.toInt(),
+        'x': _calculateImagePoint(_originTapPoint!).x.toInt(),
+        'y': _calculateImagePoint(_originTapPoint!).y.toInt(),
         'role': MarkerRole.origin
       },
       {
-        'x': xAxisImagePoint.x.toInt(),
-        'y': xAxisImagePoint.y.toInt(),
+        'x': _calculateImagePoint(_xAxisTapPoint!).x.toInt(),
+        'y': _calculateImagePoint(_xAxisTapPoint!).y.toInt(),
         'role': MarkerRole.xAxis
       },
       {
-        'x': scaleImagePoint.x.toInt(),
-        'y': scaleImagePoint.y.toInt(),
+        'x': _calculateImagePoint(_scaleTapPoint!).x.toInt(),
+        'y': _calculateImagePoint(_scaleTapPoint!).y.toInt(),
         'role': MarkerRole.scale
       }
     ];
     
-    // Use the flow manager to detect markers from tap points
-    await _flowManager.detectMarkersFromUserTaps(tapRegions);
+    for (final tapPoint in tapRegions) {
+      final int tapX = tapPoint['x'] as int;
+      final int tapY = tapPoint['y'] as int;
+      final MarkerRole role = tapPoint['role'] as MarkerRole;
+      
+      // Use the utility method to enhance the tap point detection
+      final marker = markerDetector.findMarkerNearPoint(
+        image, 
+        tapX, 
+        tapY, 
+        math.min(image.width, image.height) ~/ 10, // Reasonable search radius
+        role
+      );
+      
+      detectedMarkers.add(marker);
+      
+      // Draw marker on debug image
+      final color = role == MarkerRole.origin ? 
+        img.ColorRgba8(255, 0, 0, 255) : 
+        (role == MarkerRole.xAxis ? 
+          img.ColorRgba8(0, 255, 0, 255) : 
+          img.ColorRgba8(0, 0, 255, 255));
+      
+      DrawingUtils.drawCircle(debugImage, marker.x, marker.y, 15, color);
+      DrawingUtils.drawText(debugImage, role.toString().split('.').last, 
+                        marker.x + 20, marker.y - 5, color);
+    }
+    
+    // Draw connecting lines between markers
+    if (detectedMarkers.length >= 3) {
+      final originMarker = detectedMarkers.firstWhere((m) => m.role == MarkerRole.origin);
+      final xAxisMarker = detectedMarkers.firstWhere((m) => m.role == MarkerRole.xAxis);
+      final scaleMarker = detectedMarkers.firstWhere((m) => m.role == MarkerRole.scale);
+      
+      // Draw line from origin to x-axis
+      DrawingUtils.drawLine(
+        debugImage,
+        originMarker.x, originMarker.y,
+        xAxisMarker.x, xAxisMarker.y,
+        img.ColorRgba8(255, 255, 0, 200)
+      );
+      
+      // Draw line from origin to scale point
+      DrawingUtils.drawLine(
+        debugImage,
+        originMarker.x, originMarker.y,
+        scaleMarker.x, scaleMarker.y,
+        img.ColorRgba8(255, 255, 0, 200)
+      );
+    }
+    
+    // Create result from detected markers
+    final markerResult = markerDetector.createResultFromMarkerPoints(
+      detectedMarkers,
+      debugImage: debugImage
+    );
     
     // Store the detected markers for later use
-    _detectedMarkers = _flowManager.result.markerResult?.markers ?? [];
+    _detectedMarkers = detectedMarkers;
     
-    if (_detectedMarkers.isEmpty) {
-      throw Exception('No markers were detected from your taps. Please try again.');
-    }
+    // Use the flow manager to update with the marker result
+    await _flowManager.detectMarkersFromUserTaps(tapRegions);
     
     setState(() {
       _markersDetected = true;
       _isLoading = false;
-      _statusMessage = 'Markers detected! Now tap on the slab to select a seed point for contour detection.';
-      _markerSelectionState = MarkerSelectionState.slab;
+      _statusMessage = 'Markers detected! You can now draw the contour manually.';
+      _markerSelectionState = MarkerSelectionState.complete;
     });
+    
+    // No popup dialog - user sees status message and buttons to continue or reset
   } catch (e, stackTrace) {
     ErrorUtils().logError(
-      'Error during marker detection',
+      'Error during user-assisted marker detection',
       e,
       stackTrace: stackTrace,
-      context: 'marker_detection',
+      context: 'marker_detection_user_taps',
     );
     
     setState(() {
@@ -173,7 +251,6 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
     });
   }
 }
-
   void _drawMarkersOnDebugImage(img.Image debugImage, List<MarkerPoint> markers) {
   // Define colors for each marker type
   final colors = {
@@ -223,122 +300,124 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
   
   
   Future<void> _detectContour() async {
-    if (_selectedPoint == null) {
-      setState(() {
-        _errorMessage = 'Please tap on the slab to select a seed point first';
-      });
-      return;
-    }
-
+  if (_selectedPoint == null) {
     setState(() {
-      _isLoading = true;
-      _statusMessage = 'Detecting contour...';
-      _errorMessage = '';
+      _errorMessage = 'Please tap on the slab to select a seed point first';
     });
+    return;
+  }
 
-    try {
-      // If the image size is not available, we can't reliably calculate the seed point
-      if (_imageSize == null) {
-        throw Exception('Image dimensions not available');
+  setState(() {
+    _isLoading = true;
+    _statusMessage = 'Detecting contour...';
+    _errorMessage = '';
+  });
+
+  try {
+    // If the image size is not available, we can't reliably calculate the seed point
+    if (_imageSize == null) {
+      throw Exception('Image dimensions not available');
+    }
+    
+    // Calculate the actual seed point in the image
+    final imagePoint = _calculateImagePoint(_selectedPoint!);
+    
+    // Verify we have markers detected before proceeding
+    if (!_markersDetected) {
+      throw Exception('Markers must be detected before contour detection');
+    }
+    
+    // Check if marker result is available
+    if (_flowManager.result.markerResult == null) {
+      print('Marker result is null, attempting to recreate it');
+      
+      // Recreate marker result
+      if (_detectedMarkers.length < 3) {
+        throw Exception('Not enough markers detected');
       }
       
-      // Calculate the actual seed point in the image
-      final imagePoint = _calculateImagePoint(_selectedPoint!);
+      // Create original image and debug image
+      final imageBytes = await widget.imageFile.readAsBytes();
+      final originalImage = img.decodeImage(imageBytes);
       
-      // Verify we have markers detected before proceeding
-      if (!_markersDetected) {
-        throw Exception('Markers must be detected before contour detection');
+      if (originalImage == null) {
+        throw Exception('Failed to decode image');
       }
       
-      // Check if marker result is available
-      if (_flowManager.result.markerResult == null) {
-        print('Marker result is null, attempting to recreate it');
-        
-        // Recreate marker result
-        if (_detectedMarkers.length < 3) {
-          throw Exception('Not enough markers detected');
-        }
-        
-        // Create original image and debug image
-        final imageBytes = await widget.imageFile.readAsBytes();
-        final originalImage = img.decodeImage(imageBytes);
-        
-        if (originalImage == null) {
-          throw Exception('Failed to decode image');
-        }
-        
-        // Create a debug image
-        img.Image debugImage = img.copyResize(originalImage, width: originalImage.width, height: originalImage.height);
-        
-        // Draw markers on debug image
-        _drawMarkersOnDebugImage(debugImage, _detectedMarkers);
-        
-        // Use the marker detector to create a result
-        final markerDetector = MarkerDetector(
-          markerRealDistanceMm: widget.settings.markerXDistance,
-          generateDebugImage: true,
-        );
-        
-        // Recreate marker detection result
-        final originMarker = _detectedMarkers.firstWhere((m) => m.role == MarkerRole.origin);
-        final xAxisMarker = _detectedMarkers.firstWhere((m) => m.role == MarkerRole.xAxis);
-        final scaleMarker = _detectedMarkers.firstWhere((m) => m.role == MarkerRole.scale);
-        
-        // Calculate parameters
-        final dx = xAxisMarker.x - originMarker.x;
-        final dy = xAxisMarker.y - originMarker.y;
-        final orientationAngle = math.atan2(dy, dx);
-        
-        final scaleX = scaleMarker.x - originMarker.x;
-        final scaleY = scaleMarker.y - originMarker.y;
-        final distancePx = math.sqrt(scaleX * scaleX + scaleY * scaleY);
-        
-        final pixelToMmRatio = widget.settings.markerXDistance / distancePx;
-        
-        final origin = CoordinatePointXY(originMarker.x.toDouble(), originMarker.y.toDouble());
-        
-        // Create the result
-        final markerResult = MarkerDetectionResult(
-          markers: _detectedMarkers,
-          pixelToMmRatio: pixelToMmRatio,
-          origin: origin,
-          orientationAngle: orientationAngle,
-          debugImage: debugImage,
-        );
-        
-        // Update flow manager
-        var updatedResult = _flowManager.result.copyWith(
-          markerResult: markerResult,
-          processedImage: debugImage,
-        );
-        
-        // This creates a dummy SlabContourResult just to update the flow manager
-        final dummyContourResult = SlabContourResult(
-          pixelContour: [],
-          machineContour: [],
-          debugImage: debugImage,
-        );
-        
-        _flowManager.updateContourResult(dummyContourResult, method: ContourDetectionMethod.manual);
-      }
+      // Create a debug image
+      img.Image debugImage = img.copyResize(originalImage, width: originalImage.width, height: originalImage.height);
       
-      // Double-check if we have a marker result now
-      if (_flowManager.result.markerResult == null) {
-        throw Exception('Marker detection result not available despite recovery attempts');
-      }
+      // Draw markers on debug image
+      _drawMarkersOnDebugImage(debugImage, _detectedMarkers);
       
-      // Use edge contour algorithm with the calculated image point coordinates
-      final contourAlgorithmRegistry = await _flowManager.detectSlabContourAutomatic(
-        imagePoint.x.toInt(),  // Pass the seed point x coordinate
-        imagePoint.y.toInt()   // Pass the seed point y coordinate
+      // Use the marker detector to create a result
+      final markerDetector = MarkerDetector(
+        markerRealDistanceMm: widget.settings.markerXDistance,
+        generateDebugImage: true,
       );
       
-      setState(() {
-        _contourDetected = true;
-        _isLoading = false;
-        _statusMessage = 'Contour detected! Tap "Continue" to generate G-code.';
-        _markerSelectionState = MarkerSelectionState.complete;
-      });
+      // Recreate marker detection result
+      final originMarker = _detectedMarkers.firstWhere((m) => m.role == MarkerRole.origin);
+      final xAxisMarker = _detectedMarkers.firstWhere((m) => m.role == MarkerRole.xAxis);
+      final scaleMarker = _detectedMarkers.firstWhere((m) => m.role == MarkerRole.scale);
+      
+      // Calculate parameters
+      final dx = xAxisMarker.x - originMarker.x;
+      final dy = xAxisMarker.y - originMarker.y;
+      final orientationAngle = math.atan2(dy, dx);
+      
+      final scaleX = scaleMarker.x - originMarker.x;
+      final scaleY = scaleMarker.y - originMarker.y;
+      final distancePx = math.sqrt(scaleX * scaleX + scaleY * scaleY);
+      
+      final pixelToMmRatio = widget.settings.markerXDistance / distancePx;
+      
+      final origin = CoordinatePointXY(originMarker.x.toDouble(), originMarker.y.toDouble());
+      
+      // Create the result
+      final markerResult = MarkerDetectionResult(
+        markers: _detectedMarkers,
+        pixelToMmRatio: pixelToMmRatio,
+        origin: origin,
+        orientationAngle: orientationAngle,
+        debugImage: debugImage,
+      );
+      
+      // Update flow manager
+      var updatedResult = _flowManager.result.copyWith(
+        markerResult: markerResult,
+        processedImage: debugImage,
+      );
+      
+      // This creates a dummy SlabContourResult just to update the flow manager
+      final dummyContourResult = SlabContourResult(
+        pixelContour: [],
+        machineContour: [],
+        debugImage: debugImage,
+      );
+      
+      _flowManager.updateContourResult(dummyContourResult, method: ContourDetectionMethod.manual);
+    }
+    
+    // Double-check if we have a marker result now
+    if (_flowManager.result.markerResult == null) {
+      throw Exception('Marker detection result not available despite recovery attempts');
+    }
+    
+    // Use edge contour algorithm with the calculated image point coordinates
+    final contourAlgorithmRegistry = await _flowManager.detectSlabContourAutomatic(
+      imagePoint.x.toInt(),  // Pass the seed point x coordinate
+      imagePoint.y.toInt()   // Pass the seed point y coordinate
+    );
+    
+    setState(() {
+      _contourDetected = true;
+      _isLoading = false;
+      _statusMessage = 'Contour detected! Tap "Continue" to generate G-code.';
+      _markerSelectionState = MarkerSelectionState.complete;
+    });
+    
+    // If automatic detection failed, offer manual drawing
     } catch (e, stackTrace) {
       ErrorUtils().logError(
         'Error during contour detection',
@@ -347,12 +426,54 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
         context: 'contour_detection',
       );
       
-      setState(() {
-        _errorMessage = 'Contour detection failed: ${e.toString()}';
-        _isLoading = false;
-      });
+      // Show dialog to offer manual drawing instead of just showing error
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => AlertDialog(
+          title: Text('Contour Detection Failed'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.error_outline, color: Colors.orange, size: 48),
+              SizedBox(height: 16),
+              Text(
+                'We couldn\'t automatically detect the contour of your slab.',
+                textAlign: TextAlign.center,
+              ),
+              SizedBox(height: 12),
+              Text(
+                'Would you like to draw the contour manually?',
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                setState(() {
+                  _errorMessage = 'Contour detection failed: ${e.toString()}';
+                  _isLoading = false;
+                });
+              },
+              child: Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+                _startManualContourDrawing();
+              },
+              child: Text('Draw Manually'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue,
+              ),
+            ),
+          ],
+        ),
+      );
     }
-  }
+}
   
   Future<void> _generateGcode() async {
   Navigator.push(
@@ -387,34 +508,14 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
         _detectMarkersFromTapPoints();
         break;
         
+      // Skip the slab and spillboard steps - we'll move directly to manual drawing
       case MarkerSelectionState.slab:
-        _selectedPoint = details.localPosition;
-        
-        // Calculate image point
-        final imagePoint = _calculateImagePoint(_selectedPoint!);
-        
-        // Update status message with tap coordinates
-        _statusMessage = 'Slab: (${_selectedPoint!.dx.toInt()},${_selectedPoint!.dy.toInt()}) → Image: (${imagePoint.x.toInt()},${imagePoint.y.toInt()}). Now tap on the spillboard.';
-        _markerSelectionState = MarkerSelectionState.spillboard;
+      case MarkerSelectionState.spillboard:
+        // These states are now skipped
         break;
       
-      case MarkerSelectionState.spillboard:
-        _spillboardTapPoint = details.localPosition;
-        
-        // Calculate image point
-        final imagePoint = _calculateImagePoint(_spillboardTapPoint!);
-
-        // Calculate the actual seed points in the image
-        // For now, we only use the slab seed point, but we store the spillboard seed point for future use
-        // TODO: use the spillboard seed point to better detect edges
-        final slabSeedImagePoint = _calculateImagePoint(_selectedPoint!);
-        final spillboardSeedImagePoint = _spillboardTapPoint != null ? 
-        _calculateImagePoint(_spillboardTapPoint!) : null;
-
-        
-        // Update status message with tap coordinates
-        _statusMessage = 'Spillboard: (${_spillboardTapPoint!.dx.toInt()},${_spillboardTapPoint!.dy.toInt()}) → Image: (${imagePoint.x.toInt()},${imagePoint.y.toInt()}). Tap "Detect Contour" to proceed.';
-        _markerSelectionState = MarkerSelectionState.complete;
+      case MarkerSelectionState.manualDrawing:
+        // This is handled in the ManualContourDrawer
         break;
         
       case MarkerSelectionState.complete:
@@ -695,114 +796,239 @@ Widget build(BuildContext context) {
 }
 
 Widget _buildControlButtons() {
-    return Container(
-      padding: EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black12,
-            blurRadius: 4,
-            offset: Offset(0, -2),
+  return Container(
+    padding: EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.white,
+      boxShadow: [
+        BoxShadow(
+          color: Colors.black12,
+          blurRadius: 4,
+          offset: Offset(0, -2),
+        ),
+      ],
+    ),
+    child: Column(
+      children: [
+        // After markers detected but before contour, show the manual draw button
+        if (_markersDetected && !_contourDetected) 
+          ElevatedButton.icon(
+            icon: Icon(Icons.draw),
+            label: Text('Draw Contour Manually'),
+            onPressed: _isLoading ? null : _startManualContourDrawing,
+            style: ElevatedButton.styleFrom(
+              minimumSize: Size(double.infinity, 48),
+              backgroundColor: Colors.blue,
+            ),
           ),
-        ],
-      ),
-      child: Column(
-        children: [
-          // Detect Contour Button (only visible after markers are detected)
-          if (_markerSelectionState == MarkerSelectionState.complete)
-            ElevatedButton.icon(
-              icon: Icon(Icons.content_cut),
-              label: Text('Detect Contour'),
-              onPressed: _isLoading || _selectedPoint == null ? null : _detectContour,
-              style: ElevatedButton.styleFrom(
-                minimumSize: Size(double.infinity, 48),
+        
+        // Detect Markers Button (only visible when all three markers have been tapped)
+        if (_markerSelectionState == MarkerSelectionState.scale && 
+            _originTapPoint != null && _xAxisTapPoint != null && _scaleTapPoint != null)
+          ElevatedButton.icon(
+            icon: Icon(Icons.check_circle),
+            label: Text('Detect Markers'),
+            onPressed: _isLoading ? null : _detectMarkersFromTapPoints,
+            style: ElevatedButton.styleFrom(
+              minimumSize: Size(double.infinity, 48),
+            ),
+          ),
+        
+        SizedBox(height: 8),
+        
+        // Reset button and only show Parameters if auto-detect is used in the future
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                icon: Icon(Icons.refresh),
+                label: Text('Reset'),
+                onPressed: _isLoading ? null : _resetDetection,
               ),
             ),
-          
-          // Detect Markers Button (only visible when all three markers have been tapped)
-          if (_markerSelectionState == MarkerSelectionState.scale && 
-              _originTapPoint != null && _xAxisTapPoint != null && _scaleTapPoint != null)
-            ElevatedButton.icon(
-              icon: Icon(Icons.check_circle),
-              label: Text('Detect Markers'),
-              onPressed: _isLoading ? null : _detectMarkersFromTapPoints,
-              style: ElevatedButton.styleFrom(
-                minimumSize: Size(double.infinity, 48),
+          ],
+        ),
+        
+        SizedBox(height: 8),
+        
+        // Back and Continue buttons row
+        Row(
+          children: [
+            Expanded(
+              child: OutlinedButton.icon(
+                icon: Icon(Icons.arrow_back),
+                label: Text('Back'),
+                onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
               ),
             ),
-          
-          SizedBox(height: 8),
-          
-          // Reset and Parameters buttons row
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: Icon(Icons.refresh),
-                  label: Text('Reset'),
-                  onPressed: _isLoading ? null : _resetDetection,
+            SizedBox(width: 16),
+            Expanded(
+              child: ElevatedButton.icon(
+                icon: Icon(Icons.arrow_forward),
+                label: Text('Continue'),
+                onPressed: _isLoading || !_contourDetected ? null : _generateGcode,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: _contourDetected ? Colors.green : Colors.grey,
                 ),
               ),
-              SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: Icon(Icons.settings),
-                  label: Text('Parameters'),
-                  onPressed: _isLoading ? null : _showParametersDialog,
+            ),
+          ],
+        ),
+      ],
+    ),
+  );
+}
+
+  void _startManualContourDrawing() {
+    setState(() {
+      _isLoading = false;
+      _errorMessage = '';
+      _statusMessage = 'Drawing contour manually';
+    });
+    
+    // Show the manual drawing widget as a full-screen dialog
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => Dialog.fullscreen(
+        child: Material(
+          color: Colors.transparent,
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              // Show the image in the background
+              Center(
+                child: Image.file(
+                  widget.imageFile,
+                  fit: BoxFit.contain,
+                ),
+              ),
+              
+              // Add semi-transparent overlay for better contrast
+              Container(
+                color: Colors.black.withOpacity(0.1),
+              ),
+              
+              // Add the manual contour drawer on top
+              RepaintBoundary(
+                child: ManualContourDrawer(
+                  key: UniqueKey(), // Force creation of a new instance
+                  imageSize: _imageSize!,
+                  onContourComplete: (contourPoints) {
+                    // Close the dialog
+                    Navigator.of(context).pop();
+                    
+                    // Process the manually drawn contour
+                    _processManualContour(contourPoints);
+                  },
+                  onCancel: () {
+                    Navigator.of(context).pop();
+                  },
                 ),
               ),
             ],
           ),
-          
-          SizedBox(height: 8),
-          
-          // Back and Continue buttons row
-          Row(
-            children: [
-              Expanded(
-                child: OutlinedButton.icon(
-                  icon: Icon(Icons.arrow_back),
-                  label: Text('Back'),
-                  onPressed: _isLoading ? null : () => Navigator.of(context).pop(),
-                ),
-              ),
-              SizedBox(width: 16),
-              Expanded(
-                child: ElevatedButton.icon(
-                  icon: Icon(Icons.arrow_forward),
-                  label: Text('Continue'),
-                  onPressed: _isLoading || !_contourDetected ? null : _generateGcode,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: _contourDetected ? Colors.green : Colors.grey,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  void _resetDetection() {
+  // Method to process the manually drawn contour (add after the method above)
+  void _processManualContour(List<CoordinatePointXY> contourPoints) async {
     setState(() {
-      _markersDetected = false;
-      _contourDetected = false;
-      _selectedPoint = null;
-      _originTapPoint = null;
-      _xAxisTapPoint = null;
-      _scaleTapPoint = null;
-      _spillboardTapPoint = null;
-      _errorMessage = '';
-      _statusMessage = 'Tap on the Origin marker (bottom left)';
-      _markerSelectionState = MarkerSelectionState.origin;
-      _detectedMarkers = [];
+      _isLoading = true;
+      _statusMessage = 'Processing manual contour...';
     });
     
-    _flowManager.reset();
-    _initializeDetection();
+    try {
+      final provider = Provider.of<ProcessingProvider>(context, listen: false);
+      final flowManager = provider.flowManager;
+      
+      if (flowManager == null || flowManager.result.markerResult == null) {
+        throw Exception('Marker detection must be completed before contour detection');
+      }
+      
+      // Create coordinate system
+      final markerResult = flowManager.result.markerResult!;
+      final coordSystem = MachineCoordinateSystem.fromMarkerPointsWithDistances(
+        markerResult.markers[0].toPoint(),
+        markerResult.markers[1].toPoint(),
+        markerResult.markers[2].toPoint(),
+        widget.settings.markerXDistance,
+        widget.settings.markerYDistance
+      );
+      
+      // Load original image for visualization
+      final imageBytes = await widget.imageFile.readAsBytes();
+      final image = img.decodeImage(imageBytes);
+      
+      if (image == null) {
+        throw Exception('Failed to decode image');
+      }
+      
+      // Create a debug image for visualization
+      final debugImage = img.copyResize(image, width: image.width, height: image.height);
+      
+      // Draw the contour on the debug image
+      DrawingUtils.drawContour(
+        debugImage, 
+        contourPoints, 
+        img.ColorRgba8(0, 255, 0, 255), 
+        thickness: 3
+      );
+      
+      // Convert to machine coordinates
+      final machineContour = coordSystem.convertPointListToMachineCoords(contourPoints);
+      
+      // Create contour result
+      final contourResult = SlabContourResult(
+        pixelContour: contourPoints,
+        machineContour: machineContour,
+        debugImage: debugImage,
+      );
+      
+      // Update the flow manager
+      flowManager.updateContourResult(contourResult, method: ContourDetectionMethod.manual);
+      
+      setState(() {
+        _contourDetected = true;
+        _isLoading = false;
+        _statusMessage = 'Manual contour processed successfully. Tap "Continue" to generate G-code.';
+        _markerSelectionState = MarkerSelectionState.complete;
+      });
+    } catch (e, stackTrace) {
+      ErrorUtils().logError(
+        'Error processing manual contour',
+        e,
+        stackTrace: stackTrace,
+        context: 'manual_contour_processing',
+      );
+      
+      setState(() {
+        _errorMessage = 'Error processing manual contour: ${e.toString()}';
+        _isLoading = false;
+      });
+    }
   }
+
+  void _resetDetection() {
+  setState(() {
+    _markersDetected = false;
+    _contourDetected = false;
+    _selectedPoint = null;
+    _originTapPoint = null;
+    _xAxisTapPoint = null;
+    _scaleTapPoint = null;
+    _spillboardTapPoint = null;
+    _errorMessage = '';
+    _statusMessage = 'Tap on the Origin marker (bottom left)';
+    _markerSelectionState = MarkerSelectionState.origin;
+    _detectedMarkers = [];
+  });
+  
+  _flowManager.reset();
+  _initializeDetection();
+}
   
   Widget _buildImageDisplay() {
     if (_flowManager.result.originalImage != null) {
