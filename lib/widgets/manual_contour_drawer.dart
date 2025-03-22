@@ -4,6 +4,7 @@
 import 'package:flutter/material.dart';
 import '../utils/general/machine_coordinates.dart';
 import '../utils/image_processing/geometry_utils.dart';
+import '../utils/general/constants.dart';
 
 class ManualContourDrawer extends StatefulWidget {
   final Size imageSize;
@@ -29,7 +30,7 @@ class _ManualContourDrawerState extends State<ManualContourDrawer> {
   Widget build(BuildContext context) {
     return Stack(
       children: [
-        // The drawing area
+        // Full-screen GestureDetector for drawing
         GestureDetector(
           onTapDown: _handleTap,
           child: CustomPaint(
@@ -42,80 +43,110 @@ class _ManualContourDrawerState extends State<ManualContourDrawer> {
           ),
         ),
         
-        // Instructions at the top
+        // Status bar at bottom - matching combined_detector_screen.dart
         Positioned(
-          top: 16,
+          bottom: 100, // Position above the buttons
           left: 16,
           right: 16,
-          child: Card(
-            color: Colors.black.withOpacity(0.7),
-            child: Padding(
-              padding: const EdgeInsets.all(12.0),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    'Manual Contour Drawing',
-                    style: TextStyle(
-                      color: Colors.white, 
-                      fontWeight: FontWeight.bold,
-                      fontSize: 18,
-                    ),
-                  ),
-                  SizedBox(height: 8),
-                  Text(
-                    'Tap around the slab to create points. ${_points.isEmpty ? 'Start by tapping your first point.' : _points.length < 3 ? 'Add at least ${3 - _points.length} more points.' : 'Tap "Complete" when finished or tap near the first point to close the shape.'}',
-                    style: TextStyle(color: Colors.white),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+          child: Container(
+            padding: EdgeInsets.all(smallPadding),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade50,
+              borderRadius: BorderRadius.circular(borderRadius),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black26,
+                  blurRadius: 4,
+                  offset: Offset(0, 2),
+                ),
+              ],
+            ),
+            child: Text(
+              _getStatusMessage(),
+              style: TextStyle(
+                color: Colors.blue.shade900,
+                fontWeight: FontWeight.bold,
               ),
+              textAlign: TextAlign.center,
             ),
           ),
         ),
         
-        // Action buttons at the bottom
+        // Control buttons at bottom - matches the layout from combined_detector_screen
         Positioned(
-  bottom: 24,
-  left: 16,
-  right: 16,
-  child: Row(
-    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-    children: [
-      // Cancel button
-      ElevatedButton.icon(
-        icon: Icon(Icons.cancel, color: Colors.white),
-        label: Text('Cancel', style: TextStyle(color: Colors.white)),
-        onPressed: widget.onCancel,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.red,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          child: Container(
+            padding: EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black12,
+                  blurRadius: 4,
+                  offset: Offset(0, -2),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                // Main action buttons
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        icon: Icon(Icons.undo),
+                        label: Text('Undo Point'),
+                        onPressed: _points.isEmpty ? null : _undoLastPoint,
+                      ),
+                    ),
+                    SizedBox(width: 16),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        icon: Icon(Icons.check_circle, color: Colors.white),
+                        label: Text('Complete Drawing', style: TextStyle(color: Colors.white)),
+                        onPressed: _points.length < 3 ? null : _completeDrawing,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.green,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                
+                SizedBox(height: 8),
+                
+                // Cancel button
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    icon: Icon(Icons.cancel),
+                    label: Text('Cancel'),
+                    onPressed: widget.onCancel,
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: Colors.red,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
-      ),
-      
-      // Undo button
-      ElevatedButton.icon(
-        icon: Icon(Icons.undo, color: Colors.white),
-        label: Text('Undo Point', style: TextStyle(color: Colors.white)),
-        onPressed: _points.isEmpty ? null : _undoLastPoint,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.orange,
-        ),
-      ),
-      
-      // Complete button
-      ElevatedButton.icon(
-        icon: Icon(Icons.check_circle, color: Colors.white),
-        label: Text('Complete', style: TextStyle(color: Colors.white)),
-        onPressed: _points.length < 3 ? null : _completeDrawing,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: Colors.green,
-        ),
-      ),
-    ],
-  ),
-),
       ],
     );
+  }
+
+  String _getStatusMessage() {
+    if (_points.isEmpty) {
+      return 'Tap anywhere to add your first point';
+    } else if (_points.length < 3) {
+      return 'Add at least ${3 - _points.length} more points';
+    } else if (_isDrawingComplete) {
+      return 'Contour complete! Tap Complete to continue';
+    } else {
+      return 'Tap near the first point to close the shape or press Complete when finished';
+    }
   }
 
   void _handleTap(TapDownDetails details) {
@@ -134,12 +165,8 @@ class _ManualContourDrawerState extends State<ManualContourDrawer> {
       }
     }
     
-    // Force rebuild with the new point
     setState(() {
       _points.add(tappedPoint);
-      
-      // Debug print to verify point was added
-      print('Added point ${_points.length - 1}: $tappedPoint');
     });
   }
 
@@ -159,13 +186,40 @@ class _ManualContourDrawerState extends State<ManualContourDrawer> {
       _isDrawingComplete = true;
     });
     
-    // Convert display coordinates to image coordinates
+    // Get actual drawing area dimensions
+    final renderBox = context.findRenderObject() as RenderBox;
+    final drawingAreaSize = renderBox.size;
+    
+    // Calculate aspect ratios
+    final imageAspect = widget.imageSize.width / widget.imageSize.height;
+    final screenAspect = drawingAreaSize.width / drawingAreaSize.height;
+    
+    // Determine scale and offset for accurate mapping
+    double scaledWidth, scaledHeight, offsetX = 0, offsetY = 0;
+    
+    if (imageAspect > screenAspect) {
+      // Image is wider than screen (letterboxed)
+      scaledWidth = drawingAreaSize.width;
+      scaledHeight = scaledWidth / imageAspect;
+      offsetY = (drawingAreaSize.height - scaledHeight) / 2;
+    } else {
+      // Image is taller than screen (pillarboxed)
+      scaledHeight = drawingAreaSize.height;
+      scaledWidth = scaledHeight * imageAspect;
+      offsetX = (drawingAreaSize.width - scaledWidth) / 2;
+    }
+    
+    // Convert display coordinates to image coordinates with aspect ratio correction
     final imagePoints = _points.map((offset) {
-      return MachineCoordinateSystem.displayToImageCoordinates(
-        CoordinatePointXY(offset.dx, offset.dy),
-        widget.imageSize,
-        MediaQuery.of(context).size,
-      );
+      // Remove offsets first
+      final adjustedX = offset.dx - offsetX;
+      final adjustedY = offset.dy - offsetY;
+      
+      // Scale to image dimensions
+      final imageX = adjustedX * (widget.imageSize.width / scaledWidth);
+      final imageY = adjustedY * (widget.imageSize.height / scaledHeight);
+      
+      return CoordinatePointXY(imageX, imageY);
     }).toList();
     
     // Add first point to end if not already closed
@@ -179,6 +233,42 @@ class _ManualContourDrawerState extends State<ManualContourDrawer> {
     
     // Call the callback with the contour points
     widget.onContourComplete(simplifiedPoints);
+  }
+  
+  void _showHelpDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Manual Drawing Help'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'How to draw the slab contour:',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            SizedBox(height: 12),
+            Text('• Tap on the screen to add points around your slab'),
+            Text('• Continue adding points to trace the entire outline'),
+            Text('• Tap near the first point to automatically close the shape'),
+            Text('• Or press "Complete Drawing" when you\'re done'),
+            Text('• Use "Undo Point" if you make a mistake'),
+            SizedBox(height: 12),
+            Text(
+              'The more points you add, the more accurate the contour will be.',
+              style: TextStyle(fontStyle: FontStyle.italic),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text('Got it'),
+          ),
+        ],
+      ),
+    );
   }
 }
 
@@ -233,7 +323,7 @@ class ManualContourPainter extends CustomPainter {
       }
     }
     
-    // Draw points on top of lines - iterate through a copy of the list to avoid modifying paint during iteration
+    // Draw points on top of lines
     for (int i = 0; i < points.length; i++) {
       // Draw a larger first point to make it clear where to tap to close
       final pointSize = i == 0 ? 12.0 : 8.0;
@@ -254,8 +344,7 @@ class ManualContourPainter extends CustomPainter {
         pointPaint
       );
       
-      // Don't show point numbers for manual contour drawing
-      // Instead just mark the first point differently to indicate the start/end
+      // Mark the first point differently to indicate the start/end
       if (i == 0) {
         // Add a special marker for the first point
         final firstPointMarker = Paint()
