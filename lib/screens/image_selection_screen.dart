@@ -132,7 +132,7 @@ class _ImageSelectionScreenState extends State<ImageSelectionScreen> {
               'The image should contain your slab with three markers positioned at:\n'
               '• Bottom left (Origin)\n'
               '• Bottom right (X-axis)\n'
-              '• Top left (Scale)',
+              '• Top left (Y-axis)',
               style: TextStyle(fontSize: 16),
               textAlign: TextAlign.center,
             ),
