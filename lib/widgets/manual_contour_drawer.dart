@@ -76,44 +76,44 @@ class _ManualContourDrawerState extends State<ManualContourDrawer> {
         
         // Action buttons at the bottom
         Positioned(
-          bottom: 24,
-          left: 16,
-          right: 16,
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              // Cancel button
-              ElevatedButton.icon(
-                icon: Icon(Icons.cancel),
-                label: Text('Cancel'),
-                onPressed: widget.onCancel,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                ),
-              ),
-              
-              // Undo button
-              ElevatedButton.icon(
-                icon: Icon(Icons.undo),
-                label: Text('Undo Point'),
-                onPressed: _points.isEmpty ? null : _undoLastPoint,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.orange,
-                ),
-              ),
-              
-              // Complete button
-              ElevatedButton.icon(
-                icon: Icon(Icons.check_circle),
-                label: Text('Complete'),
-                onPressed: _points.length < 3 ? null : _completeDrawing,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                ),
-              ),
-            ],
-          ),
+  bottom: 24,
+  left: 16,
+  right: 16,
+  child: Row(
+    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    children: [
+      // Cancel button
+      ElevatedButton.icon(
+        icon: Icon(Icons.cancel, color: Colors.white),
+        label: Text('Cancel', style: TextStyle(color: Colors.white)),
+        onPressed: widget.onCancel,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.red,
         ),
+      ),
+      
+      // Undo button
+      ElevatedButton.icon(
+        icon: Icon(Icons.undo, color: Colors.white),
+        label: Text('Undo Point', style: TextStyle(color: Colors.white)),
+        onPressed: _points.isEmpty ? null : _undoLastPoint,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.orange,
+        ),
+      ),
+      
+      // Complete button
+      ElevatedButton.icon(
+        icon: Icon(Icons.check_circle, color: Colors.white),
+        label: Text('Complete', style: TextStyle(color: Colors.white)),
+        onPressed: _points.length < 3 ? null : _completeDrawing,
+        style: ElevatedButton.styleFrom(
+          backgroundColor: Colors.green,
+        ),
+      ),
+    ],
+  ),
+),
       ],
     );
   }

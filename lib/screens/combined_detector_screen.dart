@@ -95,7 +95,7 @@ class _CombinedDetectorScreenState extends State<CombinedDetectorScreen> {
     setState(() {
       _imageSize = Size(image.width.toDouble(), image.height.toDouble());
       _isLoading = false;
-      _statusMessage = 'First, tap the three marker points: Origin (red), X-Axis (green), and Scale (blue)';
+      _statusMessage = 'Tap on the Origin marker (bottom left)';
     });
   } catch (e) {
     setState(() {
@@ -499,7 +499,7 @@ Future<void> _detectMarkersFromTapPoints() async {
         
       case MarkerSelectionState.xAxis:
         _xAxisTapPoint = details.localPosition;
-        _statusMessage = 'Tap on the Scale/Y-Axis marker (top left)';
+        _statusMessage = 'Tap on the Y-Axis marker (top left)';
         _markerSelectionState = MarkerSelectionState.scale;
         break;
         
@@ -813,8 +813,8 @@ Widget _buildControlButtons() {
         // After markers detected but before contour, show the manual draw button
         if (_markersDetected && !_contourDetected) 
           ElevatedButton.icon(
-            icon: Icon(Icons.draw),
-            label: Text('Draw Contour Manually'),
+            icon: Icon(Icons.draw, color: Colors.white),
+            label: Text('Draw Contour Manually', style: TextStyle(color: Colors.white)),
             onPressed: _isLoading ? null : _startManualContourDrawing,
             style: ElevatedButton.styleFrom(
               minimumSize: Size(double.infinity, 48),
@@ -822,21 +822,22 @@ Widget _buildControlButtons() {
             ),
           ),
         
-        // Detect Markers Button (only visible when all three markers have been tapped)
+        // Detect Markers Button
         if (_markerSelectionState == MarkerSelectionState.scale && 
             _originTapPoint != null && _xAxisTapPoint != null && _scaleTapPoint != null)
           ElevatedButton.icon(
-            icon: Icon(Icons.check_circle),
-            label: Text('Detect Markers'),
+            icon: Icon(Icons.check_circle, color: Colors.white),
+            label: Text('Detect Markers', style: TextStyle(color: Colors.white)),
             onPressed: _isLoading ? null : _detectMarkersFromTapPoints,
             style: ElevatedButton.styleFrom(
               minimumSize: Size(double.infinity, 48),
+              backgroundColor: Colors.blue,
             ),
           ),
         
         SizedBox(height: 8),
         
-        // Reset button and only show Parameters if auto-detect is used in the future
+        // Rest of buttons
         Row(
           children: [
             Expanded(
@@ -864,8 +865,8 @@ Widget _buildControlButtons() {
             SizedBox(width: 16),
             Expanded(
               child: ElevatedButton.icon(
-                icon: Icon(Icons.arrow_forward),
-                label: Text('Continue'),
+                icon: Icon(Icons.arrow_forward, color: Colors.white),
+                label: Text('Continue', style: TextStyle(color: Colors.white)),
                 onPressed: _isLoading || !_contourDetected ? null : _generateGcode,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: _contourDetected ? Colors.green : Colors.grey,
@@ -1031,46 +1032,51 @@ Widget _buildControlButtons() {
 }
   
   Widget _buildImageDisplay() {
-    if (_flowManager.result.originalImage != null) {
-      if (_contourDetected && _flowManager.result.contourResult?.debugImage != null) {
-        // Use Image.memory to display the debug image if contour was detected
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Image.memory(
-              Uint8List.fromList(img.encodePng(_flowManager.result.contourResult!.debugImage!)),
-              fit: BoxFit.contain,
-            ),
-          ),
-        );
-      } else if (_markersDetected && _flowManager.result.markerResult?.debugImage != null) {
-        // Use Image.memory to display the debug image if markers were detected
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Image.memory(
-              Uint8List.fromList(img.encodePng(_flowManager.result.markerResult!.debugImage!)),
-              fit: BoxFit.contain,
-            ),
-          ),
-        );
-      } else {
-        // Show the original image if no debug images available
-        // Apply padding to original image view as well for consistency
-        return Center(
-          child: Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Image.file(
-              _flowManager.result.originalImage!,
-              fit: BoxFit.contain,
-            ),
-          ),
-        );
-      }
+  if (_flowManager.result.originalImage != null) {
+    if (_contourDetected && _flowManager.result.contourResult?.debugImage != null) {
+      // Use Image.memory to display the debug image if contour was detected
+      return Center(
+        child: Image.memory(
+          Uint8List.fromList(img.encodePng(_flowManager.result.contourResult!.debugImage!)),
+          fit: BoxFit.contain,
+        ),
+      );
+    } else if (_markersDetected && _flowManager.result.markerResult?.debugImage != null) {
+      // Use Image.memory to display the debug image if markers were detected
+      return Center(
+        child: Image.memory(
+          Uint8List.fromList(img.encodePng(_flowManager.result.markerResult!.debugImage!)),
+          fit: BoxFit.contain,
+        ),
+      );
     } else {
-      return Center(child: Text('Image not available'));
+      // Show the original image if no debug images available
+      // Remove all padding to fix positioning issues
+      return Center(
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            Image.file(
+              _flowManager.result.originalImage!,
+              fit: BoxFit.contain, 
+            ),
+            
+            // Only show one overlay, not both
+            if (_contourDetected && _flowManager.result.contourResult != null && _imageSize != null)
+              ContourOverlay(
+                contourPoints: _flowManager.result.contourResult!.pixelContour,
+                imageSize: _imageSize!,
+                color: Colors.green,
+                strokeWidth: defaultContourStrokeWidth,
+              ),
+          ],
+        ),
+      );
     }
+  } else {
+    return Center(child: Text('Image not available'));
   }
+}
 
 void _updateLocalSettings(SettingsModel updatedSettings) {
     setState(() {

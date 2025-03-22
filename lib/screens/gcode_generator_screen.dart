@@ -574,8 +574,9 @@ Widget _buildActionButtons() {
       
       // Generate G-code button
       ElevatedButton.icon(
-        icon: Icon(_isGenerated ? Icons.refresh : Icons.code),
-        label: Text(_isGenerated ? 'Regenerate G-code' : 'Generate G-code'),
+        icon: Icon(_isGenerated ? Icons.refresh : Icons.code, color: Colors.white),
+        label: Text(_isGenerated ? 'Regenerate G-code' : 'Generate G-code', 
+          style: TextStyle(color: Colors.white)),
         onPressed: _isGenerating ? null : _generateGcode,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.blue,
@@ -590,8 +591,8 @@ Widget _buildActionButtons() {
         children: [
           Expanded(
             child: ElevatedButton.icon(
-              icon: Icon(Icons.visibility),
-              label: Text('Visualize Path'),
+              icon: Icon(Icons.visibility, color: Colors.white),
+              label: Text('Visualize Path', style: TextStyle(color: Colors.white)),
               onPressed: _isGenerating || !_isGenerated ? null : _visualizeGcode,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
@@ -601,8 +602,8 @@ Widget _buildActionButtons() {
           SizedBox(width: 12),
           Expanded(
             child: ElevatedButton.icon(
-              icon: Icon(Icons.share),
-              label: Text('Share G-code'),
+              icon: Icon(Icons.share, color: Colors.white),
+              label: Text('Share G-code', style: TextStyle(color: Colors.white)),
               onPressed: _isGenerating || !_isGenerated ? null : _shareGcode,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
@@ -612,7 +613,7 @@ Widget _buildActionButtons() {
         ],
       ),
       
-      // Bottom padding to ensure everything is visible
+      // Bottom padding
       SizedBox(height: 30),
     ],
   );
