@@ -922,6 +922,7 @@ Widget _buildActionButtons() {
           SettingsTextField(
             label: 'X-Axis Marker Distance (mm)',
             value: _settings.markerXDistance,
+            isInteger: true,
             onChanged: (value) => setState(() {
               _settings.markerXDistance = value;
               _statsCacheDirty = true; // Mark stats as dirty since coordinate system changes
@@ -935,6 +936,7 @@ Widget _buildActionButtons() {
           SettingsTextField(
             label: 'Y-Axis Marker Distance (mm)',
             value: _settings.markerYDistance,
+            isInteger: true,
             onChanged: (value) => setState(() {
               _settings.markerYDistance = value;
               _statsCacheDirty = true; // Mark stats as dirty since coordinate system changes
