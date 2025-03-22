@@ -110,7 +110,8 @@ void _updateAdjustedContour() {
     if (_slabMargin <= 0) {
       _adjustedContour = List.from(originalContour);
     } else {
-      // Use buffered polygon approach for positive margins
+      // Use offset polygon approach for positive margins
+      // The negative sign is removed - positive margin should expand the contour
       _adjustedContour = _createBufferedPolygon(originalContour, _slabMargin);
     }
     
@@ -203,12 +204,14 @@ List<CoordinatePointXY> _createBufferedPolygon(List<CoordinatePointXY> originalC
     
     double newPointX, newPointY;
     
-    if (!isConvex) {
-      // For concave vertices, move away from the bisector point
+    // FIXED: For convex vertices we move outward, for concave we move inward
+    // This is the opposite of what was happening before
+    if (isConvex) {
+      // For convex vertices, move AWAY from the bisector point to EXPAND the contour
       newPointX = currX + (currX - pointOfBisectorX) * distance / bisectorDistanceVertex;
       newPointY = currY + (currY - pointOfBisectorY) * distance / bisectorDistanceVertex;
     } else {
-      // For convex vertices, move toward the bisector point
+      // For concave vertices, move TOWARD the bisector point
       newPointX = currX - (currX - pointOfBisectorX) * distance / bisectorDistanceVertex;
       newPointY = currY - (currY - pointOfBisectorY) * distance / bisectorDistanceVertex;
     }
@@ -571,8 +574,9 @@ Widget _buildActionButtons() {
       
       // Generate G-code button
       ElevatedButton.icon(
-        icon: Icon(_isGenerated ? Icons.refresh : Icons.code),
-        label: Text(_isGenerated ? 'Regenerate G-code' : 'Generate G-code'),
+        icon: Icon(_isGenerated ? Icons.refresh : Icons.code, color: Colors.white),
+        label: Text(_isGenerated ? 'Regenerate G-code' : 'Generate G-code', 
+          style: TextStyle(color: Colors.white)),
         onPressed: _isGenerating ? null : _generateGcode,
         style: ElevatedButton.styleFrom(
           backgroundColor: Colors.blue,
@@ -587,8 +591,8 @@ Widget _buildActionButtons() {
         children: [
           Expanded(
             child: ElevatedButton.icon(
-              icon: Icon(Icons.visibility),
-              label: Text('Visualize Path'),
+              icon: Icon(Icons.visibility, color: Colors.white),
+              label: Text('Visualize Path', style: TextStyle(color: Colors.white)),
               onPressed: _isGenerating || !_isGenerated ? null : _visualizeGcode,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.orange,
@@ -598,8 +602,8 @@ Widget _buildActionButtons() {
           SizedBox(width: 12),
           Expanded(
             child: ElevatedButton.icon(
-              icon: Icon(Icons.share),
-              label: Text('Share G-code'),
+              icon: Icon(Icons.share, color: Colors.white),
+              label: Text('Share G-code', style: TextStyle(color: Colors.white)),
               onPressed: _isGenerating || !_isGenerated ? null : _shareGcode,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.green,
@@ -609,7 +613,7 @@ Widget _buildActionButtons() {
         ],
       ),
       
-      // Bottom padding to ensure everything is visible
+      // Bottom padding
       SizedBox(height: 30),
     ],
   );

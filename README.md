@@ -7,12 +7,15 @@ An app for generating optimized CNC toolpaths for surfacing irregularly shaped s
 - Camera-based slab detection
 - Marker reference system for accurate real-world measurements
 - Automatic contour detection using computer vision
+- Manual contour drawing option when automatic detection is challenging
 - Interactive seed-point selection for improved edge detection
 - Optimized toolpath generation with customizable parameters
 - G-code export for direct use with CNC machines
 - Works on iOS, Android, and web platforms
 - Support for both horizontal and vertical toolpaths
 - Customizable safety margin around detected contours
+- Multiple depth passes for thick materials
+- Option to return to home position after completion
 
 ## Workflow
 
@@ -20,7 +23,7 @@ An app for generating optimized CNC toolpaths for surfacing irregularly shaped s
 
 2. **Marker Detection**: The app automatically identifies the three reference markers that define the coordinate system.
 
-3. **Contour Detection**: Tap on the slab to set a seed point for edge detection. The app uses advanced computer vision to find the slab's outline.
+3. **Contour Detection**: Either tap on the slab to set a seed point for edge detection, or draw the contour manually. The app uses advanced computer vision to find the slab's outline when using automatic detection.
 
 4. **G-code Generation**: Configure toolpath parameters (cutting depth, stepover, feed rate, etc.) and generate optimized G-code.
 
@@ -32,12 +35,21 @@ An app for generating optimized CNC toolpaths for surfacing irregularly shaped s
 
 ```
 lib/
-├── main.dart                   # App entry point
-├── models/
-│   └── settings_model.dart     # App configuration and settings
-├── providers/
-│   └── processing_provider.dart # State management for processing flow
-├── screens/
+├── main.dart                          # App entry point
+├── detection/                         # Detection algorithms
+│   ├── algorithms/                    # Contour detection algorithms
+│   │   ├── contour_algorithm_interface.dart
+│   │   ├── contour_algorithm_registry.dart
+│   │   └── edge_contour_algorithm.dart
+│   ├── marker_detector.dart           # Reference marker detection
+│   ├── marker_selection_state.dart    # State management for marker selection
+│   ├── slab_contour_detector.dart     # Slab outline detection
+│   └── slab_contour_result.dart       # Detection result structure
+├── flow_of_app/                       # Application flow management
+│   ├── flow_manager.dart              # Manages the overall processing flow
+│   ├── flow_provider.dart             # Provider for flow manager
+│   └── processing_provider.dart       # State management for processing
+├── screens/                           # UI screens
 │   ├── camera_screen_with_overlay.dart  # Camera interface with marker guides
 │   ├── combined_detector_screen.dart    # Marker and contour detection
 │   ├── file_picker_screen.dart          # Image selection screen
@@ -46,40 +58,58 @@ lib/
 │   ├── home_page.dart                   # Main navigation screen
 │   ├── image_selection_screen.dart      # Image capture/selection
 │   └── settings_screen.dart             # Settings configuration
-├── services/
-│   ├── gcode/
+├── utils/                             # Utility functions and helpers
+│   ├── drawing/                       # Drawing utilities
+│   │   ├── drawing_utils.dart           # Shape and line drawing
+│   │   └── line_drawing_utils.dart      # Line drawing utilities
+│   ├── general/                       # General utilities
+│   │   ├── constants.dart               # App-wide constants
+│   │   ├── error_utils.dart             # Error handling utilities
+│   │   ├── file_utils.dart              # File handling utilities
+│   │   ├── machine_coordinates.dart     # Coordinate transformation
+│   │   ├── permissions_utils.dart       # Permission management
+│   │   ├── settings_model.dart          # Settings model
+│   │   ├── time_formatter.dart          # Time formatting utilities
+│   │   └── units_converter.dart         # Unit conversion utilities
+│   ├── gcode/                         # G-code utilities
 │   │   ├── gcode_generator.dart         # G-code creation
 │   │   └── gcode_parser.dart            # G-code parsing for visualization
-│   ├── image_processing/
-│   │   ├── contour_algorithms/          # Edge detection algorithms
-│   │   ├── marker_detector.dart         # Reference marker detection
-│   │   ├── slab_contour_detector.dart   # Slab outline detection
-│   │   └── slab_contour_result.dart     # Detection result structure
-│   └── processing/
-│       └── processing_flow_manager.dart  # Orchestrates the entire detection process
-├── utils/
-│   ├── general/
-│   │   ├── constants.dart                # App-wide constants
-│   │   ├── error_utils.dart              # Error handling utilities
-│   │   ├── file_utils.dart               # File handling utilities
-│   │   ├── machine_coordinates.dart      # Coordinate transformation
-│   │   └── permissions_utils.dart        # Permission management
-│   └── image_processing/                 # Image processing utilities
-│       ├── base_image_utils.dart
-│       ├── color_utils.dart
-│       ├── contour_detection_utils.dart
-│       ├── drawing_utils.dart
-│       ├── filter_utils.dart
-│       ├── geometry_utils.dart
-│       ├── image_utils.dart
-│       └── threshold_utils.dart
-└── widgets/
-    ├── camera_overlay.dart              # Camera guide overlay
-    ├── contour_overlay.dart             # Contour visualization
-    ├── marker_overlay.dart              # Marker visualization
-    ├── manual_contour_dialog.dart       # Manual contour prompt
-    └── settings_fields.dart             # Settings form fields
+│   ├── image_processing/              # Image processing utilities
+│   │   ├── base_image_utils.dart        # Basic image operations
+│   │   ├── color_utils.dart             # Color manipulation
+│   │   ├── contour_detection_utils.dart # Contour detection
+│   │   ├── filter_utils.dart            # Image filtering
+│   │   ├── geometry_utils.dart          # Geometric operations
+│   │   └── threshold_utils.dart         # Thresholding operations
+│   └── toolpath/                      # Toolpath utilities
+│       ├── contour_painter.dart         # Contour visualization
+│       └── toolpath_painter.dart        # Toolpath visualization
+└── widgets/                           # Reusable widgets
+    ├── camera_overlay.dart            # Camera guide overlay
+    ├── contour_overlay.dart           # Contour visualization
+    ├── manual_contour_drawer.dart     # Manual contour drawing
+    ├── manual_contour_dialog.dart     # Manual contour prompt
+    ├── marker_overlay.dart            # Marker visualization
+    ├── settings_fields.dart           # Settings form fields
+    └── units_toggle.dart              # Unit system toggle
 ```
+
+## Enhanced Features
+
+### Manual Contour Drawing
+When automatic edge detection is challenging (such as with low-contrast materials like wood on MDF), users can now draw the contour manually with an intuitive point-based drawing interface.
+
+### Multiple Depth Passes
+The app now supports configuring multiple depth passes for thick materials, automatically distributing the cutting depth across passes for optimal results.
+
+### Margin Configuration
+Users can add a customizable safety margin around the detected slab, ensuring complete coverage during machining.
+
+### Path Direction Control
+Choose between horizontal and vertical toolpaths based on your specific material and CNC requirements.
+
+### Return to Home
+Option to add a return to home position command at the end of the G-code, improving workflow efficiency.
 
 ## Image Processing Pipeline
 
@@ -121,7 +151,7 @@ lib/
 3. Place your slab between the markers
 4. Capture an image using the camera or select a file
 5. The app will detect the reference markers
-6. Tap on the slab to select a seed point for contour detection
+6. Either tap on the slab to select a seed point for automatic contour detection, or draw the contour manually
 7. Adjust detection parameters if needed
 8. Review the detected contour and configure toolpath settings
 9. Generate and visualize the G-code
@@ -142,15 +172,16 @@ lib/
 
 - The web version has limited functionality due to browser restrictions
 - Large images (>10MB) may cause performance issues on older devices
-- Camera calibration is currently simplified and may need manual adjustment
-- Edge detection can struggle with low-contrast materials (especially wood on mdf spillboard, which is basically every cnc ever)
+- Camera calibration is currently simplified and may need manual adjustments
+- Edge detection can struggle with low-contrast materials (especially wood on MDF spillboard)
+- Manual contour drawing may require careful placement for best results
 
 ## To-Do
 
 - [ ] Add machine learning-based slab edge detection
 - [ ] Implement adaptive toolpath generation based on material properties
 - [ ] Create a material library for optimized cutting parameters
-- [ ] Create user-editable contour adjustments
+- [ ] Add fully editable contour adjustments with drag handles
 - [ ] Add support for multiple languages
 - [ ] Add metric/imperial unit system toggle
 
@@ -159,9 +190,9 @@ lib/
 Contributions are welcome! Please feel free to submit a Pull Request.
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
+2. Create your feature branch (`git checkout -b feature/feature`)
+3. Commit your changes (`git commit -m 'Add some feature'`)
+4. Push to the branch (`git push origin feature/feature`)
 5. Open a Pull Request
 
 ## License
@@ -175,4 +206,3 @@ This project is licensed under the MIT License - see the LICENSE file for detail
    https://github.com/gurbuzkaanakkaya/Buffer-and-Path-Planning
 - Timothy Malche for Edge Detection in Image Processing: An Introduction
    https://blog.roboflow.com/edge-detection/#canny-edge-detection
-   

@@ -1,9 +1,13 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math' as math;
+import 'package:cnc_wonky_slab_cutter/utils/image_processing/color_utils.dart';
+import 'package:cnc_wonky_slab_cutter/utils/image_processing/filter_utils.dart';
 import 'package:image/image.dart' as img;
+import '../flow_of_app/flow_manager.dart';
+import '../utils/drawing/drawing_utils.dart';
+import '../utils/general/error_utils.dart';
 import '../utils/general/machine_coordinates.dart';
-import '../utils/image_processing/image_utils.dart';
 
 enum MarkerRole {
   origin,
@@ -51,8 +55,8 @@ class MarkerDetector {
     this.processingTimeout = 10000,  // Default 10 second timeout
   });
   
-  /// Detect markers in an image and calculate calibration parameters
-  Future<MarkerDetectionResult> detectMarkers(img.Image image) async {
+ /// Detect markers in an image and calculate calibration parameters
+Future<MarkerDetectionResult> detectMarkers(img.Image image) async {
   // Add timeout to detection process
   return await Future.delayed(Duration.zero, () {
     return Future.value(_detectMarkersInternal(image))
@@ -63,7 +67,7 @@ class MarkerDetector {
   });
 }
 
-  MarkerDetectionResult _detectMarkersInternal(img.Image image) {
+MarkerDetectionResult _detectMarkersInternal(img.Image image) {
   // Log input image dimensions
   print('Marker detection - input image dimensions: ${image.width}x${image.height}');
   
@@ -103,141 +107,345 @@ class MarkerDetector {
   }
   
   try {
-    // STRATEGY 1: Try corner detection
-    print('Attempting corner marker detection...');
-    var markers = _findCornerMarkers(processImage, debugImage);
-    if (markers.length >= 3) {
-      print('Found ${markers.length} corner markers');
-      final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
-      
-      // Rescale marker coordinates to original image dimensions if needed
-      final scaledMarkers = _rescaleMarkers(identifiedMarkers, scaleFactor);
-      
-      final calibrationResult = _calculateCalibration(scaledMarkers, debugImage);
-      
-      // Log the detected marker positions in original image coordinates
-      for (final marker in scaledMarkers) {
-        print('Detected ${marker.role} marker at: (${marker.x}, ${marker.y}) in original image coordinates');
-      }
-      
-      return calibrationResult;
-    }
-    
-    // STRATEGY 2: Try high contrast blob detection
-    print('Attempting high contrast blob detection...');
-    markers = _findHighContrastBlobs(processImage, debugImage);
-    if (markers.length >= 3) {
-      print('Found ${markers.length} high contrast markers');
-      final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
-      
-      // Rescale marker coordinates to original image dimensions if needed
-      final scaledMarkers = _rescaleMarkers(identifiedMarkers, scaleFactor);
-      
-      final calibrationResult = _calculateCalibration(scaledMarkers, debugImage);
-      
-      // Log the detected marker positions in original image coordinates
-      for (final marker in scaledMarkers) {
-        print('Detected ${marker.role} marker at: (${marker.x}, ${marker.y}) in original image coordinates');
-      }
-      
-      return calibrationResult;
-    }
-    
-    // STRATEGY 3: Try the original method
-    print('Attempting original marker detection...');
-    // Convert to grayscale for processing
-    final grayscale = ImageUtils.convertToGrayscale(processImage);
-    
-    // Preprocess the image to make markers stand out
-    final preprocessed = _preprocessImage(grayscale);
-    
-    // Find potential marker regions
-    markers = _findMarkerCandidates(preprocessed, debugImage);
-    
-    // Identify which marker is which based on their relative positions
-    final identifiedMarkers = _identifyMarkerRoles(markers, processImage.width, processImage.height);
-    
-    // Rescale marker coordinates to original image dimensions if needed
-    final scaledMarkers = _rescaleMarkers(identifiedMarkers, scaleFactor);
-    
-    // Calculate calibration parameters with validation
-    final calibrationResult = _calculateCalibration(scaledMarkers, debugImage);
-    
-    // Log the detected marker positions in original image coordinates
-    for (final marker in scaledMarkers) {
-      print('Detected ${marker.role} marker at: (${marker.x}, ${marker.y}) in original image coordinates');
-    }
-    
-    return calibrationResult;
+    // Since we're requiring user-provided marker locations, 
+    // fall back to predefined markers immediately
+    return _createFallbackResult(processImage, debugImage);
   } catch (e) {
     print('Error in marker detection: $e');
-    // Fall back to predefined markers if detection fails
-    var fallbackMarkers = _fallbackMarkerDetection(processImage.width, processImage.height);
-    
-    // Rescale fallback markers to original image dimensions if needed
-    if (scaleFactor != 1.0) {
-      fallbackMarkers = _rescaleMarkers(fallbackMarkers, scaleFactor);
-    }
-    
     return _createFallbackResult(processImage, debugImage);
   }
 }
 
-/// Helper method to rescale marker coordinates from processed image to original image
-List<MarkerPoint> _rescaleMarkers(List<MarkerPoint> markers, double scaleFactor) {
-  // If no scaling was applied, return original markers
-  if (scaleFactor == 1.0) return markers;
-  
-  return markers.map((marker) {
-    // Convert back to original image coordinates
-    final originalX = (marker.x / scaleFactor).round();
-    final originalY = (marker.y / scaleFactor).round();
-    
-    return MarkerPoint(
-      originalX, 
-      originalY, 
-      marker.role, 
-      confidence: marker.confidence
-    );
-  }).toList();
-}
+// TODO: let's build off this one
 
-  /// Find markers in corner regions of the image
-List<MarkerPoint> _findCornerMarkers(img.Image image, img.Image? debugImage) {
+/// Find markers from user tap points
+List<MarkerPoint> findMarkersFromUserTaps(
+  img.Image image, 
+  List<Map<String, dynamic>> userTapRegions,  // List of {x, y, role} maps
+  {img.Image? debugImage}
+) {
   final markers = <MarkerPoint>[];
-  final width = image.width;
-  final height = image.height;
+  final searchRadius = math.min(image.width, image.height) ~/ 10;  // Reasonable search area
   
-  // Define corner regions to search (relative to image size)
-  final searchRegions = [
-  // Bottom left (origin)
-  [0.05, 0.75, 0.30, 0.95],
-  // Bottom right (x-axis)
-  [0.70, 0.75, 0.95, 0.95],
-  // Top left (scale/y-axis)
-  [0.05, 0.05, 0.30, 0.25],
-];
-  
-  for (int regionIndex = 0; regionIndex < searchRegions.length; regionIndex++) {
-    final region = searchRegions[regionIndex];
-    final x1 = (width * region[0]).round();
-    final y1 = (height * region[1]).round();
-    final x2 = (width * region[2]).round();
-    final y2 = (height * region[3]).round();
+  for (final tap in userTapRegions) {
+    final int tapX = tap['x'];
+    final int tapY = tap['y'];
+    final MarkerRole role = tap['role'];
     
-    // Visualize region on debug image
+    // Find a marker near this tap point
+    final marker = findMarkerNearPoint(
+      image, 
+      tapX, 
+      tapY, 
+      searchRadius,
+      role
+    );
+    
+    markers.add(marker);
+    
+    // Draw the marker on debug image if available
     if (debugImage != null) {
-      _drawRegion(debugImage, x1, y1, x2, y2, regionIndex);
-    }
-    
-    final regionMarker = _findMarkerInRegion(image, x1, y1, x2, y2, debugImage);
-    if (regionMarker != null) {
-      markers.add(regionMarker);
+      final color = role == MarkerRole.origin ? 
+        img.ColorRgba8(255, 0, 0, 255) : 
+        (role == MarkerRole.xAxis ? 
+          img.ColorRgba8(0, 255, 0, 255) : 
+          img.ColorRgba8(0, 0, 255, 255));
+      
+      DrawingUtils.drawCircle(debugImage, marker.x, marker.y, 10, color);
+      DrawingUtils.drawText(debugImage, "${role.toString()}: ${marker.confidence.toStringAsFixed(2)}", 
+                       marker.x + 15, marker.y, color);
+      
+      // Draw the search region on the debug image
+      final x1 = math.max(0, tapX - searchRadius);
+      final y1 = math.max(0, tapY - searchRadius);
+      final x2 = math.min(image.width - 1, tapX + searchRadius);
+      final y2 = math.min(image.height - 1, tapY + searchRadius);
+      DrawingUtils.drawRectangle(debugImage, x1, y1, x2, y2, ColorUtils.colorYellow, fill: false);
     }
   }
   
   return markers;
 }
+
+
+/// Find a marker near a specified location
+MarkerPoint? findMarkerNearLocation(
+  img.Image image, 
+  int x1, int y1, int x2, int y2,  // Search region bounds
+  MarkerRole role,                 // Which marker role we're looking for
+  {img.Image? debugImage}          // Optional debug image
+) {
+  // Log the search region
+  print('Searching for ${role.toString()} marker in region: ($x1,$y1) to ($x2,$y2)');
+  
+  // Ensure coordinates are within image bounds
+  x1 = math.max(0, x1);
+  y1 = math.max(0, y1);
+  x2 = math.min(image.width - 1, x2);
+  y2 = math.min(image.height - 1, y2);
+  
+  // Skip very small regions
+  if (x2 - x1 < 10 || y2 - y1 < 10) {
+    print('Search region too small');
+    return null;
+  }
+  
+  try {
+    // Extract region statistics (calculate average brightness)
+    int totalPixels = 0;
+    double sumBrightness = 0;
+    
+    for (int y = y1; y < y2; y++) {
+      for (int x = x1; x < x2; x++) {
+        final pixel = image.getPixel(x, y);
+        final brightness = FilterUtils.calculateLuminance(
+          pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+        ) / 255.0; // Normalize to 0-1
+        
+        sumBrightness += brightness;
+        totalPixels++;
+      }
+    }
+    
+    // Calculate average brightness
+    final avgBrightness = totalPixels > 0 ? sumBrightness / totalPixels : 0.5;
+    
+    // Look for the darkest or brightest area in the region as the marker
+    int bestX = -1, bestY = -1;
+    double bestDifference = -1;
+    
+    // Determine if we should look for dark markers on light background or vice versa
+    final lookForDark = avgBrightness > 0.5;
+    
+    // Slide a smaller window through the region to find the distinctive marker
+    final windowSize = math.max(5, math.min(x2 - x1, y2 - y1) ~/ 6);
+    
+    for (int y = y1; y < y2 - windowSize; y += windowSize ~/ 3) {
+      for (int x = x1; x < x2 - windowSize; x += windowSize ~/ 3) {
+        int windowPixels = 0;
+        double windowSum = 0;
+        
+        // Calculate window statistics
+        for (int wy = 0; wy < windowSize; wy++) {
+          for (int wx = 0; wx < windowSize; wx++) {
+            final px = x + wx;
+            final py = y + wy;
+            
+            final pixel = image.getPixel(px, py);
+            final brightness = FilterUtils.calculateLuminance(
+              pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+            ) / 255.0; // Normalize to 0-1
+            
+            windowSum += brightness;
+            windowPixels++;
+          }
+        }
+        
+        if (windowPixels > 0) {
+          final windowAvg = windowSum / windowPixels;
+          double difference;
+          
+          if (lookForDark) {
+            // Looking for dark markers on light background
+            difference = avgBrightness - windowAvg;
+          } else {
+            // Looking for light markers on dark background
+            difference = windowAvg - avgBrightness;
+          }
+          
+          if (difference > bestDifference) {
+            bestDifference = difference;
+            bestX = x + windowSize ~/ 2;
+            bestY = y + windowSize ~/ 2;
+          }
+        }
+      }
+    }
+    
+    // Require a minimum contrast difference to prevent false positives
+    if (bestDifference < 0.25 || bestX < 0 || bestY < 0) {
+      print('No marker found with sufficient contrast');
+      return null;
+    }
+    
+    // Draw marker on debug image if available
+    if (debugImage != null) {
+      final color = lookForDark ? 
+        img.ColorRgba8(255, 0, 0, 255) : 
+        img.ColorRgba8(0, 255, 0, 255);
+      
+      DrawingUtils.drawCircle(debugImage, bestX, bestY, 10, color);
+      DrawingUtils.drawText(debugImage, "${role.toString()}: ${bestDifference.toStringAsFixed(2)}", 
+                         bestX + 15, bestY, color);
+      
+      // Draw the search region on the debug image
+      DrawingUtils.drawRectangle(debugImage, x1, y1, x2, y2, ColorUtils.colorYellow, fill: false);
+    }
+    
+    return MarkerPoint(bestX, bestY, role, confidence: bestDifference);
+  } catch (e) {
+    print('Error finding marker in region: $e');
+    return null;
+  }
+}
+
+/// Create a MarkerDetectionResult from manually-selected marker points
+MarkerDetectionResult createResultFromMarkerPoints(List<MarkerPoint> markers, {img.Image? debugImage}) {
+  if (markers.length < 3) {
+    throw Exception('Need at least 3 markers to create a coordinate system');
+  }
+  
+  // Find the markers by role
+  final originMarker = markers.firstWhere(
+    (m) => m.role == MarkerRole.origin, 
+    orElse: () => markers[0]
+  );
+  
+  final xAxisMarker = markers.firstWhere(
+    (m) => m.role == MarkerRole.xAxis,
+    orElse: () => markers[1]
+  );
+  
+  final scaleMarker = markers.firstWhere(
+    (m) => m.role == MarkerRole.scale,
+    orElse: () => markers[2]
+  );
+  
+  // Calculate orientation angle
+  final dx = xAxisMarker.x - originMarker.x;
+  final dy = xAxisMarker.y - originMarker.y;
+  final orientationAngle = math.atan2(dy, dx);
+  
+  // Calculate pixel-to-mm ratio from scale marker distance
+  final scaleX = scaleMarker.x - originMarker.x;
+  final scaleY = scaleMarker.y - originMarker.y;
+  final distancePx = math.sqrt(scaleX * scaleX + scaleY * scaleY);
+  
+  // Use a default value if we don't have markerRealDistanceMm property
+  const markerRealDistanceMm = 50.0; // Default value
+  
+  // Calculate pixel-to-mm ratio
+  final pixelToMmRatio = markerRealDistanceMm / distancePx;
+  
+  // Create origin point
+  final origin = CoordinatePointXY(originMarker.x.toDouble(), originMarker.y.toDouble());
+  
+  return MarkerDetectionResult(
+    markers: markers,
+    pixelToMmRatio: pixelToMmRatio,
+    origin: origin,
+    orientationAngle: orientationAngle,
+    debugImage: debugImage,
+  );
+}
+
+
+/// Find a marker near a specific point that was tapped by the user
+MarkerPoint findMarkerNearPoint(
+  img.Image image, 
+  int centerX, 
+  int centerY, 
+  int searchRadius,
+  MarkerRole role
+) {
+  // Define the search region
+  final int x1 = math.max(0, centerX - searchRadius);
+  final int y1 = math.max(0, centerY - searchRadius);
+  final int x2 = math.min(image.width - 1, centerX + searchRadius);
+  final int y2 = math.min(image.height - 1, centerY + searchRadius);
+  
+  print('Searching for ${role.toString()} marker in region: ($x1,$y1) to ($x2,$y2)');
+  
+  try {
+    // Extract region statistics
+    int totalPixels = 0;
+    double sumBrightness = 0;
+    
+    for (int y = y1; y < y2; y++) {
+      for (int x = x1; x < x2; x++) {
+        if (x >= 0 && x < image.width && y >= 0 && y < image.height) {
+          final pixel = image.getPixel(x, y);
+          final brightness = FilterUtils.calculateLuminance(
+            pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+          ) / 255.0; // Normalize to 0-1
+          
+          sumBrightness += brightness;
+          totalPixels++;
+        }
+      }
+    }
+    
+    // Calculate average brightness
+    final avgBrightness = totalPixels > 0 ? sumBrightness / totalPixels : 0.5;
+    
+    // Look for the darkest or brightest area in the region as the marker
+    int bestX = -1, bestY = -1;
+    double bestDifference = -1;
+    
+    // Determine if we should look for dark markers on light background or vice versa
+    final lookForDark = avgBrightness > 0.5;
+    
+    // Slide a smaller window through the region to find the distinctive marker
+    final windowSize = math.max(5, math.min(x2 - x1, y2 - y1) ~/ 6);
+    
+    for (int y = y1; y < y2 - windowSize; y += windowSize ~/ 3) {
+      for (int x = x1; x < x2 - windowSize; x += windowSize ~/ 3) {
+        int windowPixels = 0;
+        double windowSum = 0;
+        
+        // Calculate window statistics
+        for (int wy = 0; wy < windowSize; wy++) {
+          for (int wx = 0; wx < windowSize; wx++) {
+            final px = x + wx;
+            final py = y + wy;
+            
+            if (px >= 0 && px < image.width && py >= 0 && py < image.height) {
+              final pixel = image.getPixel(px, py);
+              final brightness = FilterUtils.calculateLuminance(
+                pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
+              ) / 255.0; // Normalize to 0-1
+              
+              windowSum += brightness;
+              windowPixels++;
+            }
+          }
+        }
+        
+        if (windowPixels > 0) {
+          final windowAvg = windowSum / windowPixels;
+          double difference;
+          
+          if (lookForDark) {
+            // Looking for dark markers on light background
+            difference = avgBrightness - windowAvg;
+          } else {
+            // Looking for light markers on dark background
+            difference = windowAvg - avgBrightness;
+          }
+          
+          if (difference > bestDifference) {
+            bestDifference = difference;
+            bestX = x + windowSize ~/ 2;
+            bestY = y + windowSize ~/ 2;
+          }
+        }
+      }
+    }
+    
+    // Use the detected point if we found one with good confidence
+    if (bestDifference >= 0.15 && bestX >= 0 && bestY >= 0) {
+      return MarkerPoint(bestX, bestY, role, confidence: bestDifference);
+    }
+    
+    // If we couldn't find a clear marker, simply use the exact tap point
+    return MarkerPoint(centerX, centerY, role, confidence: 0.5);
+  } catch (e) {
+    print('Error finding marker in region: $e');
+    // Always fall back to using the tap point directly
+    return MarkerPoint(centerX, centerY, role, confidence: 0.5);
+  }
+}
+
 
 /// Find a marker within a specific region
 MarkerPoint? _findMarkerInRegion(img.Image image, int x1, int y1, int x2, int y2, img.Image? debugImage) {
@@ -257,7 +465,7 @@ MarkerPoint? _findMarkerInRegion(img.Image image, int x1, int y1, int x2, int y2
       for (int x = x1; x < x2; x++) {
         if (x >= 0 && x < image.width && y >= 0 && y < image.height) {
           final pixel = image.getPixel(x, y);
-          final brightness = ImageUtils.calculateLuminance(
+          final brightness = FilterUtils.calculateLuminance(
             pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
           ) / 255.0; // Normalize to 0-1
           
@@ -293,7 +501,7 @@ MarkerPoint? _findMarkerInRegion(img.Image image, int x1, int y1, int x2, int y2
             
             if (px >= 0 && px < image.width && py >= 0 && py < image.height) {
               final pixel = image.getPixel(px, py);
-              final brightness = ImageUtils.calculateLuminance(
+              final brightness = FilterUtils.calculateLuminance(
                 pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
               ) / 255.0; // Normalize to 0-1
               
@@ -335,8 +543,8 @@ MarkerPoint? _findMarkerInRegion(img.Image image, int x1, int y1, int x2, int y2
         img.ColorRgba8(255, 0, 0, 255) : 
         img.ColorRgba8(0, 255, 0, 255);
       
-      ImageUtils.drawCircle(debugImage, bestX, bestY, 10, color);
-      ImageUtils.drawText(debugImage, "Contrast: ${bestDifference.toStringAsFixed(2)}", 
+      DrawingUtils.drawCircle(debugImage, bestX, bestY, 10, color);
+      DrawingUtils.drawText(debugImage, "Contrast: ${bestDifference.toStringAsFixed(2)}", 
                          bestX + 15, bestY, color);
     }
     
@@ -346,44 +554,13 @@ MarkerPoint? _findMarkerInRegion(img.Image image, int x1, int y1, int x2, int y2
     return null;
   }
 }
-
-/// Draw a region on the debug image
-void _drawRegion(img.Image image, int x1, int y1, int x2, int y2, int regionIndex) {
-  final colors = [
-    img.ColorRgba8(255, 0, 0, 128),  // Red for origin
-    img.ColorRgba8(0, 255, 0, 128),  // Green for X-axis
-    img.ColorRgba8(0, 0, 255, 128)   // Blue for scale
-  ];
-  
-  final color = colors[regionIndex % colors.length];
-  
-  // Draw rectangle border
-  for (int x = x1; x <= x2; x++) {
-    if (x >= 0 && x < image.width) {
-      if (y1 >= 0 && y1 < image.height) image.setPixel(x, y1, color);
-      if (y2 >= 0 && y2 < image.height) image.setPixel(x, y2, color);
-    }
-  }
-  
-  for (int y = y1; y <= y2; y++) {
-    if (y >= 0 && y < image.height) {
-      if (x1 >= 0 && x1 < image.width) image.setPixel(x1, y, color);
-      if (x2 >= 0 && x2 < image.width) image.setPixel(x2, y, color);
-    }
-  }
-  
-  // Add label
-  final labels = ["Origin", "X-Axis", "Scale"];
-  ImageUtils.drawText(image, labels[regionIndex % labels.length], x1 + 5, y1 + 5, color);
-}
-
 /// Find high contrast blobs that could be markers
 List<MarkerPoint> _findHighContrastBlobs(img.Image image, img.Image? debugImage) {
   final markers = <MarkerPoint>[];
   
   try {
     // Convert to grayscale
-    final grayscale = ImageUtils.convertToGrayscale(image);
+    final grayscale = FilterUtils.convertToGrayscale(image);
     
     // Apply adaptive thresholding to find high contrast areas
     final thresholded = _applyMultipleThresholds(grayscale);
@@ -439,13 +616,7 @@ List<MarkerPoint> _findHighContrastBlobs(img.Image image, img.Image? debugImage)
       ));
       
       if (debugImage != null) {
-        ImageUtils.drawCircle(
-          debugImage, 
-          properties['centerX']!.round(), 
-          properties['centerY']!.round(), 
-          8, 
-          img.ColorRgba8(0, 255, 255, 255)
-        );
+        DrawingUtils.drawCircle(debugImage, properties['centerX']!.round(), properties['centerY']!.round(), 8, ColorUtils.colorCyan, fill: false);
       }
     }
   } catch (e) {
@@ -472,7 +643,7 @@ img.Image _applyMultipleThresholds(img.Image grayscale) {
   for (int y = 0; y < grayscale.height; y++) {
     for (int x = 0; x < grayscale.width; x++) {
       final pixel = grayscale.getPixel(x, y);
-      final intensity = ImageUtils.calculateLuminance(
+      final intensity = FilterUtils.calculateLuminance(
         pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
       );
       
@@ -558,9 +729,9 @@ Map<String, double> _calculateBlobProperties(List<int> blob) {
     
     // Draw markers on debug image if available
     if (debugImage != null) {
-      _drawMarker(debugImage, originMarker, ImageUtils.colorRed, "Origin (Fallback)");
-      _drawMarker(debugImage, xAxisMarker, ImageUtils.colorGreen, "X-Axis (Fallback)");
-      _drawMarker(debugImage, scaleMarker, ImageUtils.colorBlue, "Scale (Fallback)");
+      _drawMarker(debugImage, originMarker, ColorUtils.colorRed, "Origin (Fallback)");
+      _drawMarker(debugImage, xAxisMarker, ColorUtils.colorGreen, "X-Axis (Fallback)");
+      _drawMarker(debugImage, scaleMarker, ColorUtils.colorBlue, "Scale (Fallback)");
     }
     
     // Calculate fallback calibration parameters
@@ -611,7 +782,7 @@ Map<String, double> _calculateBlobProperties(List<int> blob) {
           
           // Get current pixel value
           final pixel = grayscale.getPixel(x, y);
-          final pixelValue = ImageUtils.calculateLuminance(
+          final pixelValue = FilterUtils.calculateLuminance(
             pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
           );
           
@@ -641,7 +812,7 @@ Map<String, double> _calculateBlobProperties(List<int> blob) {
       for (int i = math.max(0, x - halfBlock); i <= math.min(image.width - 1, x + halfBlock); i++) {
         try {
           final pixel = image.getPixel(i, j);
-          sum += ImageUtils.calculateLuminance(
+          sum += FilterUtils.calculateLuminance(
             pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
           );
           count++;
@@ -683,7 +854,7 @@ Map<String, double> _calculateBlobProperties(List<int> blob) {
         // Draw detected blobs on debug image if available
         if (debugImage != null) {
           try {
-            ImageUtils.drawCircle(debugImage, centerX, centerY, 5, ImageUtils.colorBlue);
+            DrawingUtils.drawCircle(debugImage, centerX, centerY, 5, ColorUtils.colorBlue, fill: false);
             for (int j = 0; j < blob.length && j + 1 < blob.length; j += 2) {
               final px = blob[j];
               final py = blob[j + 1];
@@ -725,7 +896,7 @@ Map<String, double> _calculateBlobProperties(List<int> blob) {
           
           try {
             final pixel = binaryImage.getPixel(x, y);
-            final isBlack = ImageUtils.calculateLuminance(
+            final isBlack = FilterUtils.calculateLuminance(
               pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
             ) < 128;
             
@@ -765,7 +936,7 @@ Map<String, double> _calculateBlobProperties(List<int> blob) {
     
     try {
       final pixel = binaryImage.getPixel(x, y);
-      final isBlack = ImageUtils.calculateLuminance(
+      final isBlack = FilterUtils.calculateLuminance(
         pixel.r.toInt(), pixel.g.toInt(), pixel.b.toInt()
       ) < 128;
       
@@ -934,28 +1105,28 @@ List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
     if (debugImage != null) {
       try {
         // Draw markers with their roles
-        _drawMarker(debugImage, originMarker, ImageUtils.colorRed, "Origin");
-        _drawMarker(debugImage, xAxisMarker, ImageUtils.colorGreen, "X-Axis");
-        _drawMarker(debugImage, scaleMarker, ImageUtils.colorBlue, "Scale");
+        _drawMarker(debugImage, originMarker, ColorUtils.colorRed, "Origin");
+        _drawMarker(debugImage, xAxisMarker, ColorUtils.colorGreen, "X-Axis");
+        _drawMarker(debugImage, scaleMarker, ColorUtils.colorBlue, "Scale");
         
         // Draw connecting lines
-        ImageUtils.drawLine(
+        DrawingUtils.drawLine(
           debugImage, 
           originMarker.x, originMarker.y, 
           xAxisMarker.x, xAxisMarker.y, 
-          ImageUtils.colorRed
+          ColorUtils.colorRed
         );
         
-        ImageUtils.drawLine(
+        DrawingUtils.drawLine(
           debugImage, 
           originMarker.x, originMarker.y, 
           scaleMarker.x, scaleMarker.y, 
-          ImageUtils.colorBlue
+          ColorUtils.colorBlue
         );
         
         // Add calibration info text
         final infoText = "Ratio: ${pixelToMmRatio.toStringAsFixed(3)} mm/px";
-        ImageUtils.drawText(debugImage, infoText, 10, 10, ImageUtils.colorWhite);
+        DrawingUtils.drawText(debugImage, infoText, 10, 10, ColorUtils.colorWhite);
       } catch (e) {
         print('Error drawing debug info: $e');
         // Continue even if visualization fails
@@ -975,10 +1146,10 @@ List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
   void _drawMarker(img.Image image, MarkerPoint marker, img.Color color, String label) {
     try {
       // Draw a larger, more visible circle
-      ImageUtils.drawCircle(image, marker.x, marker.y, 15, color, fill: false);
+      DrawingUtils.drawCircle(image, marker.x, marker.y, 15, color, fill: false);
       
       // Draw a filled inner circle
-      ImageUtils.drawCircle(image, marker.x, marker.y, 8, color, fill: true);
+      DrawingUtils.drawCircle(image, marker.x, marker.y, 8, color, fill: true);
       
       // Add a glow effect with a lighter color
       final glowColor = img.ColorRgba8(
@@ -987,18 +1158,18 @@ List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
         math.min(255, color.b.toInt() + 50),
         120
       );
-      ImageUtils.drawCircle(image, marker.x, marker.y, 20, glowColor, fill: false);
+      DrawingUtils.drawCircle(image, marker.x, marker.y, 20, glowColor, fill: false);
       
       // Draw crosshair
       const crosshairSize = 12;
-      ImageUtils.drawLine(
+      DrawingUtils.drawLine(
         image,
         marker.x - crosshairSize, marker.y,
         marker.x + crosshairSize, marker.y,
         color
       );
       
-      ImageUtils.drawLine(
+      DrawingUtils.drawLine(
         image,
         marker.x, marker.y - crosshairSize,
         marker.x, marker.y + crosshairSize,
@@ -1009,7 +1180,7 @@ List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
       final labelBg = img.ColorRgba8(0, 0, 0, 180);
       
       // Add a background rectangle for the text
-      ImageUtils.drawRectangle(
+      DrawingUtils.drawRectangle(
         image,
         marker.x + 5, marker.y - 15,
         marker.x + 5 + label.length * 8, marker.y + 5,
@@ -1018,7 +1189,7 @@ List<MarkerPoint> _fallbackMarkerDetection(int width, int height) {
       );
       
       // Draw the label text with a brighter color for contrast
-      ImageUtils.drawText(image, label, marker.x + 10, marker.y - 10, color);
+      DrawingUtils.drawText(image, label, marker.x + 10, marker.y - 10, color);
     } catch (e) {
       print('Error drawing marker: $e');
     }
